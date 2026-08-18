@@ -1,14 +1,13 @@
-# Runtime shared board state — regenerated deterministically from seed.js on first run.
-# Keep it out of git so a deploy never ships one site's live QC data to another.
-data.json
-data.json.tmp
-data.json.bak-*
-
-# Uploaded evidence photos
-photos/
-
 # Local noise
 node_modules/
 *.log
 .DS_Store
 .env
+.env.local
+.env.*
+!.env.example
+
+# Leftover from the pre-MongoDB file-store version — no longer used.
+data.json
+data.json.tmp
+data.json.bak-*

@@ -12,6 +12,11 @@ const ROLES = {
   MEAS: { name: "Measurement DET (eMB)",             note: "Measures and photographs hidden work before QC gates." }
 };
 
+/* Set window.API_BASE (in index.html) to the backend's URL when the frontend
+   is hosted separately, e.g. "https://your-app.onrender.com" on Vercel. Empty
+   string keeps same-origin requests for local dev. */
+const API_BASE = (typeof window !== "undefined" && window.API_BASE) || "";
+
 const SEVERITIES = ["Critical", "Major", "Minor"];
 const SNAG_STATUS = ["Open", "In Progress", "Closed"];
 const ASSIGN_STATUS = ["Assigned", "Accepted", "Done"];
@@ -148,7 +153,7 @@ const Store = {
 
   async init() {
     try {
-      const r = await fetch("/api/state", { cache: "no-store" });
+      const r = await fetch(API_BASE + "/api/state", { cache: "no-store" });
       if (!r.ok) throw new Error("HTTP " + r.status);
       const j = await r.json();
       this.data = j.data;
@@ -171,10 +176,10 @@ const Store = {
   async poll() {
     if (this.mode !== "live") return;
     try {
-      const r = await fetch("/api/rev", { cache: "no-store" });
+      const r = await fetch(API_BASE + "/api/rev", { cache: "no-store" });
       const j = await r.json();
       if (j.rev !== this.rev) {
-        const s = await (await fetch("/api/state", { cache: "no-store" })).json();
+        const s = await (await fetch(API_BASE + "/api/state", { cache: "no-store" })).json();
         this.data = s.data;
         this.rev = s.rev;
         renderAll();
@@ -196,7 +201,7 @@ const Store = {
       return;
     }
     try {
-      const r = await fetch("/api/ops", {
+      const r = await fetch(API_BASE + "/api/ops", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ops })
@@ -212,7 +217,7 @@ const Store = {
 
   async reset(mode) {
     if (this.mode !== "live") return toast("Reset needs the server");
-    const r = await fetch("/api/reset", {
+    const r = await fetch(API_BASE + "/api/reset", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ mode })
@@ -1122,7 +1127,7 @@ function renderSnagDrawer(id) {
       <div><strong>Assigned to</strong> · ${esc(refLabel("users", s.assignedTo))}</div>
       ${s.closedAt ? `<div><strong>Closed</strong> · ${fmtDT(s.closedAt)} by ${esc(refLabel("users", s.closedBy))}</div>` : ""}
     </div>
-    ${(s.photos || []).length ? `<div class="photo-strip">${s.photos.map((u) => `<img class="photo-thumb" src="${esc(u)}" onclick="window.open('${esc(u)}','_blank')">`).join("")}</div>` : ""}
+    ${(s.photos || []).length ? `<div class="photo-strip">${s.photos.map((p) => { const u = (p && p.url) || p; return `<img class="photo-thumb" src="${esc(u)}" onclick="window.open('${esc(u)}','_blank')">`; }).join("")}</div>` : ""}
     <div style="margin-top:16px;">
       <div class="micro-label">REASSIGN</div>
       <select class="select" id="snagAssignee">${coll("users").filter((u) => u.active !== false).map((u) => `<option value="${u.id}" ${u.id === s.assignedTo ? "selected" : ""}>${esc(u.name)} · ${esc(u.role)}</option>`).join("")}</select>
@@ -1464,24 +1469,26 @@ function capturePhoto(kind, id, stageId) {
     if (!file) return;
     toast("Processing photo…");
     const dataUrl = await watermark(file, kind === "snag" ? refLabel("snags", id) : refLabel(kind === "unit" ? "units" : "floors", id));
-    let url = dataUrl;
+    // Cloudinary folder segregation: snag evidence vs hidden-work measurement evidence.
+    const photoType = kind === "snag" ? "snags" : "progress";
+    let photo = { url: dataUrl, publicId: null };
     if (Store.mode === "live") {
       try {
-        const r = await fetch("/api/photo", {
+        const r = await fetch(API_BASE + "/api/photo", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ dataUrl })
+          body: JSON.stringify({ dataUrl, type: photoType })
         });
         const j = await r.json();
-        if (j.url) url = j.url;
+        if (j.url) photo = { url: j.url, publicId: j.publicId || null };
       } catch {}
     }
     if (kind === "snag") {
       const s = byId("snags", id);
-      Store.apply([{ op: "upsert", coll: "snags", rec: Object.assign({}, s, { photos: (s.photos || []).concat([url]) }) }]);
+      Store.apply([{ op: "upsert", coll: "snags", rec: Object.assign({}, s, { photos: (s.photos || []).concat([photo]) }) }]);
     } else {
       Store.apply([
-        { op: "progress", key: pkey(id, stageId), patch: { meas: Date.now(), measBy: currentUserId, photo: url } },
+        { op: "progress", key: pkey(id, stageId), patch: { meas: Date.now(), measBy: currentUserId, photo } },
         logEvent("MEASURE", id, stageId, "Hidden work measured and photographed")
       ]);
     }

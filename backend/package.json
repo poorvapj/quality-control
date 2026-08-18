@@ -1,0 +1,19 @@
+{
+  "name": "neoteric-tower-quality-board",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Master-data-driven QC and handoff board — MongoDB-backed API server.",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "cloudinary": "^2.5.1",
+    "dotenv": "^16.4.5",
+    "mongodb": "^6.9.0"
+  }
+}
