@@ -1,29 +1,40 @@
 /* ===========================================================================
-   Static configuration extracted from the original app.js — unchanged.
+   Static configuration — typed port of the original config.js. Values and
+   structure are unchanged; only annotated.
    =========================================================================== */
 
-export const ROLES = {
-  DRI:  { name: "Site In-charge (DRI)",              note: "Owns the board. Runs the morning quality huddle, clears slow handoffs." },
-  EXE:  { name: "Engineer — Structure & Wet Trades", note: "Columns, slab, masonry, plaster, waterproofing. Needs QC pour permits." },
-  MEP:  { name: "Engineer — MEP",                    note: "AC conduits, plumbing and electrical before pour permits close." },
-  FIN:  { name: "Engineer — Finishes",               note: "Putty, tiling, windows. Locked until the pre-tiling gate passes." },
-  QC:   { name: "QC Engineer",                       note: "Passes/fails gates, issues pour permits. Fails need a written reason." },
-  MEAS: { name: "Measurement DET (eMB)",             note: "Measures and photographs hidden work before QC gates." }
+import type { Role, Severity, MasterDef, MasterKey } from "../types";
+
+export const ROLES: Record<Role, { name: string; note: string }> = {
+  DRI: { name: "Site In-charge (DRI)", note: "Owns the board. Runs the morning quality huddle, clears slow handoffs." },
+  EXE: { name: "Engineer — Structure & Wet Trades", note: "Columns, slab, masonry, plaster, waterproofing. Needs QC pour permits." },
+  MEP: { name: "Engineer — MEP", note: "AC conduits, plumbing and electrical before pour permits close." },
+  FIN: { name: "Engineer — Finishes", note: "Putty, tiling, windows. Locked until the pre-tiling gate passes." },
+  QC: { name: "QC Engineer", note: "Passes/fails gates, issues pour permits. Fails need a written reason." },
+  MEAS: { name: "Measurement DET (eMB)", note: "Measures and photographs hidden work before QC gates." }
 };
 
-/* Set window.API_BASE (in index.html) to the backend's URL when the frontend
-   is hosted separately, e.g. "https://your-app.onrender.com" on Vercel. Empty
-   string keeps same-origin requests for local dev. */
-export const API_BASE = (typeof window !== "undefined" && window.API_BASE) || "";
+/* Backend base URL.
+   - Any Vite dev server port (npm run dev — 5173, or 5174/5175 if that's
+     taken) -> talk to the backend on :5000.
+   - Same origin (backend/server.js serving this build itself) -> "".
+   - Anywhere else (Vercel) -> the deployed Render backend. */
+export const API_BASE: string = (() => {
+  if (typeof window === "undefined") return "";
+  const { hostname, port } = window.location;
+  const isLocal = hostname === "localhost" || hostname === "127.0.0.1";
+  const isViteDevPort = isLocal && port !== "" && port !== "5000";
+  if (isViteDevPort) return "http://localhost:5000";
+  if (isLocal) return "";
+  return "https://project-quality.onrender.com";
+})();
 
-export const SEVERITIES = ["Critical", "Major", "Minor"];
-export const SNAG_STATUS = ["Open", "In Progress", "Closed"];
-export const ASSIGN_STATUS = ["Assigned", "Accepted", "Done"];
+export const SEVERITIES: Severity[] = ["Critical", "Major", "Minor"];
+export const SNAG_STATUS = ["Open", "In Progress", "Closed"] as const;
+export const ASSIGN_STATUS = ["Assigned", "Accepted", "Done"] as const;
 export const HOUR = 3600000;
 
-/* --------------------------------------------------------------- masters */
-/* One schema per master drives its table, its form and its CSV export. */
-export const MASTERS = {
+export const MASTERS: Record<MasterKey, MasterDef> = {
   projects: {
     label: "Project", icon: "🏗️", prefix: "PRJ",
     desc: "Sites this board covers. The active project filters every other screen.",
@@ -96,7 +107,7 @@ export const MASTERS = {
       { k: "category", label: "Category", type: "select", options: ["Civil", "MEP", "Wet Trade", "Finishes", "Structure"] },
       { k: "method", label: "Inspection method", type: "text", hint: "e.g. Spirit level, Megger, 48 hr ponding" },
       { k: "acceptance", label: "Acceptance criteria", type: "text", hint: "e.g. ± 3 mm per 3 m" },
-      { k: "severity", label: "Severity if failed", type: "select", options: SEVERITIES, required: true },
+      { k: "severity", label: "Severity if failed", type: "select", options: [...SEVERITIES], required: true },
       { k: "active", label: "Active", type: "bool" }
     ]
   },
@@ -138,6 +149,18 @@ export const MASTERS = {
       { k: "phone", label: "Phone", type: "text" },
       { k: "email", label: "Email", type: "text" },
       { k: "active", label: "Active", type: "bool" }
+    ]
+  },
+  permissions: {
+    label: "Drawing Request Permission", icon: "🔐", prefix: "PRM",
+    desc: "Per-user grants for the Drawing Requests review chain — not tied to role. DRI always bypasses this check.",
+    cols: ["userId", "canScreenStage1", "canProduceStage2", "canCrosscheckStage3", "canFinalApproveStage4"],
+    fields: [
+      { k: "userId", label: "User", type: "ref", coll: "users", required: true },
+      { k: "canScreenStage1", label: "Can screen at Stage 1", type: "bool", default: false },
+      { k: "canProduceStage2", label: "Can produce at Stage 2", type: "bool", default: false },
+      { k: "canCrosscheckStage3", label: "Can cross-check at Stage 3", type: "bool", default: false },
+      { k: "canFinalApproveStage4", label: "Can give final approval at Stage 4", type: "bool", default: false }
     ]
   }
 };

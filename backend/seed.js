@@ -18,7 +18,10 @@ const COLLECTIONS = [
   "stagemap",     // Stage Mapping   (which stages run, in what order, per project/track)
   "users",        // User Master
   "snags",        // Snag register
-  "assignments"   // Work assigned to a person
+  "assignments",  // Work assigned to a person
+  "dpr",              // Daily Progress Report — end-of-day site logs
+  "drawingRequests",  // Drawing Requests — 4-stage review/approval tickets
+  "permissions"        // Per-user fine-grained permission grants (Drawing Requests review stages)
 ];
 
 /* Roles are a fixed vocabulary — users and stages both point at these. */

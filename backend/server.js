@@ -21,7 +21,8 @@
  *
  * API
  *   GET  /api/rev           -> {rev}                          cheap poll
- *   GET  /api/state         -> {rev, data}                     full snapshot
+ *   GET  /api/state         -> {rev, data}                     full snapshot (password hashes stripped)
+ *   POST /api/login         -> {user} | 401                    email+password check (scrypt, server-side only)
  *   POST /api/ops           -> {rev, data}                     apply ops, bump rev
  *   POST /api/photo         -> {url, publicId}                 upload to Cloudinary
  *   POST /api/reset         -> {rev, data}                     reseed or blank
@@ -33,12 +34,31 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const crypto = require("crypto");
 const { MongoClient } = require("mongodb");
 const cloudinary = require("cloudinary").v2;
 const { seedData, blankData, COLLECTIONS } = require("./seed.js");
 
+/* ------------------------------------------------------------- passwords
+   No new dependency (bcrypt) — Node's built-in scrypt is a solid, standard
+   choice for this. Plaintext passwords are NEVER stored or returned; only
+   passwordHash/passwordSalt live in Mongo, and getState() strips both
+   before any /api/state response leaves the server. */
+function hashPassword(password, salt) {
+  return crypto.scryptSync(String(password), salt, 64).toString("hex");
+}
+function verifyPassword(password, salt, hash) {
+  const candidate = hashPassword(password, salt);
+  const a = Buffer.from(candidate, "hex");
+  const b = Buffer.from(hash, "hex");
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
 const ROOT = __dirname;
-const STATIC_ROOT = path.join(ROOT, "..", "frontend");
+// frontend/ is now a React+TS app requiring a build step (npm run build);
+// serve the compiled output so `node server.js` alone still works locally
+// after a build, same as it did for the old build-free vanilla app.
+const STATIC_ROOT = path.join(ROOT, "..", "frontend", "dist");
 const MAX_BODY = 16 * 1024 * 1024; // 16MB — photo uploads
 const MAX_EVENTS = 5000;
 
@@ -58,7 +78,7 @@ if (!process.env.CLOUDINARY_URL) {
 // Every Project Quality asset lives under this root, segregated by type, so it
 // never collides with — or needs to touch — existing VMS assets in the same account.
 const CLOUDINARY_ROOT = "ProjectQuality";
-const PHOTO_TYPES = ["snags", "qc", "progress", "drawings"];
+const PHOTO_TYPES = ["snags", "qc", "progress", "drawings", "dpr"];
 
 /* ---------------------------------------------------------------- storage */
 
@@ -75,6 +95,9 @@ async function connectMongo() {
     await mongoDb.collection(c).createIndex({ id: 1 }, { unique: true });
   }
   await mongoDb.collection("events").createIndex({ ts: -1 });
+  // sparse: users created before email-based login existed (or without an
+  // email) don't collide with each other on a shared "" value.
+  await mongoDb.collection("users").createIndex({ email: 1 }, { unique: true, sparse: true });
 
   const projectCount = await mongoDb.collection("projects").countDocuments();
   if (projectCount === 0) {
@@ -106,6 +129,14 @@ async function getState() {
   const data = {};
   for (const c of COLLECTIONS) {
     data[c] = await mongoDb.collection(c).find({}, { projection: { _id: 0 } }).toArray();
+  }
+  // Password hashes must never leave the server, even to an authenticated
+  // browser — /api/state is otherwise a full generic dump of every collection.
+  if (data.users) {
+    data.users = data.users.map((u) => {
+      const { passwordHash, passwordSalt, ...rest } = u;
+      return rest;
+    });
   }
   const progressDocs = await mongoDb.collection("progress").find({}).toArray();
   data.progress = {};
@@ -141,7 +172,16 @@ async function applyOps(ops) {
     if (!op || typeof op !== "object") continue;
 
     if (op.op === "upsert" && COLLECTIONS.includes(op.coll) && op.rec && op.rec.id) {
-      const { set, unset } = splitSetUnset(op.rec);
+      const rec = Object.assign({}, op.rec);
+      // A plaintext "password" field on a users upsert (e.g. set via Masters
+      // ▸ User Master) is hashed here and never stored/echoed back raw.
+      if (op.coll === "users" && typeof rec.password === "string" && rec.password) {
+        const salt = crypto.randomBytes(16).toString("hex");
+        rec.passwordHash = hashPassword(rec.password, salt);
+        rec.passwordSalt = salt;
+      }
+      delete rec.password;
+      const { set, unset } = splitSetUnset(rec);
       const update = {};
       if (Object.keys(set).length) update.$set = set;
       if (Object.keys(unset).length) update.$unset = unset;
@@ -258,6 +298,21 @@ async function handleApi(req, res, urlPath) {
     const state = await getState();
     return sendJson(res, 200, state);
   }
+  if (req.method === "POST" && urlPath === "/api/login") {
+    const body = await readBody(req);
+    const email = String(body.email || "").trim().toLowerCase();
+    const password = String(body.password || "");
+    if (!email || !password) return sendJson(res, 400, { error: "Email and password are required" });
+
+    const user = await mongoDb.collection("users").findOne({ email: new RegExp("^" + email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$", "i") });
+    if (!user || !user.passwordHash || !user.passwordSalt) return sendJson(res, 401, { error: "Invalid email or password" });
+    if (user.active === false) return sendJson(res, 401, { error: "This account is inactive" });
+    if (!verifyPassword(password, user.passwordSalt, user.passwordHash)) {
+      return sendJson(res, 401, { error: "Invalid email or password" });
+    }
+    const { _id, passwordHash, passwordSalt, ...safeUser } = user;
+    return sendJson(res, 200, { user: safeUser });
+  }
   if (req.method === "POST" && urlPath === "/api/ops") {
     const body = await readBody(req);
     if (!Array.isArray(body.ops)) return sendJson(res, 400, { error: "ops[] required" });
@@ -322,7 +377,21 @@ const server = http.createServer(async (req, res) => {
   if (!filePath.startsWith(STATIC_ROOT + path.sep)) return sendText(res, 403, "Forbidden");
 
   fs.stat(filePath, (err, stat) => {
-    if (err || !stat.isFile()) return sendText(res, 404, "Not found: " + urlPath);
+    if (err || !stat.isFile()) {
+      // SPA fallback: a path with no file extension (e.g. /dpr/new, one of
+      // the public no-login routes) is a client-side route, not a missing
+      // file — serve index.html so React can render it, same as vercel.json's
+      // rewrite for production.
+      if (!path.extname(urlPath)) {
+        const indexPath = path.join(STATIC_ROOT, "index.html");
+        return fs.stat(indexPath, (err2, stat2) => {
+          if (err2 || !stat2.isFile()) return sendText(res, 404, "Not found: " + urlPath);
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Content-Length": stat2.size, "Cache-Control": "no-store" });
+          fs.createReadStream(indexPath).pipe(res);
+        });
+      }
+      return sendText(res, 404, "Not found: " + urlPath);
+    }
     const type = MIME[path.extname(filePath).toLowerCase()] || "application/octet-stream";
     res.writeHead(200, {
       "Content-Type": type,

@@ -112,6 +112,7 @@
       flex-shrink: 0;
       background: var(--bg-card);
       border-right: 1px solid var(--border);
+      box-shadow: 3px 0 16px rgba(15, 23, 42, 0.10);
       position: sticky;
       top: 0;
       height: 100vh;
@@ -558,7 +559,13 @@
       font-size: 12px;
       font-weight: 700;
       cursor: pointer;
+      outline: none;
       transition: all 0.15s ease;
+    }
+
+    .sub-btn:focus-visible {
+      outline: 2px solid var(--theme-primary);
+      outline-offset: 2px;
     }
 
     .sub-btn:hover {
@@ -570,6 +577,155 @@
       background: var(--theme-primary-light);
       border-color: var(--theme-primary);
       color: var(--theme-primary);
+    }
+
+    /* Segmented tab bar — matches the reference app exactly: plain gray
+       text for inactive tabs, active tab gets a bordered white pill (not
+       an underline, not a filled/colored background). */
+    .tabs-underline {
+      display: flex;
+      gap: 4px;
+      padding: 14px 16px;
+      margin-bottom: 4px;
+    }
+
+    .tab-underline-btn {
+      background: none;
+      border: 1px solid transparent;
+      padding: 7px 14px;
+      border-radius: 8px;
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      outline: none;
+      transition: color .15s ease, border-color .15s ease, background .15s ease;
+    }
+
+    .tab-underline-btn:focus-visible {
+      outline: 2px solid var(--theme-primary);
+      outline-offset: 2px;
+    }
+
+    .tab-underline-btn:hover {
+      color: var(--text-main);
+    }
+
+    .tab-underline-btn.active {
+      background: var(--bg-card);
+      border-color: var(--border-strong);
+      color: var(--text-main);
+      font-weight: 800;
+    }
+
+    .two-col-cards {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+      padding: 0 16px 16px;
+    }
+
+    @media (min-width: 900px) {
+      .two-col-cards {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .two-col-cards .card {
+      margin: 0;
+    }
+
+    .card-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--text-main);
+    }
+
+    .card-subtitle {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .progress-track {
+      width: 90px;
+      height: 6px;
+      border-radius: 99px;
+      background: var(--bg-subtle);
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      border-radius: 99px;
+      background: var(--theme-primary);
+    }
+
+    /* Compact filter bar — matches the reference's tight, low-height
+       Date Range / Project / DRI filter row above the stat cards. */
+    .filter-bar {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-card);
+      padding: 14px 16px;
+      margin-bottom: 20px;
+      display: flex;
+      gap: 14px;
+      align-items: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .filter-bar .field label {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 600;
+      margin-bottom: 4px;
+      display: block;
+    }
+
+    .filter-bar .select {
+      height: 36px;
+      font-size: 13px;
+    }
+
+    .filter-bar .btn {
+      height: 36px;
+    }
+
+    .select-icon-wrap {
+      position: relative;
+    }
+
+    .select-icon-wrap .select {
+      padding-left: 30px;
+    }
+
+    .select-icon {
+      position: absolute;
+      left: 9px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 12px;
+      pointer-events: none;
+      filter: grayscale(1) opacity(.7);
+    }
+
+    /* Neutral, non-colorful glyph — for emoji used as plain inline icons
+       (section headers, etc.) so they read as flat icon marks rather than
+       loud colorful emoji. */
+    .icon-mono {
+      display: inline-block;
+      filter: grayscale(1) opacity(.7);
     }
 
     /* -------------------------------------------------------- sections */
@@ -625,6 +781,7 @@
       align-items: center;
       justify-content: center;
       font-size: 20px;
+      filter: grayscale(1) opacity(.75);
     }
 
     .page-title {
@@ -658,9 +815,9 @@
     }
 
     .panel-card .sub-nav {
-      padding: 14px 16px;
+      padding: 16px 16px 4px;
       margin: 0;
-      border-bottom: 1px solid var(--border);
+      border-bottom: none;
     }
 
     .panel-card .toolbar {
@@ -668,13 +825,17 @@
       border: none;
       box-shadow: none;
       border-radius: 0;
-      border-bottom: 1px solid var(--border);
-      margin-bottom: 0;
+      border-bottom: none;
+      margin-bottom: 16px;
+      padding-bottom: 4px;
     }
 
     .panel-card .table-scroll {
       overflow-x: auto;
     }
+
+    .panel-card table.data th:first-child { border-top-left-radius: var(--radius-md); }
+    .panel-card table.data th:last-child { border-top-right-radius: var(--radius-md); }
 
     .panel-card #snagList.card,
     .panel-card #masterTable.card {
@@ -700,9 +861,8 @@
       background: var(--bg-card);
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
-      padding: 14px;
+      padding: 16px;
       position: relative;
-      overflow: hidden;
       box-shadow: var(--shadow-card);
       transition: all 0.2s ease;
     }
@@ -712,11 +872,21 @@
       border-color: var(--border-strong);
     }
 
+
     .stat-val {
-      font-size: 26px;
-      font-weight: 900;
+      font-size: 28px;
+      font-weight: 600;
       color: var(--text-main);
-      margin-top: 4px;
+      margin-top: 6px;
+    }
+
+    /* Plain sentence-case label — matches the reference's stat cards
+       (regular weight, no uppercase/letter-spacing), used where a card
+       doesn't need the tiny all-caps micro-label treatment. */
+    .stat-label {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-muted);
     }
 
     .stat-card.warn .stat-val {
@@ -728,16 +898,27 @@
     }
 
     .stat-card.ok .stat-val {
-      color: var(--color-pass);
+      color: var(--text-main);
     }
 
     .stat-icon {
       position: absolute;
-      bottom: -4px;
-      right: -2px;
-      font-size: 32px;
-      opacity: 0.14;
+      top: 14px;
+      right: 14px;
+      width: 32px;
+      height: 32px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-subtle);
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
+
+    /* Icon badges stay neutral gray on every KPI card, regardless of status —
+       matches the reference's uniform icon style; only the big value number
+       still carries the ok/warn/bad color. */
+    .stat-card .micro-label, .stat-card .stat-label { padding-right: 40px; }
 
     .stat-foot {
       font-size: 10px;
@@ -1166,8 +1347,14 @@
       align-items: center;
       justify-content: center;
       gap: 7px;
+      outline: none;
       transition: all 0.18s ease;
       white-space: nowrap;
+    }
+
+    .btn:focus-visible {
+      outline: 2px solid var(--theme-primary);
+      outline-offset: 2px;
     }
 
     .btn-primary {
@@ -1258,7 +1445,7 @@
     }
 
     .drawer-header {
-      padding: 15px 20px;
+      padding: 20px 24px;
       border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
@@ -1269,12 +1456,14 @@
     .drawer-body {
       flex: 1;
       overflow-y: auto;
-      padding: 18px 20px;
+      padding: 24px;
+      background: var(--bg-card);
     }
 
     .drawer-footer {
-      padding: 14px 20px;
+      padding: 16px 24px;
       border-top: 1px solid var(--border);
+      background: #fafafa;
       display: flex;
       gap: 8px;
       justify-content: flex-end;
@@ -1431,35 +1620,130 @@
    ========================================================= */
 
     :root {
+      /* Values below are taken directly from the reference app's own
+         stylesheet (light theme), ported onto our existing token names so
+         nothing here is a guess anymore. */
       --theme-primary: #ff7a00;
-      --theme-primary-hover: #e96800;
-      --theme-primary-light: rgba(255, 122, 0, .11);
-      --bg-page: #f7f9fc;
-      --bg-card: #fff;
-      --bg-card-hover: #f8fafc;
-      --bg-subtle: #f4f6f9;
-      --border: #e6e9ef;
-      --border-strong: #d7dce5;
+      --theme-primary-hover: #e56e00;
+      --theme-primary-light: #fff4e8;
+      --bg-page: #f8fafc;
+      --bg-card: #ffffff;
+      --bg-card-hover: #f9fafb;
+      --bg-subtle: #f3f4f6;
+      --border: #e5e7eb;
+      --border-strong: #cbd5e1;
       --text-main: #111827;
-      --text-muted: #667085;
-      --text-sub: #98a2b3;
-      --radius-sm: 7px;
+      --text-muted: #6b7280;
+      --text-sub: #9ca3af;
+      --radius-sm: 8px;
       --radius-md: 10px;
       --radius-lg: 14px;
       --shadow-card: 0 1px 3px rgba(16, 24, 40, .05), 0 8px 24px rgba(16, 24, 40, .035);
+
+      /* Aliases for the sidebar's own token names, mapped onto the tokens
+         above so both naming schemes stay in sync with one source of truth. */
+      --nx-orange: var(--theme-primary);
+      --nx-sidebar-logo-border: #f3f4f6;
+      --nx-sidebar-brand-color: var(--text-main);
+      --nx-sidebar-sub-color: #9ca3af;
+      --nx-sidebar-group-color: #b0b7c3;
+      --nx-sidebar-group-line: #f0f0f5;
+      --nx-sidebar-text: var(--text-main);
     }
 
-    /* App shell */
+    /* Plain layout wrapper only — the outer .sidebar element already
+       supplies the visible card look (background/border/shadow), so this
+       doesn't duplicate it into a nested box. */
+    .sidebar-inner {
+      width: 100%;
+    }
+
+    /* Values below match the reference app's own .nx-nav-item /.nx-nav-icon
+       rules exactly, including the fact that the active row carries NO
+       background fill — only the orange text + icon tint change. */
+    .nx-nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 8px 12px;
+      margin: 2px 10px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--nx-sidebar-text);
+      cursor: pointer;
+      transition: background .15s ease, color .15s ease;
+      outline: none;
+    }
+
+    /* Native <button> keeps a focus ring after a click, which read as a
+       stray black box around the active item. Keep it for keyboard nav
+       (:focus-visible) only. */
+    .nx-nav-item:focus-visible {
+      outline: 2px solid var(--theme-primary);
+      outline-offset: -2px;
+    }
+
+    .nx-nav-item:hover { background: var(--bg-card-hover); color: var(--text-main); }
+    .nx-nav-item:hover .nx-nav-icon { background: var(--border); }
+
+    .nx-nav-item--active {
+      background: transparent;
+      color: var(--theme-primary);
+      font-weight: 650;
+    }
+
+    .nx-nav-item--active:hover {
+      background: var(--bg-card-hover);
+      color: var(--theme-primary-hover);
+    }
+
+    .nx-nav-icon {
+      width: 32px;
+      height: 32px;
+      flex-shrink: 0;
+      border-radius: 8px;
+      background: var(--bg-subtle);
+      color: var(--nx-sidebar-text);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: background .15s ease, color .15s ease;
+    }
+
+    .nx-nav-item--active .nx-nav-icon {
+      background: rgba(255, 122, 0, .14);
+      color: var(--theme-primary);
+    }
+
+    /* App shell — pure white; separation from the boxed sidebar/header
+       comes from their own border + shadow, not a page tint. */
     .app-shell {
-      background: #f7f9fc;
+      background: #ffffff;
     }
 
-    /* Sidebar — fixed ERP navigation like the reference */
+    /* Sidebar — fixed ERP navigation like the reference. The .sidebar
+       column itself is transparent padding; .sidebar-inner is the actual
+       floating boxed card (rounded, bordered, shadowed) so the sidebar
+       reads as a distinct panel sitting on the page background. */
     .sidebar {
       width: 264px;
-      background: #fff;
-      border-right: 1px solid #e5e7eb;
+      background: transparent;
+      border-right: none;
       box-shadow: none;
+      padding: 12px 0 12px 12px;
+      box-sizing: border-box;
+      overflow-y: hidden;
+    }
+
+    .sidebar-inner {
+      background: var(--bg-card);
+      border: 1px solid #d8dee6;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(15, 23, 42, 0.09);
+      overflow-y: auto;
+      overflow-x: hidden;
     }
 
     .sidebar-brand {
@@ -1534,6 +1818,31 @@
       font-weight: 700;
     }
 
+    /* Icon sits inside its own small rounded-square badge, like the
+       reference's sidebar — not a bare emoji floating next to the label. */
+    .nav-icon {
+      width: 28px;
+      height: 28px;
+      flex-shrink: 0;
+      border-radius: var(--radius-sm);
+      background: var(--bg-subtle);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+    }
+
+    .tab-btn.active .nav-icon {
+      background: rgba(255, 122, 0, .16);
+    }
+
+    .nav-label {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
     .tab-badge {
       margin-left: auto;
       min-width: 20px;
@@ -1544,7 +1853,7 @@
       justify-content: center;
       border-radius: 999px;
       background: #f2f4f7;
-      color: #667085;
+      color: #64748b;
       font-size: 10px;
       font-weight: 700;
     }
@@ -1556,14 +1865,18 @@
 
     /* Main/header */
     .main-area {
-      background: #f7f9fc;
+      background: #ffffff;
     }
 
+    /* Floating boxed card, same treatment as .sidebar-inner, so header and
+       sidebar read as one consistent design language on the gray page. */
     header {
       height: 64px;
-      border-bottom: 1px solid #e7eaf0;
-      background: rgba(255, 255, 255, .96);
-      box-shadow: 0 1px 2px rgba(16, 24, 40, .025);
+      margin: 12px 12px 0;
+      border: 1px solid #d8dee6;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, .98);
+      box-shadow: 0 4px 20px rgba(15, 23, 42, 0.09);
     }
 
     .header-inner {
@@ -1606,7 +1919,7 @@
 
     .account-name .r {
       font-size: 10px;
-      color: #667085;
+      color: #64748b;
     }
 
     .role-avatar {
@@ -1627,15 +1940,15 @@
       padding: 24px 28px 56px;
     }
 
-    /* Active project strip */
+    /* Active project strip — kept compact, no min-height, so it doesn't
+       read as a big empty box when there's only a label + one dropdown. */
     .role-bar {
-      min-height: 82px;
-      padding: 16px 20px;
-      margin-bottom: 22px;
-      border: 1px solid #e5e7eb;
+      padding: 12px 18px;
+      margin-bottom: 18px;
+      border: 1px solid #d8dee6;
       border-radius: 14px;
       background: #fff;
-      box-shadow: var(--shadow-card);
+      box-shadow: 0 4px 20px rgba(15, 23, 42, 0.06);
     }
 
     .role-bar .select {
@@ -1676,7 +1989,7 @@
     .page-desc {
       margin-top: 4px;
       font-size: 13px;
-      color: #667085;
+      color: #64748b;
     }
 
     /* KPI area */
@@ -1795,7 +2108,7 @@
     }
 
     th {
-      color: #667085;
+      color: #64748b;
       font-size: 10px;
       font-weight: 800;
       text-transform: uppercase;
@@ -1821,7 +2134,7 @@
 
     /* Login */
     .login-screen {
-      background: #f7f9fc;
+      background: #f7f8fa;
     }
 
     .login-card {
@@ -1852,24 +2165,31 @@
        Needs to win over the light :root block above with equal specificity,
        so it must come after it in source order (it does) and match html.dark. */
     html.dark {
+      /* Ported directly from the reference app's [data-theme="dark"] block. */
       --theme-primary: #ff7a00;
       --theme-primary-hover: #ff9233;
-      --theme-primary-light: rgba(255, 122, 0, .16);
-      --bg-page: #0b0f19;
-      --bg-card: #131a2a;
-      --bg-card-hover: #1b2437;
-      --bg-subtle: #1b2437;
-      --border: #26304a;
-      --border-strong: #35415e;
+      --theme-primary-light: rgba(255, 122, 0, .12);
+      --bg-page: #0f172a;
+      --bg-card: #1e293b;
+      --bg-card-hover: #273549;
+      --bg-subtle: #273549;
+      --border: #334155;
+      --border-strong: #475569;
       --text-main: #f1f5f9;
       --text-muted: #94a3b8;
       --text-sub: #64748b;
+
+      --nx-sidebar-logo-border: #334155;
+      --nx-sidebar-sub-color: #64748b;
+      --nx-sidebar-group-color: #64748b;
+      --nx-sidebar-group-line: #334155;
+      --nx-sidebar-text: var(--text-muted);
     }
 
     html.dark body { background: var(--bg-page); }
     html.dark .app-shell { background: var(--bg-page); }
     html.dark .main-area { background: var(--bg-page); }
-    html.dark .sidebar { background: var(--bg-card); border-right-color: var(--border); }
+    html.dark .sidebar-inner { background: var(--bg-card); border-color: var(--border); }
     html.dark .sidebar-brand { background: var(--bg-card); border-bottom-color: var(--border); }
     html.dark header { background-color: rgba(19, 26, 42, .92); border-bottom-color: var(--border); }
     html.dark .login-screen { background: var(--bg-page); }
@@ -1885,13 +2205,20 @@
       border-color: var(--border);
     }
     html.dark .input, html.dark .select, html.dark .textarea { background: var(--bg-subtle); border-color: var(--border); color: var(--text-main); }
-    html.dark table.data th { background: var(--bg-subtle); border-color: var(--border); }
+
+    /* Table header/row-hover colors — reference uses a darker, readable
+       header (not a faint muted gray) and a warm-tinted row hover. */
+    table.data th { color: #374151; }
+    table.data tbody tr:hover { background: #fffaf5; }
+    html.dark table.data th { background: var(--bg-subtle); border-color: var(--border); color: var(--text-muted); }
+    html.dark table.data tbody tr:hover { background: #1a2535; }
     html.dark table.data td { border-color: var(--border); }
     html.dark table { background: var(--bg-card); }
     html.dark thead { background: var(--bg-subtle) !important; }
     html.dark th { color: var(--text-sub); }
     html.dark td { color: var(--text-main); }
     html.dark .drawer-sheet, html.dark .modal-box { border-color: var(--border); }
+    html.dark .drawer-footer { background: #162032; }
     html.dark .sub-btn, html.dark .tab-btn:not(.active) { background: transparent; }
     html.dark .btn-secondary { background: var(--bg-subtle); border-color: var(--border); color: var(--text-main); }
     html.dark .nav-group-label { color: var(--text-sub); }
@@ -1907,305 +2234,9 @@
   </style>
 
 </head>
-
-<body>
-
-  <!-- Login screen — shown before any board data loads or renders -->
-  <div class="login-screen" id="loginScreen">
-    <div class="login-card">
-      <div class="login-brand">
-        <div class="brand-logo" style="width:48px; height:48px; font-size:20px;">N</div>
-        <div>
-          <div class="brand-title" style="font-size:17px;">NEOTERIC GROUP</div>
-          <div class="brand-sub">TOWER QUALITY BOARD</div>
-        </div>
-      </div>
-      <div class="micro-label" style="margin-top:22px;">SIGN IN AS</div>
-      <select class="select" id="loginUserSel" style="margin-top:6px;"></select>
-      <div class="hint" id="loginHint" style="margin-top:8px;">Pick your name from the team list to continue. Your role
-        decides what you can act on.</div>
-      <button class="btn btn-primary" id="loginBtn" style="width:100%; margin-top:18px; justify-content:center;">Sign
-        In</button>
-    </div>
-  </div>
-
-  <div class="app-shell hide" id="appShell">
-
-    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar(false)"></div>
-
-    <aside class="sidebar" id="sidebar">
-      <div class="sidebar-brand">
-        <div class="brand-logo">N</div>
-        <div style="min-width:0;">
-          <div class="brand-title">NEOTERIC GROUP</div>
-          <div class="brand-sub">QUALITY &amp; HANDOFF</div>
-        </div>
-      </div>
-      <nav class="sidebar-nav">
-        <div class="nav-group-label">Overview</div>
-        <div class="nav-tabs">
-          <button class="tab-btn active" id="tabDash" onclick="switchTab('dash')">📊 Dashboard</button>
-        </div>
-        <div class="nav-group-label">Execution</div>
-        <div class="nav-tabs">
-          <button class="tab-btn" id="tabWork" onclick="switchTab('work')">⚡ My Work <span class="tab-badge"
-              id="workBadge">0</span></button>
-          <button class="tab-btn" id="tabBoard" onclick="switchTab('board')">🏢 Tower Board</button>
-          <button class="tab-btn" id="tabSnags" onclick="switchTab('snags')">🐞 Snags <span class="tab-badge"
-              id="snagBadge">0</span></button>
-          <button class="tab-btn" id="tabTeam" onclick="switchTab('team')">👥 Team</button>
-        </div>
-        <div class="nav-group-label">Administration</div>
-        <div class="nav-tabs">
-          <button class="tab-btn" id="tabMasters" onclick="switchTab('masters')">⚙️ Masters</button>
-        </div>
-      </nav>
-    </aside>
-
-    <div class="main-area">
-      <header>
-        <div class="header-inner">
-          <div class="header-left">
-            <button class="btn-icon menu-btn" onclick="toggleSidebar()" title="Menu">☰</button>
-            <div>
-              <div class="brand-title" style="font-size:14px;">Tower Quality Board</div>
-              <div style="font-size:11px; color:var(--text-muted); font-weight:600;">Quality Control &amp; Handoff
-                System</div>
-            </div>
-          </div>
-          <div class="header-actions">
-            <span class="sync-pill" id="syncPill"><span class="dot"></span> CONNECTING</span>
-            <button class="btn-icon" id="themeToggleBtn" title="Toggle theme">☾</button>
-            <div class="account-wrap">
-              <button class="account-btn" id="accountBtn">
-                <div class="account-name">
-                  <div class="n" id="acctName">—</div>
-                  <div class="r" id="acctRole">—</div>
-                </div>
-                <div class="role-avatar" id="userAvatar" title="Signed in as">--</div>
-              </button>
-              <div class="account-menu" id="accountMenu">
-                <div class="account-menu-header">
-                  <div class="n" id="acctMenuName">—</div>
-                  <div class="r" id="acctMenuRole">—</div>
-                </div>
-                <select class="select" id="userSel" style="display:none;"></select>
-                <button class="btn btn-secondary btn-sm" id="logoutBtn">Logout</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <div class="wrap">
-
-        <!-- Active project -->
-        <div class="role-bar">
-          <div class="role-info" style="flex:0 1 auto; min-width:200px;">
-            <div style="min-width:0;">
-              <div class="micro-label">ACTIVE PROJECT</div>
-              <select class="select" id="projectSel" style="max-width:260px;"></select>
-            </div>
-          </div>
-          <div id="roleNote" style="font-size:11px; color:var(--text-muted); max-width:300px; line-height:1.5;"></div>
-        </div>
-
-        <!-- DASHBOARD -->
-        <div id="viewDash">
-          <div class="page-header">
-            <div class="page-header-left">
-              <div class="page-icon">📊</div>
-              <div>
-                <div class="page-title">Dashboard</div>
-                <div class="page-desc">Site-wide KPIs, what needs you, and floor-by-floor progress.</div>
-              </div>
-            </div>
-          </div>
-          <div class="micro-label">KPI OVERVIEW</div>
-          <div class="stats-grid" id="statsGrid"></div>
-          <div id="dashPanels"></div>
-        </div>
-
-        <!-- MY WORK -->
-        <div id="viewWork" class="hide">
-          <div class="page-header">
-            <div class="page-header-left">
-              <div class="page-icon">⚡</div>
-              <div>
-                <div class="page-title">My Work</div>
-                <div class="page-desc" id="workSubtitle"></div>
-              </div>
-            </div>
-            <div class="page-header-actions">
-              <button class="btn btn-primary btn-sm" onclick="openAssignModal()">＋ Assign work</button>
-            </div>
-          </div>
-          <div id="workPanels"></div>
-        </div>
-
-        <!-- TOWER BOARD -->
-        <div id="viewBoard" class="hide">
-          <div class="page-header">
-            <div class="page-header-left">
-              <div class="page-icon">🏢</div>
-              <div>
-                <div class="page-title">Tower Quality Matrix</div>
-                <div class="page-desc">Tap a unit for its trade timeline · tap the floor label for the RCC structure
-                  track.</div>
-              </div>
-            </div>
-          </div>
-          <div class="card card-pad">
-            <div id="towerBoard"></div>
-            <div class="legend-bar" id="legendBar"></div>
-          </div>
-        </div>
-
-        <!-- SNAGS -->
-        <div id="viewSnags" class="hide">
-          <div class="page-header">
-            <div class="page-header-left">
-              <div class="page-icon">🐞</div>
-              <div>
-                <div class="page-title">Snag Register</div>
-                <div class="page-desc" id="snagSubtitle"></div>
-              </div>
-            </div>
-            <div class="page-header-actions">
-              <button class="btn btn-primary btn-sm" onclick="openSnagModal()">＋ Raise snag</button>
-            </div>
-          </div>
-          <div class="panel-card">
-            <div class="toolbar">
-              <input class="input grow" id="snagSearch" placeholder="Search snags by title, unit or description…"
-                oninput="renderSnags()">
-              <select class="select" id="snagStatusFilter" style="width:auto;" onchange="renderSnags()">
-                <option value="">All statuses</option>
-                <option value="Open">Open</option>
-                <option value="In Progress">In Progress</option>
-                <option value="Closed">Closed</option>
-              </select>
-              <select class="select" id="snagSevFilter" style="width:auto;" onchange="renderSnags()">
-                <option value="">All severities</option>
-                <option value="Critical">Critical</option>
-                <option value="Major">Major</option>
-                <option value="Minor">Minor</option>
-              </select>
-              <select class="select" id="snagMineFilter" style="width:auto;" onchange="renderSnags()">
-                <option value="">Everyone</option>
-                <option value="mine">Assigned to me</option>
-                <option value="raised">Raised by me</option>
-              </select>
-            </div>
-            <div id="snagList"></div>
-          </div>
-        </div>
-
-        <!-- TEAM / ASSIGNMENT DASHBOARD -->
-        <div id="viewTeam" class="hide">
-          <div class="page-header">
-            <div class="page-header-left">
-              <div class="page-icon">👥</div>
-              <div>
-                <div class="page-title">Team Workload</div>
-                <div class="page-desc">Open assignments and snags per person. Tap a person to see their board.</div>
-              </div>
-            </div>
-            <div class="page-header-actions">
-              <button class="btn btn-primary btn-sm" onclick="openAssignModal()">＋ Assign work</button>
-            </div>
-          </div>
-          <div id="teamPanels"></div>
-        </div>
-
-        <!-- MASTERS -->
-        <div id="viewMasters" class="hide">
-          <div class="page-header">
-            <div class="page-header-left">
-              <div class="page-icon">⚙️</div>
-              <div>
-                <div class="page-title">Master Data</div>
-                <div class="page-desc" id="masterSubtitle"></div>
-              </div>
-            </div>
-          </div>
-          <div class="panel-card">
-            <div class="sub-nav" id="masterNav"></div>
-            <div class="toolbar">
-              <input class="input grow" id="masterSearch" placeholder="Search…" oninput="renderMasterTable()">
-              <button class="btn btn-secondary btn-sm" onclick="exportMasterCsv()">⬇ Export CSV</button>
-              <button class="btn btn-primary btn-sm" id="masterAddBtn" onclick="openRecordModal(null)">＋ New</button>
-            </div>
-            <div class="table-scroll" id="masterTable"></div>
-          </div>
-          <div style="margin-top:24px; display:flex; gap:10px; flex-wrap:wrap;" id="dangerZone"></div>
-        </div>
-
-      </div>
-    </div>
-  </div>
-
-  <!-- Detail drawer (unit / floor timeline, snag detail) -->
-  <div class="overlay" id="overlay" onclick="closeDrawer()"></div>
-  <div class="drawer-sheet" id="sheet">
-    <div class="drawer-header">
-      <div style="min-width:0;">
-        <div class="micro-label" id="sheetSub">DETAIL</div>
-        <div style="font-size:16px; font-weight:800;" id="sheetTitle">—</div>
-      </div>
-      <button class="btn-icon" onclick="closeDrawer()">✕</button>
-    </div>
-    <div class="drawer-body" id="sheetContent"></div>
-    <div class="drawer-footer hide" id="sheetFooter"></div>
-  </div>
-
-  <!-- Generic record editor modal -->
-  <div class="overlay" id="modalOverlay" onclick="closeModal()"></div>
-  <div class="modal-shell" id="modalShell">
-    <div class="modal-box" id="modalBox">
-      <div class="drawer-header">
-        <div>
-          <div class="micro-label" id="modalSub">RECORD</div>
-          <div style="font-size:16px; font-weight:800;" id="modalTitle">—</div>
-        </div>
-        <button class="btn-icon" onclick="closeModal()">✕</button>
-      </div>
-      <div class="drawer-body" id="modalContent"></div>
-      <div class="drawer-footer" id="modalFooter"></div>
-    </div>
-  </div>
-
-  <!-- Photo capture (real camera where the browser allows it, file picker otherwise) -->
-  <input type="file" accept="image/*" capture="environment" id="photoInput" style="display:none;">
-
-  <div class="toast" id="toast"></div>
-
-  <script>
-    // Backend base URL.
-    //  - Same origin (backend/server.js serving this file itself, e.g. :5000) -> "".
-    //  - Vite dev server (npm run dev, :5173) -> talk to the backend on :5000.
-    //  - Anywhere else (Vercel) -> the deployed Render backend.
-    window.API_BASE = (() => {
-      const { hostname, port } = window.location;
-      const isLocal = hostname === "localhost" || hostname === "127.0.0.1";
-      if (isLocal && port === "5173") return "http://localhost:5000";
-      if (isLocal) return "";
-      return "https://project-quality.onrender.com";
-    })();
-  </script>
-  <script>
-    function toggleSidebar(force) {
-      const sb = document.getElementById("sidebar");
-      const ov = document.getElementById("sidebarOverlay");
-      const open = typeof force === "boolean" ? force : !sb.classList.contains("open");
-      sb.classList.toggle("open", open);
-      ov.classList.toggle("open", open);
-    }
-    document.querySelectorAll(".sidebar .tab-btn").forEach(btn => {
-      btn.addEventListener("click", () => { if (window.innerWidth <= 960) toggleSidebar(false); });
-    });
-  </script>
-  <script type="module" src="src/main.js"></script>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
 </body>
 
 </html>
