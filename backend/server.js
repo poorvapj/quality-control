@@ -349,6 +349,18 @@ server.on("error", (err) => {
   throw err;
 });
 
+// Surface the full error for any crash that would otherwise exit silently
+// (e.g. an unhandled rejection from a driver internal that isn't routed
+// through connectMongo()'s own .catch below).
+process.on("unhandledRejection", (err) => {
+  console.error("  ! unhandled rejection:", err && err.stack ? err.stack : err);
+  process.exit(1);
+});
+process.on("uncaughtException", (err) => {
+  console.error("  ! uncaught exception:", err && err.stack ? err.stack : err);
+  process.exit(1);
+});
+
 console.log(`\n  Neoteric Tower Quality Board`);
 connectMongo()
   .then(() => {
@@ -359,6 +371,6 @@ connectMongo()
     });
   })
   .catch((e) => {
-    console.error("  ! failed to connect to MongoDB:", e.message);
+    console.error("  ! failed to connect to MongoDB:", e && e.stack ? e.stack : e);
     process.exit(1);
   });

@@ -172,11 +172,16 @@ wireStore(renderAll, reopenDrawer);
 
   state.currentProjectId = (coll("projects")[0] || {}).id;
 
-  if (sessionActive && validUser) {
-    state.currentUserId = savedUser;
-    bootApp();
-  } else {
+  // TEMPORARY: login gate disabled for now (empty deployed DB was blocking
+  // access entirely). Re-enable by restoring the sessionActive/validUser
+  // check below — nothing else about the login screen/logic was removed.
+  const LOGIN_GATE_ENABLED = false;
+
+  if (LOGIN_GATE_ENABLED && !(sessionActive && validUser)) {
     showLogin();
+  } else {
+    state.currentUserId = (sessionActive && validUser) ? savedUser : (coll("users")[0] || {}).id;
+    bootApp();
   }
 })();
 
