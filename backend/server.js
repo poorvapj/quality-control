@@ -78,8 +78,7 @@ async function connectMongo() {
 
   const projectCount = await mongoDb.collection("projects").countDocuments();
   if (projectCount === 0) {
-    console.log("  no data found — seeding fresh demo data");
-    await resetDb("demo");
+    console.log("  no data found — starting with an empty board (use /api/reset to seed demo data if needed)");
   }
 
   for (const sig of ["SIGINT", "SIGTERM"]) {
