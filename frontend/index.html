@@ -359,9 +359,9 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 4px 8px 4px 4px;
+      padding: 5px 10px 5px 6px;
       border: 1px solid var(--border);
-      border-radius: 99px;
+      border-radius: var(--radius-md);
       background: var(--bg-card);
       cursor: pointer;
       transition: all 0.15s ease;
@@ -1845,6 +1845,58 @@
         padding: 18px 16px 40px;
       }
     }
+
+    /* Dark theme — same Nexora layout, dark navy surfaces, orange accent kept.
+       Needs to win over the light :root block above with equal specificity,
+       so it must come after it in source order (it does) and match html.dark. */
+    html.dark {
+      --theme-primary: #ff7a00;
+      --theme-primary-hover: #ff9233;
+      --theme-primary-light: rgba(255, 122, 0, .16);
+      --bg-page: #0b0f19;
+      --bg-card: #131a2a;
+      --bg-card-hover: #1b2437;
+      --bg-subtle: #1b2437;
+      --border: #26304a;
+      --border-strong: #35415e;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --text-sub: #64748b;
+    }
+
+    html.dark body { background: var(--bg-page); }
+    html.dark .app-shell { background: var(--bg-page); }
+    html.dark .main-area { background: var(--bg-page); }
+    html.dark .sidebar { background: var(--bg-card); border-right-color: var(--border); }
+    html.dark .sidebar-brand { background: var(--bg-card); border-bottom-color: var(--border); }
+    html.dark header { background-color: rgba(19, 26, 42, .92); border-bottom-color: var(--border); }
+    html.dark .login-screen { background: var(--bg-page); }
+    html.dark .login-card { background: var(--bg-card); border-color: var(--border); }
+    html.dark .panel-card,
+    html.dark .card,
+    html.dark .stat-card,
+    html.dark .role-bar,
+    html.dark .account-menu,
+    html.dark .modal-box,
+    html.dark .drawer-sheet {
+      background: var(--bg-card);
+      border-color: var(--border);
+    }
+    html.dark .input, html.dark .select, html.dark .textarea { background: var(--bg-subtle); border-color: var(--border); color: var(--text-main); }
+    html.dark table.data th { background: var(--bg-subtle); border-color: var(--border); }
+    html.dark table.data td { border-color: var(--border); }
+    html.dark .sub-btn, html.dark .tab-btn:not(.active) { background: transparent; }
+    html.dark .btn-secondary { background: var(--bg-subtle); border-color: var(--border); color: var(--text-main); }
+    html.dark .nav-group-label { color: var(--text-sub); }
+    html.dark .tab-btn { color: var(--text-muted); }
+    html.dark .tab-btn:hover { background: var(--bg-card-hover); color: #ffb877; }
+    html.dark .tab-btn.active { background: rgba(255, 122, 0, .18); color: #ff9d4d; }
+    html.dark .tab-badge { background: var(--bg-subtle); color: var(--text-muted); }
+    html.dark .tab-btn.active .tab-badge { background: rgba(255, 122, 0, .28); color: #ff9d4d; }
+    html.dark .sub-btn { color: var(--text-muted); border-color: var(--border); }
+    html.dark .sub-btn.active { background: rgba(255, 122, 0, .18); border-color: var(--theme-primary); color: #ff9d4d; }
+    html.dark .page-desc, html.dark .micro-label, html.dark .section-sub { color: var(--text-muted); }
+    html.dark .brand-title { color: var(--text-main); }
   </style>
 
 </head>
@@ -1930,8 +1982,7 @@
                   <div class="n" id="acctMenuName">—</div>
                   <div class="r" id="acctMenuRole">—</div>
                 </div>
-                <label class="micro-label">SWITCH USER</label>
-                <select class="select" id="userSel"></select>
+                <select class="select" id="userSel" style="display:none;"></select>
                 <button class="btn btn-secondary btn-sm" id="logoutBtn">Logout</button>
               </div>
             </div>
