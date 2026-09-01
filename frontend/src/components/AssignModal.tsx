@@ -3,11 +3,12 @@ import { useApp } from "../context/AppContext";
 import { coll, trackStages, projectFloors, projectUnits } from "../lib/rules";
 import { HOUR } from "../services/config";
 import { useActions } from "../lib/useActions";
-import Modal from "./Modal";
+import SidePanel from "./SidePanel";
+import NavIcon from "./NavIcon";
 import type { Track } from "../types";
 
 export default function AssignModal() {
-  const { assignModal, closeAssignModal, data, currentProjectId } = useApp();
+  const { assignModal, closeAssignModal, data, currentProjectId, toast } = useApp();
   const { saveAssignment } = useActions();
 
   const [targetType, setTargetType] = useState<Track>("unit");
@@ -28,27 +29,27 @@ export default function AssignModal() {
     setNote("");
   }, [assignModal]);
 
-  if (!assignModal) return null;
-
   const targets = targetType === "unit" ? projectUnits(data, currentProjectId) : projectFloors(data, currentProjectId);
   const stages = trackStages(data, currentProjectId, targetType);
   const users = coll(data, "users").filter((u) => u.active !== false);
 
+  async function submit() {
+    if (!targetId) { toast("Pick a target"); return; }
+    if (!stageId) { toast("Pick a stage"); return; }
+    if (!assignedTo) { toast("Pick who this is assigned to"); return; }
+    if (!due) { toast("Pick a due date"); return; }
+    await saveAssignment({ targetType, targetId, stageId, assignedTo, dueAt: new Date(due).getTime(), note });
+    closeAssignModal();
+  }
+
   return (
-    <Modal open sub="ASSIGN WORK" title="Assign to a team member" onClose={closeAssignModal} footer={
-      <>
-        <button className="btn btn-secondary" onClick={closeAssignModal}>Cancel</button>
-        <button
-          className="btn btn-primary"
-          onClick={async () => {
-            await saveAssignment({ targetType, targetId, stageId, assignedTo, dueAt: due ? new Date(due).getTime() : null, note });
-            closeAssignModal();
-          }}
-        >
-          Assign work
-        </button>
-      </>
-    }>
+    <SidePanel
+      open={!!assignModal}
+      icon={<NavIcon name="work" size={17} />}
+      title="Assign Work"
+      desc="Hand a stage of work to a team member, with a due date and instructions."
+      onClose={closeAssignModal}
+    >
       <div className="form-grid">
         <div className="field">
           <label>Target type</label>
@@ -84,6 +85,10 @@ export default function AssignModal() {
           <textarea className="textarea" placeholder="What exactly needs doing, and any constraint the person should know." value={note} onChange={(e) => setNote(e.target.value)} />
         </div>
       </div>
-    </Modal>
+
+      <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 20 }} onClick={submit}>
+        Assign work
+      </button>
+    </SidePanel>
   );
 }

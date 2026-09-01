@@ -96,14 +96,14 @@ export default function DailyProgressReportPage() {
     <div>
       <div className="page-header">
         <div className="page-header-left">
-          <div className="page-icon">📋</div>
+          <div className="page-icon"><NavIcon name="dpr" size={20} /></div>
           <div>
             <div className="page-title">Daily Progress Report</div>
             <div className="page-desc">Track labour, work progress, and drawing requests across all your projects.</div>
           </div>
         </div>
         <div className="page-header-actions">
-          <button className="btn btn-secondary btn-sm" onClick={() => setDrOpen(true)}>🖊️ Drawing Request</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => setDrOpen(true)}><NavIcon name="drawing" size={13} /> Drawing Request</button>
           <button className="btn btn-primary btn-sm" onClick={() => setOpen(true)}>＋ New Report</button>
         </div>
       </div>
@@ -302,11 +302,11 @@ export default function DailyProgressReportPage() {
         )}
       </div>
 
-      <SidePanel open={open} icon="📋" title="New Daily Progress Report" desc="Fill in today's site details, then check off what work happened." onClose={() => setOpen(false)}>
+      <SidePanel open={open} icon={<NavIcon name="dpr" size={17} />} title="New Daily Progress Report" desc="Fill in today's site details, then check off what work happened." onClose={() => setOpen(false)}>
         <DprForm isPublic={false} onDone={() => setOpen(false)} />
       </SidePanel>
 
-      <SidePanel open={drOpen} icon="🖊️" title="Request a Drawing" desc="Ask Planning/Design for a drawing you need on site" onClose={() => setDrOpen(false)}>
+      <SidePanel open={drOpen} icon={<NavIcon name="drawing" size={17} />} title="Request a Drawing" desc="Ask Planning/Design for a drawing you need on site" onClose={() => setDrOpen(false)}>
         <DrawingRequestForm isPublic={false} onDone={() => setDrOpen(false)} />
       </SidePanel>
     </div>

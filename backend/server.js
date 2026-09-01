@@ -40,10 +40,52 @@ const cloudinary = require("cloudinary").v2;
 const { seedData, blankData, COLLECTIONS } = require("./seed.js");
 
 /* ------------------------------------------------------------- passwords
-   No new dependency (bcrypt) — Node's built-in scrypt is a solid, standard
-   choice for this. Plaintext passwords are NEVER stored or returned; only
-   passwordHash/passwordSalt live in Mongo, and getState() strips both
-   before any /api/state response leaves the server. */
+   Node's built-in scrypt is our own hashing scheme going forward. Plaintext
+   passwords are NEVER stored or returned; only passwordHash/passwordSalt
+   live in Mongo, and getState() strips both before any /api/state response
+   leaves the server.
+
+   legacyPasswordHash: a small number of imported users carry their real
+   bcrypt hash from a previous system (their actual password was never
+   known to us — bcrypt hashes can't be converted to scrypt directly). On
+   their first successful login we verify against bcrypt, then transparently
+   re-hash to scrypt and drop the legacy field, so every account converges
+   on the same scheme within one login. */
+const bcrypt = require("bcryptjs");
+
+/* --------------------------------------------------------------- sessions
+   Minimal in-memory bearer-token auth. Not persisted across a restart —
+   users just log in again, same as any other session cookie would need to
+   after a server redeploy. Good enough to make "admin only" a real,
+   server-enforced boundary instead of a client-side convenience.
+
+   ADMIN_USER_ID names the one account whose session is trusted for
+   admin-gated ops (deletes, and any write to the users collection) —
+   matches the frontend's existing "U-ADMIN" convention. */
+const ADMIN_USER_ID = "U-ADMIN";
+const sessions = new Map(); // token -> { userId, isAdmin, expiresAt }
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+function issueSession(user) {
+  const token = crypto.randomBytes(24).toString("hex");
+  sessions.set(token, {
+    userId: user.id,
+    isAdmin: user.id === ADMIN_USER_ID,
+    expiresAt: Date.now() + SESSION_TTL_MS
+  });
+  return token;
+}
+
+function getSession(req) {
+  const header = req.headers["authorization"] || "";
+  const m = /^Bearer\s+(.+)$/.exec(header);
+  if (!m) return null;
+  const session = sessions.get(m[1]);
+  if (!session) return null;
+  if (session.expiresAt < Date.now()) { sessions.delete(m[1]); return null; }
+  return session;
+}
+
 function hashPassword(password, salt) {
   return crypto.scryptSync(String(password), salt, 64).toString("hex");
 }
@@ -134,7 +176,7 @@ async function getState() {
   // browser — /api/state is otherwise a full generic dump of every collection.
   if (data.users) {
     data.users = data.users.map((u) => {
-      const { passwordHash, passwordSalt, ...rest } = u;
+      const { passwordHash, passwordSalt, legacyPasswordHash, ...rest } = u;
       return rest;
     });
   }
@@ -167,7 +209,37 @@ function splitSetUnset(fields) {
   return { set, unset };
 }
 
-async function applyOps(ops) {
+/* Deletes, and any write to the `users` collection (Masters ▸ User Master
+   is Admin-only, everything else in Masters is open to every signed-in
+   board member), need a real logged-in admin session. Anonymous upsert to
+   `dpr`/`drawingRequests` — the two collections the public no-login
+   submission forms write to — stays open by design.
+
+   Bootstrap exception: if the users collection is genuinely empty (fresh
+   board, or recovering from a reset), the very first user upsert is let
+   through unauthenticated — otherwise nobody could ever create the first
+   admin account to log in and authorize anything else. Throws a tagged
+   error so the route handler can turn it into a clean 401/403. */
+async function assertOpAllowed(op, session) {
+  const needsAdmin = op.op === "delete" || (op.op === "upsert" && op.coll === "users");
+  if (!needsAdmin) return;
+  if (op.op === "upsert" && op.coll === "users") {
+    const userCount = await mongoDb.collection("users").countDocuments();
+    if (userCount === 0) return;
+  }
+  if (!session) { const e = new Error("Sign-in required"); e.status = 401; throw e; }
+  if (!session.isAdmin) { const e = new Error("Admin access required"); e.status = 403; throw e; }
+}
+
+async function applyOps(ops, session) {
+  // Validate the ENTIRE batch before writing anything — otherwise an
+  // allowed op earlier in the array would already be persisted to Mongo by
+  // the time a later, disallowed op in the same batch throws and aborts.
+  for (const op of ops || []) {
+    if (!op || typeof op !== "object") continue;
+    await assertOpAllowed(op, session);
+  }
+
   for (const op of ops || []) {
     if (!op || typeof op !== "object") continue;
 
@@ -305,18 +377,42 @@ async function handleApi(req, res, urlPath) {
     if (!email || !password) return sendJson(res, 400, { error: "Email and password are required" });
 
     const user = await mongoDb.collection("users").findOne({ email: new RegExp("^" + email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$", "i") });
-    if (!user || !user.passwordHash || !user.passwordSalt) return sendJson(res, 401, { error: "Invalid email or password" });
+    if (!user) return sendJson(res, 401, { error: "Invalid email or password" });
     if (user.active === false) return sendJson(res, 401, { error: "This account is inactive" });
-    if (!verifyPassword(password, user.passwordSalt, user.passwordHash)) {
+
+    if (user.passwordHash && user.passwordSalt) {
+      if (!verifyPassword(password, user.passwordSalt, user.passwordHash)) {
+        return sendJson(res, 401, { error: "Invalid email or password" });
+      }
+    } else if (user.legacyPasswordHash) {
+      if (!bcrypt.compareSync(password, user.legacyPasswordHash)) {
+        return sendJson(res, 401, { error: "Invalid email or password" });
+      }
+      // First successful login on a legacy account — migrate to our own
+      // scrypt hash and drop the bcrypt one, so this branch never runs again.
+      const salt = crypto.randomBytes(16).toString("hex");
+      const passwordHash = hashPassword(password, salt);
+      await mongoDb.collection("users").updateOne(
+        { id: user.id },
+        { $set: { passwordHash, passwordSalt: salt }, $unset: { legacyPasswordHash: "" } }
+      );
+    } else {
       return sendJson(res, 401, { error: "Invalid email or password" });
     }
-    const { _id, passwordHash, passwordSalt, ...safeUser } = user;
-    return sendJson(res, 200, { user: safeUser });
+
+    const { _id, passwordHash, passwordSalt, legacyPasswordHash, ...safeUser } = user;
+    const token = issueSession(user);
+    return sendJson(res, 200, { user: safeUser, token });
   }
   if (req.method === "POST" && urlPath === "/api/ops") {
     const body = await readBody(req);
     if (!Array.isArray(body.ops)) return sendJson(res, 400, { error: "ops[] required" });
-    await applyOps(body.ops);
+    try {
+      await applyOps(body.ops, getSession(req));
+    } catch (e) {
+      if (e.status) return sendJson(res, e.status, { error: e.message });
+      throw e;
+    }
     const state = await getState();
     return sendJson(res, 200, state);
   }
@@ -338,6 +434,9 @@ async function handleApi(req, res, urlPath) {
     }
   }
   if (req.method === "POST" && urlPath === "/api/reset") {
+    const session = getSession(req);
+    if (!session) return sendJson(res, 401, { error: "Sign-in required" });
+    if (!session.isAdmin) return sendJson(res, 403, { error: "Admin access required" });
     const body = await readBody(req);
     await resetDb(body.mode === "blank" ? "blank" : "demo");
     const state = await getState();

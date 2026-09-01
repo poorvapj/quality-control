@@ -4,6 +4,7 @@ import { myAssignments, mySnags, myReleases, refLabel } from "../lib/rules";
 import { ago } from "../lib/helpers";
 import AssignRow from "../components/AssignRow";
 import SnagRow from "../components/SnagRow";
+import NavIcon from "../components/NavIcon";
 
 export default function MyWork() {
   const { data, currentProjectId, currentUserId, openAssignModal, openDrawer } = useApp();
@@ -15,7 +16,7 @@ export default function MyWork() {
     <div>
       <div className="page-header">
         <div className="page-header-left">
-          <div className="page-icon">⚡</div>
+          <div className="page-icon"><NavIcon name="work" size={20} /></div>
           <div>
             <div className="page-title">My Work</div>
             <div className="page-desc">{asg.length} assigned · {rel.length} released to your role · {sng.length} snags on you</div>
@@ -26,12 +27,12 @@ export default function MyWork() {
         </div>
       </div>
 
-      <div className="section-header"><div className="section-title"><span className="icon-mono">📌</span> ASSIGNED TO ME</div></div>
+      <div className="section-header"><div className="section-title"><span className="icon-mono"><NavIcon name="pin" size={14} /></span> ASSIGNED TO ME</div></div>
       <div className="card">
         {asg.length ? asg.map((a) => <AssignRow key={a.id} a={a} />) : <div className="empty">Nothing assigned to you.</div>}
       </div>
 
-      <div className="section-header"><div className="section-title"><span className="icon-mono">⚡</span> RELEASED TO MY ROLE</div></div>
+      <div className="section-header"><div className="section-title"><span className="icon-mono"><NavIcon name="work" size={14} /></span> RELEASED TO MY ROLE</div></div>
       <div className="card">
         {rel.length ? rel.map((r, i) => {
           const name = r.targetType === "unit" ? refLabel(data, "units", r.targetId) : refLabel(data, "floors", r.targetId);
@@ -49,7 +50,7 @@ export default function MyWork() {
         }) : <div className="empty">No stages released to your role.</div>}
       </div>
 
-      <div className="section-header"><div className="section-title"><span className="icon-mono">🐞</span> SNAGS ON ME</div></div>
+      <div className="section-header"><div className="section-title"><span className="icon-mono"><NavIcon name="snags" size={14} /></span> SNAGS ON ME</div></div>
       <div className="card">
         {sng.length ? sng.map((s) => <SnagRow key={s.id} s={s} />) : <div className="empty">No open snags assigned to you.</div>}
       </div>

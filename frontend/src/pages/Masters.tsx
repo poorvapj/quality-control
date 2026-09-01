@@ -4,15 +4,20 @@ import { MASTERS } from "../services/config";
 import { coll, byId, refLabel } from "../lib/rules";
 import { exportSnagCsv } from "../lib/exportSnagCsv";
 import { downloadCsv } from "../lib/csv";
+import NavIcon from "../components/NavIcon";
 import type { MasterKey } from "../types";
 
 export default function Masters() {
   const {
-    data, currentProjectId, myRole, activeMaster, setActiveMaster,
-    openRecordModal, apply, toast, reset
+    data, currentProjectId, currentUserId, myRole, activeMaster: rawActiveMaster, setActiveMaster,
+    openRecordModal, apply, toast
   } = useApp();
   const [q, setQ] = useState("");
+  const isAdmin = currentUserId === "U-ADMIN";
   const editable = myRole() === "DRI";
+  // User Master exposes every account's contact/role data — Admin only.
+  // Every other master stays fully open to any signed-in user.
+  const activeMaster: MasterKey = (rawActiveMaster === "users" && !isAdmin) ? "projects" : rawActiveMaster;
   const master = MASTERS[activeMaster];
 
   let rows: any[] = coll(data, activeMaster).slice();
@@ -63,7 +68,7 @@ export default function Masters() {
     <div>
       <div className="page-header">
         <div className="page-header-left">
-          <div className="page-icon">⚙️</div>
+          <div className="page-icon"><NavIcon name="masters" size={20} /></div>
           <div>
             <div className="page-title">Master Data</div>
             <div className="page-desc">{master.desc}</div>
@@ -73,11 +78,13 @@ export default function Masters() {
 
       <div className="panel-card">
         <div className="sub-nav">
-          {(Object.entries(MASTERS) as [MasterKey, typeof master][]).map(([k, m]) => (
-            <button key={k} className={"sub-btn" + (k === activeMaster ? " active" : "")} onClick={() => { setActiveMaster(k); setQ(""); }}>
-              {m.icon} {m.label} Master
-            </button>
-          ))}
+          {(Object.entries(MASTERS) as [MasterKey, typeof master][])
+            .filter(([k]) => k !== "users" || isAdmin)
+            .map(([k, m]) => (
+              <button key={k} className={"sub-btn" + (k === activeMaster ? " active" : "")} onClick={() => { setActiveMaster(k); setQ(""); }}>
+                {m.icon} {m.label} Master
+              </button>
+            ))}
         </div>
         <div className="toolbar">
           <input className="input grow" placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -102,8 +109,8 @@ export default function Masters() {
                     {editable && (
                       <td>
                         <div className="row-actions">
-                          <button className="btn btn-secondary btn-sm" title="Edit" onClick={() => openRecordModal({ master: activeMaster, id: r.id })}>✎</button>
-                          <button className="btn btn-secondary btn-sm" title="Delete" onClick={() => deleteRecord(r.id)}>🗑</button>
+                          <button className="btn btn-secondary btn-sm" title="Edit" onClick={() => openRecordModal({ master: activeMaster, id: r.id })}><NavIcon name="edit" size={13} /></button>
+                          <button className="btn btn-secondary btn-sm" title="Delete" onClick={() => deleteRecord(r.id)}><NavIcon name="trash" size={13} /></button>
                         </div>
                       </td>
                     )}
@@ -117,8 +124,6 @@ export default function Masters() {
 
       {editable && (
         <div style={{ marginTop: 24, display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button className="btn btn-secondary btn-sm" onClick={() => { if (confirm("Reload the demo data? This replaces the whole board for everyone.")) reset("demo"); }}>↻ Reload demo data</button>
-          <button className="btn btn-secondary btn-sm" onClick={() => { if (confirm("Wipe everything and start from a blank board? This cannot be undone.")) reset("blank"); }}>⌫ Start blank board</button>
           <button className="btn btn-secondary btn-sm" onClick={() => exportSnagCsv(data, currentProjectId)}>⬇ Snag register CSV</button>
         </div>
       )}

@@ -5,6 +5,7 @@ import { fmtDate } from "../lib/helpers";
 import SidePanel from "../components/SidePanel";
 import DrawingRequestForm from "../components/DrawingRequestForm";
 import DrawingRequestDetailModal from "../components/DrawingRequestDetailModal";
+import NavIcon from "../components/NavIcon";
 import type { DrawingRequest } from "../types";
 
 const STAGE_LABEL: Record<string, string> = {
@@ -17,9 +18,11 @@ const STAGE_LABEL: Record<string, string> = {
 };
 
 export default function DrawingRequestsPage() {
-  const { data, currentProjectId } = useApp();
+  const { data, currentProjectId, myRole, apply, toast } = useApp();
+  const editable = myRole() === "DRI";
   const [createOpen, setCreateOpen] = useState(false);
   const [detail, setDetail] = useState<DrawingRequest | null>(null);
+  const [editing, setEditing] = useState<DrawingRequest | null>(null);
   const [fStatus, setFStatus] = useState("");
   const [fTracking, setFTracking] = useState("");
   const [fPriority, setFPriority] = useState("");
@@ -38,11 +41,17 @@ export default function DrawingRequestsPage() {
   // Keep the open detail view's data fresh as the board updates.
   const liveDetail = detail ? coll(data, "drawingRequests").find((r) => r.id === detail.id) || null : null;
 
+  async function deleteRequest(r: DrawingRequest) {
+    if (!confirm(`Delete drawing request ${r.ticketNo}?\n\nThis removes it for everyone on the board.`)) return;
+    await apply([{ op: "delete", coll: "drawingRequests", id: r.id }]);
+    toast("Deleted " + r.ticketNo);
+  }
+
   return (
     <div>
       <div className="page-header">
         <div className="page-header-left">
-          <div className="page-icon">📐</div>
+          <div className="page-icon"><NavIcon name="drawing" size={20} /></div>
           <div>
             <div className="page-title">Drawing Requests</div>
             <div className="page-desc">Manage drawing requests — {rows.length} total</div>
@@ -107,7 +116,13 @@ export default function DrawingRequestsPage() {
                     <td>{r.remarks || "—"}</td>
                     <td>
                       <div className="row-actions">
-                        <button className="btn btn-secondary btn-sm" title="View" onClick={() => setDetail(r)}>👁</button>
+                        <button className="btn btn-secondary btn-sm" title="View" onClick={() => setDetail(r)}><NavIcon name="eye" size={13} /></button>
+                        {editable && (
+                          <>
+                            <button className="btn btn-secondary btn-sm" title="Edit" onClick={() => setEditing(r)}><NavIcon name="edit" size={13} /></button>
+                            <button className="btn btn-secondary btn-sm" title="Delete" onClick={() => deleteRequest(r)}><NavIcon name="trash" size={13} /></button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -118,8 +133,12 @@ export default function DrawingRequestsPage() {
         </div>
       </div>
 
-      <SidePanel open={createOpen} icon="🖊️" title="Request a Drawing" desc="Ask Planning/Design for a drawing you need on site" onClose={() => setCreateOpen(false)}>
+      <SidePanel open={createOpen} icon={<NavIcon name="drawing" size={17} />} title="Request a Drawing" desc="Ask Planning/Design for a drawing you need on site" onClose={() => setCreateOpen(false)}>
         <DrawingRequestForm isPublic={false} onDone={() => setCreateOpen(false)} />
+      </SidePanel>
+
+      <SidePanel open={!!editing} icon={<NavIcon name="edit" size={17} />} title="Edit Drawing Request" desc="Update the ticket details — the review stage and history are unaffected" onClose={() => setEditing(null)}>
+        {editing && <DrawingRequestForm isPublic={false} editRecord={editing} onDone={() => setEditing(null)} />}
       </SidePanel>
 
       <DrawingRequestDetailModal dr={liveDetail} onClose={() => setDetail(null)} />

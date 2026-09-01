@@ -5,6 +5,16 @@ import { byId, coll } from "../lib/rules";
 
 const LS_KEY = "neoteric_board_v5";
 const SESSION_KEY = "neoteric_session";
+const TOKEN_KEY = "neoteric_token";
+
+function authHeaders(): Record<string, string> {
+  try {
+    const token = localStorage.getItem(TOKEN_KEY);
+    return token ? { Authorization: "Bearer " + token } : {};
+  } catch {
+    return {};
+  }
+}
 
 /* Mirror of the server's op handler so optimistic updates match exactly. */
 function applyOpsLocal(d: BoardData, ops: Op[]) {
@@ -134,10 +144,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       const r = await fetch(API_BASE + "/api/ops", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ ops })
       });
       const j = await r.json();
+      if (!r.ok) {
+        // The optimistic local update above already applied — the server
+        // rejected it (e.g. not signed in / not admin), so re-sync from the
+        // real server state instead of leaving the UI showing a change that
+        // never actually persisted.
+        const fresh = await fetch(API_BASE + "/api/state", { cache: "no-store" }).then((x) => x.json());
+        setData(fresh.data); dataRef.current = fresh.data; setRev(fresh.rev);
+        toast(j.error || "That action isn't allowed");
+        return;
+      }
       if (j.data) { setData(j.data); dataRef.current = j.data; setRev(j.rev); }
     } catch {
       modeRef.current = "offline";
@@ -150,10 +170,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (modeRef.current !== "live") { toast("Reset needs the server"); return; }
     const r = await fetch(API_BASE + "/api/reset", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({ mode })
     });
     const j = await r.json();
+    if (!r.ok) { toast(j.error || "Reset isn't allowed"); return; }
     setData(j.data); dataRef.current = j.data; setRev(j.rev);
     toast(mode === "blank" ? "Blank board created" : "Demo data reloaded");
   }, [toast]);
@@ -234,9 +255,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const body = await res.json().catch(() => ({}));
         return body.error || "Invalid email or password";
       }
-      const { user } = await res.json();
+      const { user, token } = await res.json();
       setCurrentUserId(user.id);
-      try { localStorage.setItem(SESSION_KEY, "1"); } catch {}
+      try {
+        localStorage.setItem(SESSION_KEY, "1");
+        if (token) localStorage.setItem(TOKEN_KEY, token);
+      } catch {}
       setLoggedIn(true);
       return null;
     } catch {
@@ -245,7 +269,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [setCurrentUserId]);
 
   const logout = useCallback(() => {
-    try { localStorage.removeItem(SESSION_KEY); } catch {}
+    try {
+      localStorage.removeItem(SESSION_KEY);
+      localStorage.removeItem(TOKEN_KEY);
+    } catch {}
     setLoggedIn(!LOGIN_GATE_ENABLED ? true : false);
   }, []);
 

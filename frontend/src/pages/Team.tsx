@@ -2,6 +2,7 @@ import React from "react";
 import { useApp } from "../context/AppContext";
 import { ROLES } from "../services/config";
 import { coll } from "../lib/rules";
+import NavIcon from "../components/NavIcon";
 
 export default function Team() {
   const { data, currentProjectId, openAssignModal, openDrawer } = useApp();
@@ -20,7 +21,7 @@ export default function Team() {
     <div>
       <div className="page-header">
         <div className="page-header-left">
-          <div className="page-icon">👥</div>
+          <div className="page-icon"><NavIcon name="team" size={20} /></div>
           <div>
             <div className="page-title">Team Workload</div>
             <div className="page-desc">Open assignments and snags per person. Tap a person to see their board.</div>

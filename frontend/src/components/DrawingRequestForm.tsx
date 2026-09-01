@@ -2,22 +2,26 @@ import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll } from "../lib/rules";
 import { useDrawingRequestActions } from "../lib/useDrawingRequestActions";
-import type { DrawingType, DrawingSource, DrawingPriority } from "../types";
+import type { DrawingType, DrawingSource, DrawingPriority, DrawingRequest } from "../types";
 
 const DRAWING_TYPES: DrawingType[] = ["Architectural", "Structural", "MEP", "Civil", "Interior", "Landscape", "Shop Drawing", "As-Built", "Other"];
 const SOURCES: DrawingSource[] = ["Site Visit", "RFI", "Client Request", "Internal Review", "Other"];
 
-export default function DrawingRequestForm({ isPublic, onDone }: { isPublic: boolean; onDone: (ticketNo: string) => void }) {
-  const { data, currentProjectId, me, toast } = useApp();
+export default function DrawingRequestForm({
+  isPublic, onDone, editRecord
+}: {
+  isPublic: boolean; onDone: (ticketNo: string) => void; editRecord?: DrawingRequest | null;
+}) {
+  const { data, currentProjectId, me, toast, apply } = useApp();
   const { createDrawingRequest } = useDrawingRequestActions();
   const projects = coll(data, "projects").filter((p) => p.active !== false);
 
-  const [projectId, setProjectId] = useState(currentProjectId || projects[0]?.id || "");
-  const [description, setDescription] = useState("");
-  const [drawingType, setDrawingType] = useState<DrawingType | "">("");
-  const [source, setSource] = useState<DrawingSource | "">("");
-  const [requestedPriority, setRequestedPriority] = useState<DrawingPriority | "">("");
-  const [requesterName, setRequesterName] = useState(isPublic ? "" : me()?.name || "");
+  const [projectId, setProjectId] = useState(editRecord?.projectId || currentProjectId || projects[0]?.id || "");
+  const [description, setDescription] = useState(editRecord?.description || "");
+  const [drawingType, setDrawingType] = useState<DrawingType | "">(editRecord?.drawingType || "");
+  const [source, setSource] = useState<DrawingSource | "">(editRecord?.source || "");
+  const [requestedPriority, setRequestedPriority] = useState<DrawingPriority | "">(editRecord?.requestedPriority || "");
+  const [requesterName, setRequesterName] = useState(editRecord?.requesterName || (isPublic ? "" : me()?.name || ""));
   const [saving, setSaving] = useState(false);
 
   async function submit() {
@@ -26,6 +30,19 @@ export default function DrawingRequestForm({ isPublic, onDone }: { isPublic: boo
     if (!drawingType) { toast("Pick a drawing type"); return; }
     if (!requesterName.trim()) { toast("Requester name is required"); return; }
     setSaving(true);
+    if (editRecord) {
+      // Only the basic ticket details are editable here — reviewStatus, reviewHistory,
+      // files and stage assignment are never touched, so the workflow stays append-only.
+      const projectName = coll(data, "projects").find((p) => p.id === projectId)?.name || "";
+      await apply([{
+        op: "upsert", coll: "drawingRequests",
+        rec: { id: editRecord.id, projectId, projectName, description: description.trim(), drawingType, source, requesterName: requesterName.trim(), requestedPriority }
+      }]);
+      setSaving(false);
+      toast("Drawing request updated");
+      onDone(editRecord.ticketNo);
+      return;
+    }
     const ticketNo = await createDrawingRequest({
       projectId, description: description.trim(), drawingType, source, requesterName: requesterName.trim(), isPublic, requestedPriority
     });
@@ -68,7 +85,7 @@ export default function DrawingRequestForm({ isPublic, onDone }: { isPublic: boo
       </div>
       <div className="field full">
         <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }} disabled={saving} onClick={submit}>
-          {saving ? "Submitting…" : "Submit Request"}
+          {saving ? "Saving…" : editRecord ? "Save changes" : "Submit Request"}
         </button>
       </div>
     </div>

@@ -40,7 +40,7 @@ export default function Dashboard() {
     <div>
       <div className="page-header">
         <div className="page-header-left">
-          <div className="page-icon">📊</div>
+          <div className="page-icon"><NavIcon name="dashboard" size={20} /></div>
           <div>
             <div className="page-title">Dashboard</div>
             <div className="page-desc">Site-wide KPIs, what needs you, and floor-by-floor progress.</div>
@@ -61,7 +61,7 @@ export default function Dashboard() {
       </div>
 
       <div className="section-header">
-        <div className="section-title"><span className="icon-mono">📌</span> WHAT NEEDS ME</div>
+        <div className="section-title"><span className="icon-mono"><NavIcon name="pin" size={14} /></span> WHAT NEEDS ME</div>
         <div className="section-sub">{myOpen} open item{myOpen === 1 ? "" : "s"} for {me()?.name || ""}</div>
       </div>
       <div className="card">
@@ -73,7 +73,7 @@ export default function Dashboard() {
       {slow.length > 0 && (
         <>
           <div className="section-header">
-            <div className="section-title"><span className="icon-mono">⏳</span> SLOW HANDOFFS</div>
+            <div className="section-title"><span className="icon-mono"><NavIcon name="clock" size={14} /></span> SLOW HANDOFFS</div>
             <div className="section-sub">Released to a trade but never acknowledged — these are the huddle agenda</div>
           </div>
           <div className="card">
@@ -93,7 +93,7 @@ export default function Dashboard() {
         </>
       )}
 
-      <div className="section-header"><div className="section-title"><span className="icon-mono">📈</span> FLOOR PROGRESS</div></div>
+      <div className="section-header"><div className="section-title"><span className="icon-mono"><NavIcon name="trend" size={14} /></span> FLOOR PROGRESS</div></div>
       <div className="card card-pad">
         {floors.slice().reverse().map((f) => {
           const us = floorUnits(data, currentProjectId, f.id);

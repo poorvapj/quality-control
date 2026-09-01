@@ -47,9 +47,9 @@ export default function Header({ onToggleSidebar }: { onToggleSidebar: () => voi
       <div className="header-inner">
         <div className="header-left">
           <button className="btn-icon menu-btn" onClick={onToggleSidebar} title="Menu">☰</button>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <div className="brand-title" style={{ fontSize: 14 }}>Tower Quality Board</div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600 }}>Quality Control &amp; Handoff System</div>
+            <div className="header-subtitle" style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600 }}>Quality Control &amp; Handoff System</div>
           </div>
         </div>
         <div className="header-actions">
@@ -69,16 +69,20 @@ export default function Header({ onToggleSidebar }: { onToggleSidebar: () => voi
                   <div className="n">{u ? u.name : "—"}</div>
                   <div className="r">{roleLabel}</div>
                 </div>
-                <select
-                  className="select"
-                  style={{ display: "none" }}
-                  value={currentUserId ?? ""}
-                  onChange={(e) => setCurrentUserId(e.target.value)}
-                >
-                  {users.map((usr) => (
-                    <option key={usr.id} value={usr.id}>{usr.name} · {usr.role}</option>
-                  ))}
-                </select>
+                {u?.id === "U-ADMIN" && (
+                  <>
+                    <label className="micro-label">Switch role</label>
+                    <select
+                      className="select"
+                      value={currentUserId ?? ""}
+                      onChange={(e) => setCurrentUserId(e.target.value)}
+                    >
+                      {users.map((usr) => (
+                        <option key={usr.id} value={usr.id}>{usr.name} · {usr.role}</option>
+                      ))}
+                    </select>
+                  </>
+                )}
                 <button className="btn btn-secondary btn-sm" onClick={() => { setMenuOpen(false); logout(); }}>Logout</button>
               </div>
             )}

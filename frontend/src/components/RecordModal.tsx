@@ -7,9 +7,14 @@ import Modal from "./Modal";
 import type { ChecklistItem, MasterField } from "../types";
 
 export default function RecordModal() {
-  const { recordModal, closeRecordModal, data, currentProjectId, apply, toast } = useApp();
-  const master = recordModal ? MASTERS[recordModal.master] : null;
-  const rec = recordModal?.id ? byId(coll(data, recordModal.master), recordModal.id) : null;
+  const { recordModal, closeRecordModal, data, currentProjectId, currentUserId, apply, toast } = useApp();
+  const isAdmin = currentUserId === "U-ADMIN";
+  // User Master is Admin-only — don't trust whatever `master` key this was
+  // opened with; the backend also rejects it, but fail closed here too
+  // instead of relying solely on every future caller staying careful.
+  const blocked = recordModal?.master === "users" && !isAdmin;
+  const master = recordModal && !blocked ? MASTERS[recordModal.master] : null;
+  const rec = recordModal?.id && !blocked ? byId(coll(data, recordModal.master), recordModal.id) : null;
 
   const [values, setValues] = useState<Record<string, any>>({});
   const [items, setItems] = useState<ChecklistItem[]>([]);
@@ -25,7 +30,19 @@ export default function RecordModal() {
     setItems((rec as any)?.items || []);
   }, [recordModal?.master, recordModal?.id]);
 
-  if (!recordModal || !master) return null;
+  if (!recordModal) return null;
+
+  if (blocked) {
+    return (
+      <Modal open sub="ACCESS DENIED" title="User Master" onClose={closeRecordModal} footer={
+        <button className="btn btn-secondary" onClick={closeRecordModal}>Close</button>
+      }>
+        <div className="empty">Only Admin can manage the User Master.</div>
+      </Modal>
+    );
+  }
+
+  if (!master) return null;
 
   const setV = (k: string, v: any) => setValues((s) => ({ ...s, [k]: v }));
 

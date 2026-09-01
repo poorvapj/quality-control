@@ -7,7 +7,7 @@ import React, { useEffect, useRef } from "react";
 export default function SidePanel({
   open, icon, title, desc, onClose, children
 }: {
-  open: boolean; icon: string; title: string; desc: string; onClose: () => void; children: React.ReactNode;
+  open: boolean; icon: React.ReactNode; title: string; desc: string; onClose: () => void; children: React.ReactNode;
 }) {
   const sheetRef = useRef<HTMLDivElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);

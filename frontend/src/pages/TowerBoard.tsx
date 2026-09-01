@@ -1,6 +1,7 @@
 import React from "react";
 import { useApp } from "../context/AppContext";
 import { projectFloors, floorUnits, trackStages, prog, floorReleased, floorBelow, unitSummary } from "../lib/rules";
+import NavIcon from "../components/NavIcon";
 
 export default function TowerBoard() {
   const { data, currentProjectId, openDrawer } = useApp();
@@ -11,7 +12,7 @@ export default function TowerBoard() {
     <div>
       <div className="page-header">
         <div className="page-header-left">
-          <div className="page-icon">🏢</div>
+          <div className="page-icon"><NavIcon name="board" size={20} /></div>
           <div>
             <div className="page-title">Tower Quality Matrix</div>
             <div className="page-desc">Tap a unit for its trade timeline · tap the floor label for the RCC structure track.</div>

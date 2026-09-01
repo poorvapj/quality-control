@@ -1,10 +1,12 @@
 import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
+import NavIcon from "./NavIcon";
 
 export default function LoginScreen() {
   const { data, mode, login } = useApp();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -57,14 +59,30 @@ export default function LoginScreen() {
           </div>
           <div className="field" style={{ marginTop: 12 }}>
             <label>Password</label>
-            <input
-              className="input"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-            />
+            <div style={{ position: "relative" }}>
+              <input
+                className="input"
+                type={showPassword ? "text" : "password"}
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                style={{ paddingRight: 40 }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                title={showPassword ? "Hide password" : "Show password"}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                style={{
+                  position: "absolute", right: 2, top: "50%", transform: "translateY(-50%)",
+                  width: 40, height: 40, background: "none", border: "none", cursor: "pointer",
+                  color: "var(--text-muted)", display: "flex", alignItems: "center", justifyContent: "center"
+                }}
+              >
+                <NavIcon name={showPassword ? "eyeOff" : "eye"} size={16} />
+              </button>
+            </div>
           </div>
 
           {error && (

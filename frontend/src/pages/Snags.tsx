@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, refLabel, snagTarget } from "../lib/rules";
 import { dueLabel, ago } from "../lib/helpers";
+import NavIcon from "../components/NavIcon";
 
 export default function Snags() {
   const { data, currentProjectId, currentUserId, openSnagModal, openDrawer } = useApp();
@@ -31,7 +32,7 @@ export default function Snags() {
     <div>
       <div className="page-header">
         <div className="page-header-left">
-          <div className="page-icon">🐞</div>
+          <div className="page-icon"><NavIcon name="snags" size={20} /></div>
           <div>
             <div className="page-title">Snag Register</div>
             <div className="page-desc">{open.length} open · {overdue.length} overdue · {all.length - open.length} closed</div>

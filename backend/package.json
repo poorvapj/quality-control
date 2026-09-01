@@ -12,6 +12,7 @@
     "dev": "node server.js"
   },
   "dependencies": {
+    "bcryptjs": "^2.4.3",
     "cloudinary": "^2.5.1",
     "dotenv": "^16.4.5",
     "mongodb": "^6.21.0"

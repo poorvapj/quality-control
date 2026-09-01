@@ -20,14 +20,32 @@ import Masters from "./pages/Masters";
 import DailyProgressReport from "./pages/DailyProgressReport";
 import DrawingRequests from "./pages/DrawingRequests";
 
+const COLLAPSE_KEY = "neoteric_sidebar_collapsed";
+
 export default function App() {
   const { data, loggedIn, currentProjectId, setCurrentProjectId, me, activeTab } = useApp();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem(COLLAPSE_KEY) === "1"; } catch { return false; }
+  });
+
+  // The header's hamburger does double duty: on mobile it opens/closes the
+  // overlay drawer, on desktop it collapses/expands the persistent sidebar —
+  // whichever one actually applies at the current width via CSS.
+  function toggleSidebar() {
+    setSidebarOpen((o) => !o);
+    setCollapsed((c) => {
+      const next = !c;
+      try { localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0"); } catch {}
+      return next;
+    });
+  }
 
   if (!loggedIn) return <><LoginScreen /><Toast /></>;
 
   const projects = coll(data, "projects").filter((p) => p.active !== false);
   const u = me();
+  const isAdmin = u?.id === "U-ADMIN";
 
   const pages: Record<string, React.ReactNode> = {
     dash: <Dashboard />,
@@ -40,12 +58,18 @@ export default function App() {
     drawingRequests: <DrawingRequests />
   };
 
+  // Team is admin-only — a stale activeTab (e.g. from before this
+  // restriction existed) should fall back to Dashboard, not just hide the
+  // nav link while still rendering the page underneath. Masters is open to
+  // everyone now, so it's excluded from this check.
+  const restrictedTab = activeTab === "team" && !isAdmin;
+
   return (
     <div className="app-shell">
       <div className={"sidebar-overlay" + (sidebarOpen ? " open" : "")} onClick={() => setSidebarOpen(false)}></div>
-      <Sidebar open={sidebarOpen} onNavigate={() => setSidebarOpen(false)} />
+      <Sidebar open={sidebarOpen} collapsed={collapsed} onNavigate={() => setSidebarOpen(false)} />
       <div className="main-area">
-        <Header onToggleSidebar={() => setSidebarOpen((o) => !o)} />
+        <Header onToggleSidebar={toggleSidebar} />
         <div className="wrap">
           {activeTab === "dash" && (
             <div className="role-bar">
@@ -63,7 +87,7 @@ export default function App() {
             </div>
           )}
 
-          {pages[activeTab]}
+          {restrictedTab ? <Dashboard /> : pages[activeTab]}
         </div>
       </div>
 
