@@ -88,7 +88,7 @@ export default function DailyProgressReportPage() {
   const [open, setOpen] = useState(false);
   const [drOpen, setDrOpen] = useState(false);
   const [tab, setTab] = useState<DprTab>("work");
-  const [fProject, setFProject] = useState(currentProjectId || "");
+  const [fProject, setFProject] = useState("");
   const [fUser, setFUser] = useState("");
   const [fRange, setFRange] = useState<DateRange>("all");
   const [customFrom, setCustomFrom] = useState("");

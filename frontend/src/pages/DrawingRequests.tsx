@@ -18,7 +18,7 @@ const STAGE_LABEL: Record<string, string> = {
 };
 
 export default function DrawingRequestsPage() {
-  const { data, currentProjectId, myRole, apply, toast } = useApp();
+  const { data, myRole, apply, toast } = useApp();
   const editable = myRole() === "DRI";
   const [createOpen, setCreateOpen] = useState(false);
   const [detail, setDetail] = useState<DrawingRequest | null>(null);
@@ -27,7 +27,7 @@ export default function DrawingRequestsPage() {
   const [fTracking, setFTracking] = useState("");
   const [fPriority, setFPriority] = useState("");
   const [fType, setFType] = useState("");
-  const [fProject, setFProject] = useState(currentProjectId || "");
+  const [fProject, setFProject] = useState("");
 
   const projects = coll(data, "projects").filter((p) => p.active !== false);
   let rows = coll(data, "drawingRequests").slice();
