@@ -23,13 +23,31 @@ export const prog = (data: BoardData | null, targetId: string, stageId: string) 
 
 export interface JoinedStage { map: StageMap; stage: Stage; }
 
+/* trackStages re-filters the whole stagemap on every call — cheap for one
+   project, but unitSummary() calls it (directly, and again indirectly via
+   floorReleased) for every single unit, so "All Projects" dashboards doing
+   this for ~2600 units re-scan the stagemap thousands of times per render.
+   Memoized per (data object identity, project+track) — safe because `data`
+   is treated as immutable within a render; AppContext always produces a new
+   object via structuredClone on every real change, so a stale cache entry
+   for an old `data` reference is simply never looked up again. */
+const trackStagesCache = new WeakMap<BoardData, Map<string, JoinedStage[]>>();
+
 export function trackStages(data: BoardData | null, projectId: string | null, track: Track): JoinedStage[] {
   if (!data) return [];
-  return data.stagemap
+  let byKey = trackStagesCache.get(data);
+  if (!byKey) { byKey = new Map(); trackStagesCache.set(data, byKey); }
+  const key = projectId + "::" + track;
+  const cached = byKey.get(key);
+  if (cached) return cached;
+
+  const result = data.stagemap
     .filter((m) => m.projectId === projectId && m.track === track && m.active !== false)
     .map((m) => ({ map: m, stage: byId(data.stages, m.stageId) as Stage }))
     .filter((x): x is JoinedStage => !!x.stage && x.stage.active !== false)
     .sort((a, b) => (a.map.seq || 0) - (b.map.seq || 0));
+  byKey.set(key, result);
+  return result;
 }
 
 export function projectFloors(data: BoardData | null, projectId: string | null): Floor[] {

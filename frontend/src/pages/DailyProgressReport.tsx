@@ -84,7 +84,7 @@ function fmtDate(ts: number): string {
 }
 
 export default function DailyProgressReportPage() {
-  const { data, currentProjectId } = useApp();
+  const { data } = useApp();
   const [open, setOpen] = useState(false);
   const [drOpen, setDrOpen] = useState(false);
   const [tab, setTab] = useState<DprTab>("work");
@@ -137,9 +137,13 @@ export default function DailyProgressReportPage() {
   // KPI strip — purely read-only display stats, computed from this feature's
   // own data (+ a read-only glance at Drawing Requests' pending count). No
   // shared logic/model between the two features — just a summary glance.
-  const totalLabour = allDpr.reduce((a, r) => a + (r.labourCount || 0), 0);
-  const units = projectUnits(data, currentProjectId);
-  const summaries = units.map((u) => unitSummary(data, currentProjectId, u.id));
+  // Both figures respect the page's own Project filter (fProject) — not the
+  // separate global currentProjectId — so "All Projects" in the dropdown
+  // above genuinely means every project's data, not one hardcoded project.
+  const totalLabour = rows.reduce((a, r) => a + (r.labourCount || 0), 0);
+  const progressProjectIds = fProject ? [fProject] : projects.map((p) => p.id);
+  const units = progressProjectIds.flatMap((pid) => projectUnits(data, pid));
+  const summaries = progressProjectIds.flatMap((pid) => projectUnits(data, pid).map((u) => unitSummary(data, pid, u.id)));
   const stagesTotal = summaries.reduce((a, s) => a + s.total, 0) || 1;
   const stagesDone = summaries.reduce((a, s) => a + s.done, 0);
   const overallProgress = Math.round((stagesDone / stagesTotal) * 100);

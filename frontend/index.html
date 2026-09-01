@@ -784,11 +784,12 @@
       justify-content: space-between;
       gap: 8px;
       width: 100%;
-      padding: 8px 10px;
+      padding: 9px 12px;
       border: none;
       background: none;
       border-radius: 7px;
-      font-size: 13px;
+      font-size: 14px;
+      font-weight: 500;
       color: var(--text-main);
       text-align: left;
       cursor: pointer;
@@ -801,10 +802,16 @@
       background: var(--bg-card-hover);
     }
 
+    /* Active = orange text + checkmark only, no background fill — matches
+       the reference dropdown exactly. */
     .dropdown-row.active {
       color: var(--theme-primary);
       font-weight: 700;
-      background: var(--theme-primary-light);
+      background: var(--bg-subtle);
+    }
+
+    .dropdown-row.active:hover {
+      background: var(--bg-card-hover);
     }
 
     .dropdown-empty {

@@ -12,7 +12,7 @@
  * at this server's URL reads and writes ONE board, live (5s poll).
  *
  * Required env (see .env.example):
- *   MONGODB_URI, MONGODB_DB, CLOUDINARY_URL, ALLOWED_ORIGIN
+ *   MONGODB_URI, MONGODB_DB, CLOUDINARY_URL, ALLOWED_ORIGIN, JWT_SECRET
  *
  * Cloudinary credentials are read ONLY from CLOUDINARY_URL (the SDK picks it
  * up automatically) — never split into separate cloud_name/key/secret vars.
@@ -54,36 +54,40 @@ const { seedData, blankData, COLLECTIONS } = require("./seed.js");
 const bcrypt = require("bcryptjs");
 
 /* --------------------------------------------------------------- sessions
-   Minimal in-memory bearer-token auth. Not persisted across a restart —
-   users just log in again, same as any other session cookie would need to
-   after a server redeploy. Good enough to make "admin only" a real,
-   server-enforced boundary instead of a client-side convenience.
+   Signed JWTs — stateless, so "who's admin" is a real server-verified
+   claim (not a client-held convenience) that also survives a server
+   restart/redeploy without forcing every signed-in user to log in again,
+   unlike an in-memory session store.
 
-   ADMIN_USER_ID names the one account whose session is trusted for
+   ADMIN_USER_ID names the one account whose token is trusted for
    admin-gated ops (deletes, and any write to the users collection) —
-   matches the frontend's existing "U-ADMIN" convention. */
+   matches the frontend's existing "U-ADMIN" convention.
+
+   Tradeoff to know: a JWT can't be revoked before it expires — deactivating
+   a user or changing their password doesn't invalidate a token they already
+   hold. SESSION_TTL bounds how long that window can last. */
+const jwt = require("jsonwebtoken");
 const ADMIN_USER_ID = "U-ADMIN";
-const sessions = new Map(); // token -> { userId, isAdmin, expiresAt }
-const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const SESSION_TTL = "7d";
+
+if (!process.env.JWT_SECRET) {
+  throw new Error("JWT_SECRET is not set — see .env.example. Refusing to start with no signing key.");
+}
+const JWT_SECRET = process.env.JWT_SECRET;
 
 function issueSession(user) {
-  const token = crypto.randomBytes(24).toString("hex");
-  sessions.set(token, {
-    userId: user.id,
-    isAdmin: user.id === ADMIN_USER_ID,
-    expiresAt: Date.now() + SESSION_TTL_MS
-  });
-  return token;
+  return jwt.sign({ userId: user.id, isAdmin: user.id === ADMIN_USER_ID }, JWT_SECRET, { expiresIn: SESSION_TTL });
 }
 
 function getSession(req) {
   const header = req.headers["authorization"] || "";
   const m = /^Bearer\s+(.+)$/.exec(header);
   if (!m) return null;
-  const session = sessions.get(m[1]);
-  if (!session) return null;
-  if (session.expiresAt < Date.now()) { sessions.delete(m[1]); return null; }
-  return session;
+  try {
+    return jwt.verify(m[1], JWT_SECRET);
+  } catch {
+    return null; // expired, tampered, or malformed — all treated as unauthenticated
+  }
 }
 
 function hashPassword(password, salt) {

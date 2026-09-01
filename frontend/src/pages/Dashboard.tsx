@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { SEVERITIES } from "../services/config";
 import {
@@ -8,13 +8,21 @@ import {
 import AssignRow from "../components/AssignRow";
 import SnagRow from "../components/SnagRow";
 import NavIcon from "../components/NavIcon";
+import SearchDropdown from "../components/SearchDropdown";
 import type { Floor } from "../types";
 
 const FLOOR_LIST_CAP = 40;
+const ALL_PROJECTS_VALUE = "__all__";
 
-export default function Dashboard({ viewAllProjects }: { viewAllProjects: boolean }) {
-  const { data, currentProjectId, currentUserId, me, openDrawer } = useApp();
+export default function Dashboard() {
+  const { data, currentProjectId, setCurrentProjectId, currentUserId, me, openDrawer } = useApp();
   const allProjects = coll(data, "projects").filter((p) => p.active !== false);
+  // Dashboard-only "All Projects" view, owned entirely by this page.
+  // Deliberately NOT stored on currentProjectId — that value is shared by
+  // Tower Board/My Work/Snags, none of which have an "all projects" mode,
+  // so it must always stay a real single project id for them regardless of
+  // what this page is showing.
+  const [viewAllProjects, setViewAllProjects] = useState(true);
   // "All Projects" combines real per-project results — each helper below is
   // still called once per real project (never with a null/empty projectId),
   // so a floor's own project always drives its own stage list. No shared
@@ -47,7 +55,32 @@ export default function Dashboard({ viewAllProjects }: { viewAllProjects: boolea
   const myOpen = asg.length + sng.length;
   const bySeverity = SEVERITIES.map((sev) => ({ sev, n: openSnags.filter((s) => s.severity === sev).length }));
 
-  const floorRows = floors.slice().reverse().slice(0, FLOOR_LIST_CAP);
+  // Capping this list only matters in "All Projects" mode (290 floors is
+  // too many to render). A plain slice() would just show every floor of
+  // whichever project happens to sort last — not remotely "latest" activity
+  // since floors have no timestamp. Instead, round-robin one floor per
+  // project per pass (each project's own floors already ordered highest
+  // first via projectFloors' seq sort + our own reverse), so every project
+  // gets fair representation instead of one project dominating the list.
+  const floorRows: Floor[] = (() => {
+    if (!viewAllProjects) return floors.slice().reverse().slice(0, FLOOR_LIST_CAP);
+    const byProject = new Map<string, Floor[]>();
+    for (const f of floors) {
+      const list = byProject.get(f.projectId) || [];
+      list.push(f);
+      byProject.set(f.projectId, list);
+    }
+    for (const list of byProject.values()) list.reverse(); // highest floor first, per project
+    const lists = Array.from(byProject.values());
+    const out: Floor[] = [];
+    for (let i = 0; out.length < FLOOR_LIST_CAP && lists.some((l) => i < l.length); i++) {
+      for (const list of lists) {
+        if (i < list.length) out.push(list[i]);
+        if (out.length >= FLOOR_LIST_CAP) break;
+      }
+    }
+    return out;
+  })();
 
   return (
     <div>
@@ -63,6 +96,19 @@ export default function Dashboard({ viewAllProjects }: { viewAllProjects: boolea
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="field" style={{ maxWidth: 220, marginBottom: 24 }}>
+        <label>Active Project</label>
+        <SearchDropdown
+          value={viewAllProjects ? ALL_PROJECTS_VALUE : (currentProjectId ?? "")}
+          onChange={(v) => {
+            if (v === ALL_PROJECTS_VALUE) { setViewAllProjects(true); return; }
+            setViewAllProjects(false);
+            setCurrentProjectId(v);
+          }}
+          options={[{ value: ALL_PROJECTS_VALUE, label: "All Projects" }, ...allProjects.map((p) => ({ value: p.id, label: p.name }))]}
+        />
       </div>
 
       <div className="micro-label" style={{ marginBottom: 10 }}>KPI OVERVIEW</div>
@@ -113,7 +159,7 @@ export default function Dashboard({ viewAllProjects }: { viewAllProjects: boolea
       <div className="section-header">
         <div className="section-title"><span className="icon-mono"><NavIcon name="trend" size={14} /></span> FLOOR PROGRESS</div>
         {viewAllProjects && floors.length > FLOOR_LIST_CAP && (
-          <div className="section-sub">Showing the latest {FLOOR_LIST_CAP} of {floors.length} floors across all projects</div>
+          <div className="section-sub">Showing {floorRows.length} of {floors.length} floors — a spread across every project, not just one</div>
         )}
       </div>
       <div className="card card-pad">
