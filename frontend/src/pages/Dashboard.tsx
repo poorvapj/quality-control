@@ -8,21 +8,32 @@ import {
 import AssignRow from "../components/AssignRow";
 import SnagRow from "../components/SnagRow";
 import NavIcon from "../components/NavIcon";
+import type { Floor } from "../types";
 
-export default function Dashboard() {
+const FLOOR_LIST_CAP = 40;
+
+export default function Dashboard({ viewAllProjects }: { viewAllProjects: boolean }) {
   const { data, currentProjectId, currentUserId, me, openDrawer } = useApp();
+  const allProjects = coll(data, "projects").filter((p) => p.active !== false);
+  // "All Projects" combines real per-project results — each helper below is
+  // still called once per real project (never with a null/empty projectId),
+  // so a floor's own project always drives its own stage list. No shared
+  // rule function had to change to make this work.
+  const projectIds = viewAllProjects ? allProjects.map((p) => p.id) : [currentProjectId];
 
-  const units = projectUnits(data, currentProjectId);
-  const summaries = units.map((u) => unitSummary(data, currentProjectId, u.id));
+  const units = projectIds.flatMap((pid) => projectUnits(data, pid));
+  const summaries = projectIds.flatMap((pid) => projectUnits(data, pid).map((u) => unitSummary(data, pid, u.id)));
   const handed = summaries.filter((s) => s.complete).length;
   const stagesTotal = summaries.reduce((a, s) => a + s.total, 0) || 1;
   const stagesDone = summaries.reduce((a, s) => a + s.done, 0);
   const pct = Math.round((stagesDone / stagesTotal) * 100);
-  const openSnags = coll(data, "snags").filter((s) => s.status !== "Closed" && s.projectId === currentProjectId);
+  const openSnags = viewAllProjects
+    ? coll(data, "snags").filter((s) => s.status !== "Closed")
+    : coll(data, "snags").filter((s) => s.status !== "Closed" && s.projectId === currentProjectId);
   const critical = openSnags.filter((s) => s.severity === "Critical").length;
-  const slow = slowHandoffs(data, currentProjectId);
-  const floors = projectFloors(data, currentProjectId);
-  const castFloors = floors.filter((f) => floorReleased(data, currentProjectId, f.id)).length;
+  const slow = projectIds.flatMap((pid) => slowHandoffs(data, pid)).sort((a, b) => b.hrs - a.hrs);
+  const floors: Floor[] = projectIds.flatMap((pid) => projectFloors(data, pid));
+  const castFloors = floors.filter((f) => floorReleased(data, f.projectId, f.id)).length;
 
   const stats = [
     { label: "UNITS HANDED OVER", val: `${handed}/${units.length}`, ok: true, icon: "award", foot: pct + "% of all stages complete" },
@@ -31,10 +42,12 @@ export default function Dashboard() {
     { label: "FLOORS CURED", val: `${castFloors}/${floors.length}`, icon: "board", foot: "Bottom-up casting enforced" }
   ];
 
-  const asg = myAssignments(data, currentProjectId, currentUserId);
-  const sng = mySnags(data, currentProjectId, currentUserId);
+  const asg = projectIds.flatMap((pid) => myAssignments(data, pid, currentUserId));
+  const sng = projectIds.flatMap((pid) => mySnags(data, pid, currentUserId));
   const myOpen = asg.length + sng.length;
   const bySeverity = SEVERITIES.map((sev) => ({ sev, n: openSnags.filter((s) => s.severity === sev).length }));
+
+  const floorRows = floors.slice().reverse().slice(0, FLOOR_LIST_CAP);
 
   return (
     <div>
@@ -43,7 +56,11 @@ export default function Dashboard() {
           <div className="page-icon"><NavIcon name="dashboard" size={20} /></div>
           <div>
             <div className="page-title">Dashboard</div>
-            <div className="page-desc">Site-wide KPIs, what needs you, and floor-by-floor progress.</div>
+            <div className="page-desc">
+              {viewAllProjects
+                ? "Combined KPIs, what needs you, and floor-by-floor progress across all projects."
+                : "Site-wide KPIs, what needs you, and floor-by-floor progress."}
+            </div>
           </div>
         </div>
       </div>
@@ -93,19 +110,27 @@ export default function Dashboard() {
         </>
       )}
 
-      <div className="section-header"><div className="section-title"><span className="icon-mono"><NavIcon name="trend" size={14} /></span> FLOOR PROGRESS</div></div>
+      <div className="section-header">
+        <div className="section-title"><span className="icon-mono"><NavIcon name="trend" size={14} /></span> FLOOR PROGRESS</div>
+        {viewAllProjects && floors.length > FLOOR_LIST_CAP && (
+          <div className="section-sub">Showing the latest {FLOOR_LIST_CAP} of {floors.length} floors across all projects</div>
+        )}
+      </div>
       <div className="card card-pad">
-        {floors.slice().reverse().map((f) => {
-          const us = floorUnits(data, currentProjectId, f.id);
-          const s = us.map((u) => unitSummary(data, currentProjectId, u.id));
+        {floorRows.map((f) => {
+          const us = floorUnits(data, f.projectId, f.id);
+          const s = us.map((u) => unitSummary(data, f.projectId, u.id));
           const d = s.reduce((a, x) => a + x.done, 0);
           const t = s.reduce((a, x) => a + x.total, 0) || 1;
           const p = Math.round((d / t) * 100);
-          const released = floorReleased(data, currentProjectId, f.id);
+          const released = floorReleased(data, f.projectId, f.id);
           return (
             <div key={f.id} style={{ marginBottom: 11 }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, fontWeight: 700 }}>
-                <span>{f.name} <span style={{ color: "var(--text-sub)", fontWeight: 600 }}>· {us.length} units{released ? "" : " · structure in progress"}</span></span>
+                <span>
+                  {viewAllProjects ? refLabel(data, "projects", f.projectId) + " · " : ""}{f.name}{" "}
+                  <span style={{ color: "var(--text-sub)", fontWeight: 600 }}>· {us.length} units{released ? "" : " · structure in progress"}</span>
+                </span>
                 <span style={{ color: "var(--text-muted)" }}>{p}%</span>
               </div>
               <div className="workload-bar"><div className="workload-fill" style={{ width: p + "%", background: p === 100 ? "var(--color-pass)" : "var(--theme-primary)" }}></div></div>

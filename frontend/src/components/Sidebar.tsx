@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, myAssignments, myReleases } from "../lib/rules";
 import NavIcon from "./NavIcon";
@@ -6,9 +6,22 @@ import type { TabKey } from "../types";
 
 interface NavItem { key: TabKey; icon: string; label: string; badge?: number }
 
-export default function Sidebar({ open, collapsed, onNavigate }: { open: boolean; collapsed: boolean; onNavigate: () => void }) {
+export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: { open: boolean; collapsed: boolean; onNavigate: () => void }) {
   const { activeTab, setActiveTab, data, currentUserId, currentProjectId } = useApp();
   const isAdmin = currentUserId === "U-ADMIN";
+
+  // Icon-only collapse only ever makes sense on desktop. A stale
+  // collapsed=true from localStorage (e.g. set on desktop, then this page
+  // loads on a phone) must never hide labels here — check the real
+  // viewport directly rather than trusting the prop alone.
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia("(max-width: 960px)").matches);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 960px)");
+    const onChange = () => setIsMobile(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  const collapsed = collapsedProp && !isMobile;
 
   const workBadge =
     myAssignments(data, currentProjectId, currentUserId).length + myReleases(data, currentProjectId, currentUserId).length;

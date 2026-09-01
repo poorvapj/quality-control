@@ -1,21 +1,70 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, refLabel, projectFloors, projectUnits, unitSummary } from "../lib/rules";
 import { downloadCsv } from "../lib/csv";
 import NavIcon from "../components/NavIcon";
+import SearchDropdown from "../components/SearchDropdown";
+import CalendarRangePicker from "../components/CalendarRangePicker";
 import SidePanel from "../components/SidePanel";
 import DprForm from "../components/DprForm";
 import DrawingRequestForm from "../components/DrawingRequestForm";
 
 type DprTab = "work" | "drawing" | "summary";
-type DateRange = "all" | "today" | "7d" | "30d";
+type DateRange = "all" | "today" | "yesterday" | "thisWeek" | "lastWeek" | "weekNumber" | "thisMonth" | "custom";
 
 const DATE_RANGES: { key: DateRange; label: string }[] = [
   { key: "all", label: "All Time" },
   { key: "today", label: "Today" },
-  { key: "7d", label: "Last 7 days" },
-  { key: "30d", label: "Last 30 days" }
+  { key: "yesterday", label: "Yesterday" },
+  { key: "thisWeek", label: "This Week" },
+  { key: "lastWeek", label: "Last Week" },
+  { key: "weekNumber", label: "Week Number" },
+  { key: "thisMonth", label: "This Month" },
+  { key: "custom", label: "Custom Range" }
 ];
+
+/** Monday..Sunday bounds for ISO week `week` of `year`. */
+function isoWeekBounds(year: number, week: number): { from: string; to: string } {
+  const jan4 = new Date(year, 0, 4);
+  const jan4Dow = (jan4.getDay() + 6) % 7;
+  const mon = new Date(jan4); mon.setDate(jan4.getDate() - jan4Dow + (week - 1) * 7);
+  const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
+  return { from: ymd(mon), to: ymd(sun) };
+}
+
+function ymd(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+/** Real [from, to] (inclusive, YYYY-MM-DD) for each preset — Monday-start weeks. */
+function dateRangeBounds(range: DateRange): { from: string; to: string } | null {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dow = (today.getDay() + 6) % 7; // 0 = Monday
+
+  if (range === "all") return null;
+  if (range === "today") return { from: ymd(today), to: ymd(today) };
+  if (range === "yesterday") {
+    const y = new Date(today); y.setDate(y.getDate() - 1);
+    return { from: ymd(y), to: ymd(y) };
+  }
+  if (range === "thisWeek") {
+    const mon = new Date(today); mon.setDate(mon.getDate() - dow);
+    const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
+    return { from: ymd(mon), to: ymd(sun) };
+  }
+  if (range === "lastWeek") {
+    const mon = new Date(today); mon.setDate(mon.getDate() - dow - 7);
+    const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
+    return { from: ymd(mon), to: ymd(sun) };
+  }
+  if (range === "thisMonth") {
+    const first = new Date(today.getFullYear(), today.getMonth(), 1);
+    const last = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    return { from: ymd(first), to: ymd(last) };
+  }
+  return null; // "custom" and "weekNumber" are handled separately, with their own inputs
+}
 
 const STAGE_LABEL: Record<string, string> = {
   "stage-1-screen": "Screening (L1)",
@@ -42,17 +91,37 @@ export default function DailyProgressReportPage() {
   const [fProject, setFProject] = useState(currentProjectId || "");
   const [fUser, setFUser] = useState("");
   const [fRange, setFRange] = useState<DateRange>("all");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const calendarWrapRef = useRef<HTMLDivElement>(null);
+  const nowForWeek = new Date();
+  const [weekYear, setWeekYear] = useState(nowForWeek.getFullYear());
+  const [weekNum, setWeekNum] = useState(1);
+
+  useEffect(() => {
+    if (!calendarOpen) return;
+    function onDocClick(e: MouseEvent) {
+      if (calendarWrapRef.current && !calendarWrapRef.current.contains(e.target as Node)) setCalendarOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [calendarOpen]);
 
   const projects = coll(data, "projects").filter((p) => p.active !== false);
   const users = coll(data, "users").filter((u) => u.active !== false);
   const allDpr = coll(data, "dpr");
 
-  const rangeCutoff = fRange === "all" ? "" : new Date(Date.now() - (fRange === "today" ? 0 : fRange === "7d" ? 6 : 29) * 86400000).toISOString().slice(0, 10);
+  const bounds = fRange === "custom"
+    ? (customFrom || customTo ? { from: customFrom || "0000-01-01", to: customTo || "9999-12-31" } : null)
+    : fRange === "weekNumber"
+    ? isoWeekBounds(weekYear, weekNum)
+    : dateRangeBounds(fRange);
 
   let rows = allDpr.slice();
   if (fProject) rows = rows.filter((r) => r.projectId === fProject);
   if (fUser) rows = rows.filter((r) => r.submittedByUserId === fUser);
-  if (rangeCutoff) rows = rows.filter((r) => r.date >= rangeCutoff);
+  if (bounds) rows = rows.filter((r) => r.date >= bounds.from && r.date <= bounds.to);
   rows.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 
   function generateReport() {
@@ -111,26 +180,58 @@ export default function DailyProgressReportPage() {
       <div className="filter-bar">
         <div className="field" style={{ minWidth: 150 }}>
           <label>Date Range</label>
-          <div className="select-icon-wrap">
-            <span className="select-icon">📅</span>
-            <select className="select" value={fRange} onChange={(e) => setFRange(e.target.value as DateRange)}>
-              {DATE_RANGES.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
-            </select>
-          </div>
+          <SearchDropdown
+            icon="calendar"
+            searchable={false}
+            scrollable={false}
+            value={fRange}
+            onChange={(v) => setFRange(v as DateRange)}
+            options={DATE_RANGES.map((r) => ({ value: r.key, label: r.label }))}
+          />
         </div>
+        {fRange === "custom" && (
+          <div className="field" style={{ minWidth: 190, position: "relative" }} ref={calendarWrapRef}>
+            <label>Range</label>
+            <button type="button" className="select" style={{ textAlign: "left" }} onClick={() => setCalendarOpen((o) => !o)}>
+              {customFrom && customTo ? customFrom + "  →  " + customTo : "Pick dates"}
+            </button>
+            {calendarOpen && (
+              <CalendarRangePicker
+                from={customFrom}
+                to={customTo}
+                onCancel={() => setCalendarOpen(false)}
+                onApply={(from, to) => { setCustomFrom(from); setCustomTo(to); setCalendarOpen(false); }}
+              />
+            )}
+          </div>
+        )}
+        {fRange === "weekNumber" && (
+          <>
+            <div className="field" style={{ minWidth: 90 }}>
+              <label>Week</label>
+              <input className="input" type="number" min={1} max={53} value={weekNum} onChange={(e) => setWeekNum(Math.min(53, Math.max(1, Number(e.target.value) || 1)))} />
+            </div>
+            <div className="field" style={{ minWidth: 100 }}>
+              <label>Year</label>
+              <input className="input" type="number" value={weekYear} onChange={(e) => setWeekYear(Number(e.target.value) || nowForWeek.getFullYear())} />
+            </div>
+          </>
+        )}
         <div className="field" style={{ minWidth: 170 }}>
           <label>Project</label>
-          <select className="select" value={fProject} onChange={(e) => setFProject(e.target.value)}>
-            <option value="">All Projects</option>
-            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          <SearchDropdown
+            value={fProject}
+            onChange={setFProject}
+            options={[{ value: "", label: "All Projects" }, ...projects.map((p) => ({ value: p.id, label: p.name }))]}
+          />
         </div>
         <div className="field" style={{ minWidth: 170 }}>
           <label>DRI / Site Engineer</label>
-          <select className="select" value={fUser} onChange={(e) => setFUser(e.target.value)}>
-            <option value="">All DRI</option>
-            {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </select>
+          <SearchDropdown
+            value={fUser}
+            onChange={setFUser}
+            options={[{ value: "", label: "All DRI" }, ...users.map((u) => ({ value: u.id, label: u.name }))]}
+          />
         </div>
         <button className="btn btn-primary" onClick={generateReport}>⬇ Generate Report</button>
       </div>

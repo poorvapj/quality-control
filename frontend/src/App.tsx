@@ -11,6 +11,7 @@ import AssignModal from "./components/AssignModal";
 import SnagModal from "./components/SnagModal";
 import ChecklistModal from "./components/ChecklistModal";
 import RecordModal from "./components/RecordModal";
+import SearchDropdown from "./components/SearchDropdown";
 import Dashboard from "./pages/Dashboard";
 import MyWork from "./pages/MyWork";
 import TowerBoard from "./pages/TowerBoard";
@@ -28,12 +29,27 @@ export default function App() {
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem(COLLAPSE_KEY) === "1"; } catch { return false; }
   });
+  // Dashboard-only "All Projects" view. Deliberately NOT stored on
+  // currentProjectId — that value is shared by Tower Board/My Work/Snags,
+  // none of which have an "all projects" mode, so it must always stay a
+  // real single project id for them regardless of what Dashboard is showing.
+  const [viewAllProjects, setViewAllProjects] = useState(true);
+  const ALL_PROJECTS_VALUE = "__all__";
 
   // The header's hamburger does double duty: on mobile it opens/closes the
-  // overlay drawer, on desktop it collapses/expands the persistent sidebar —
-  // whichever one actually applies at the current width via CSS.
+  // overlay drawer, on desktop it collapses/expands the persistent sidebar.
+  // Toggling BOTH states on every click (regardless of width) used to flip
+  // `collapsed` on mobile too — and Sidebar.tsx hides all its text labels
+  // whenever `collapsed` is true, with no viewport check — so the mobile
+  // drawer alternated between showing full labels and a broken icon-only
+  // layout depending on whether the tap count was even or odd. Only touch
+  // the state that's actually relevant at the current width.
   function toggleSidebar() {
-    setSidebarOpen((o) => !o);
+    const isMobile = window.matchMedia("(max-width: 960px)").matches;
+    if (isMobile) {
+      setSidebarOpen((o) => !o);
+      return;
+    }
     setCollapsed((c) => {
       const next = !c;
       try { localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0"); } catch {}
@@ -48,7 +64,7 @@ export default function App() {
   const isAdmin = u?.id === "U-ADMIN";
 
   const pages: Record<string, React.ReactNode> = {
-    dash: <Dashboard />,
+    dash: <Dashboard viewAllProjects={viewAllProjects} />,
     work: <MyWork />,
     board: <TowerBoard />,
     snags: <Snags />,
@@ -74,11 +90,17 @@ export default function App() {
           {activeTab === "dash" && (
             <div className="role-bar">
               <div className="role-info" style={{ flex: "0 1 auto", minWidth: 200 }}>
-                <div style={{ minWidth: 0 }}>
+                <div style={{ minWidth: 0, maxWidth: 260 }}>
                   <div className="micro-label">ACTIVE PROJECT</div>
-                  <select className="select" style={{ maxWidth: 260 }} value={currentProjectId ?? ""} onChange={(e) => setCurrentProjectId(e.target.value)}>
-                    {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
+                  <SearchDropdown
+                    value={viewAllProjects ? ALL_PROJECTS_VALUE : (currentProjectId ?? "")}
+                    onChange={(v) => {
+                      if (v === ALL_PROJECTS_VALUE) { setViewAllProjects(true); return; }
+                      setViewAllProjects(false);
+                      setCurrentProjectId(v);
+                    }}
+                    options={[{ value: ALL_PROJECTS_VALUE, label: "All Projects" }, ...projects.map((p) => ({ value: p.id, label: p.name }))]}
+                  />
                 </div>
               </div>
               <div style={{ fontSize: 11, color: "var(--text-muted)", maxWidth: 300, lineHeight: 1.5 }}>
@@ -87,7 +109,7 @@ export default function App() {
             </div>
           )}
 
-          {restrictedTab ? <Dashboard /> : pages[activeTab]}
+          {restrictedTab ? <Dashboard viewAllProjects={viewAllProjects} /> : pages[activeTab]}
         </div>
       </div>
 
