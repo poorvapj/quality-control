@@ -1,8 +1,8 @@
 import { useApp } from "../context/AppContext";
 import { API_BASE, HOUR } from "../services/config";
 import type { Op, Track, EventLog } from "../types";
-import { pkey, prog, trackStages, byId, coll, refLabel } from "./rules";
-import { nextId } from "./helpers";
+import { pkey, prog, trackStages, byId, coll, refLabel } from "../shared/rules";
+import { nextId } from "../shared/helpers";
 
 export function useActions() {
   const { data, apply, toast, currentUserId, currentProjectId, closeDrawer, drawer, openDrawer, openSnagModal } = useApp();

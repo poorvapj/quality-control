@@ -286,7 +286,7 @@ export type Op =
   | { op: "progress"; key: string; patch: Partial<ProgressPatch> }
   | { op: "event"; ev: EventLog };
 
-export type TabKey = "dash" | "work" | "board" | "snags" | "team" | "masters" | "dpr" | "drawingRequests";
+export type TabKey = "dash" | "work" | "board" | "snags" | "team" | "masters" | "dpr" | "drawingRequests" | "backups";
 export type MasterKey = "projects" | "floors" | "units" | "stages" | "qparams" | "checklists" | "stagemap" | "users" | "permissions";
 
 export type FieldType = "text" | "number" | "date" | "color" | "select" | "ref" | "bool" | "textarea" | "items";

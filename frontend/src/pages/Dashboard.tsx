@@ -4,7 +4,7 @@ import { SEVERITIES } from "../services/config";
 import {
   coll, projectUnits, projectFloors, floorUnits, unitSummary, slowHandoffs, floorReleased,
   myAssignments, mySnags, refLabel
-} from "../lib/rules";
+} from "../shared/rules";
 import AssignRow from "../components/AssignRow";
 import SnagRow from "../components/SnagRow";
 import NavIcon from "../components/NavIcon";
@@ -108,6 +108,7 @@ export default function Dashboard() {
             setCurrentProjectId(v);
           }}
           options={[{ value: ALL_PROJECTS_VALUE, label: "All Projects" }, ...allProjects.map((p) => ({ value: p.id, label: p.name }))]}
+          neutralActive
         />
       </div>
 

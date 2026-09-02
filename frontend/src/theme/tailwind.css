@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+/* Maps the app's existing design tokens (defined in index.html's :root)
+   onto Tailwind's theme, so new components can use Tailwind utilities
+   (bg-primary, text-primary, rounded-radius-lg, …) that resolve to the
+   exact same colors/radii the rest of the app already uses — instead of
+   picking a second, slightly-different orange by accident. */
+@theme {
+  --color-primary: #ff7a00;
+  --color-primary-hover: #e56e00;
+  --color-primary-light: #fff4e8;
+
+  --color-bg-page: #f8fafc;
+  --color-bg-card: #ffffff;
+  --color-bg-subtle: #f3f4f6;
+  --color-border: #e5e7eb;
+  --color-border-strong: #cbd5e1;
+  --color-text-main: #111827;
+  --color-text-muted: #6b7280;
+  --color-text-sub: #9ca3af;
+
+  --radius-radius-sm: 8px;
+  --radius-radius-md: 10px;
+  --radius-radius-lg: 14px;
+}

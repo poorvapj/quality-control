@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useApp } from "../context/AppContext";
-import { coll, trackStages, projectUnits } from "../lib/rules";
+import { coll, trackStages, projectUnits } from "../shared/rules";
 import { HOUR, SEVERITIES } from "../services/config";
-import { useActions } from "../lib/useActions";
+import { useActions } from "../hooks/useActions";
 import SidePanel from "./SidePanel";
 import NavIcon from "./NavIcon";
 import type { Severity } from "../types";

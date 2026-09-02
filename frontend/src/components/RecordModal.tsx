@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { MASTERS } from "../services/config";
-import { byId, coll, refLabel } from "../lib/rules";
-import { nextId } from "../lib/helpers";
+import { byId, coll, refLabel } from "../shared/rules";
+import { nextId } from "../shared/helpers";
 import Modal from "./Modal";
 import type { ChecklistItem, MasterField } from "../types";
 

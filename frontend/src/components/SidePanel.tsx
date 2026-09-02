@@ -5,9 +5,9 @@ import React, { useEffect, useRef } from "react";
  *  already uses, just with an icon+title+description header instead of
  *  the Drawer's micro-label+title pairing. */
 export default function SidePanel({
-  open, icon, title, desc, onClose, children
+  open, icon, title, desc, onClose, children, footer, wide
 }: {
-  open: boolean; icon: React.ReactNode; title: string; desc: string; onClose: () => void; children: React.ReactNode;
+  open: boolean; icon: React.ReactNode; title: string; desc: string; onClose: () => void; children: React.ReactNode; footer?: React.ReactNode; wide?: boolean;
 }) {
   const sheetRef = useRef<HTMLDivElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
@@ -55,7 +55,7 @@ export default function SidePanel({
   return (
     <>
       <div className="overlay open" onClick={onClose}></div>
-      <div className="drawer-sheet open" ref={sheetRef} role="dialog" aria-modal="true" aria-labelledby={titleId}>
+      <div className={"drawer-sheet open" + (wide ? " wide" : "")} ref={sheetRef} role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <div className="drawer-header">
           <div style={{ display: "flex", gap: 12, alignItems: "flex-start", minWidth: 0 }}>
             <div className="page-icon" style={{ width: 38, height: 38, fontSize: 17 }}>{icon}</div>
@@ -67,6 +67,7 @@ export default function SidePanel({
           <button ref={closeBtnRef} className="btn-icon" aria-label="Close" onClick={onClose}>✕</button>
         </div>
         <div className="drawer-body">{children}</div>
+        {footer && <div className="drawer-footer">{footer}</div>}
       </div>
     </>
   );

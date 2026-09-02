@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
-import { coll, refLabel, projectFloors, projectUnits, unitSummary } from "../lib/rules";
-import { downloadCsv } from "../lib/csv";
+import { coll, refLabel, projectFloors, projectUnits, unitSummary } from "../shared/rules";
+import { downloadCsv } from "../shared/csv";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
 import CalendarRangePicker from "../components/CalendarRangePicker";

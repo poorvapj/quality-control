@@ -1,9 +1,9 @@
 import React, { useRef } from "react";
 import { useApp } from "../context/AppContext";
 import { ROLES } from "../services/config";
-import { byId, coll, canAct, blockReason, openSnagsFor, prog, refLabel, trackStages, snagTarget } from "../lib/rules";
-import { fmtDT, ago, dueLabel } from "../lib/helpers";
-import { useActions } from "../lib/useActions";
+import { byId, coll, canAct, blockReason, openSnagsFor, prog, refLabel, trackStages, snagTarget } from "../shared/rules";
+import { fmtDT, ago, dueLabel } from "../shared/helpers";
+import { useActions } from "../hooks/useActions";
 import AssignRow from "./AssignRow";
 import SnagRow from "./SnagRow";
 

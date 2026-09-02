@@ -1,7 +1,7 @@
 import React from "react";
 import { useApp } from "../context/AppContext";
-import { myAssignments, mySnags, myReleases, refLabel } from "../lib/rules";
-import { ago } from "../lib/helpers";
+import { myAssignments, mySnags, myReleases, refLabel } from "../shared/rules";
+import { ago } from "../shared/helpers";
 import AssignRow from "../components/AssignRow";
 import SnagRow from "../components/SnagRow";
 import NavIcon from "../components/NavIcon";

@@ -1,7 +1,7 @@
 import React from "react";
 import { useApp } from "../context/AppContext";
-import { refLabel, snagTarget } from "../lib/rules";
-import { dueLabel, ago } from "../lib/helpers";
+import { refLabel, snagTarget } from "../shared/rules";
+import { dueLabel, ago } from "../shared/helpers";
 import type { Snag } from "../types";
 
 export default function SnagRow({ s }: { s: Snag }) {

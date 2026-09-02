@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import { uploadPhoto } from "../lib/uploadPhoto";
+import { uploadPhoto } from "../shared/uploadPhoto";
 import type { Photo } from "../types";
 
 export default function PhotoGroupUploader({ label, photos, onChange }: { label: string; photos: Photo[]; onChange: (photos: Photo[]) => void }) {

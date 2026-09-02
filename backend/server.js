@@ -26,6 +26,13 @@
  *   POST /api/ops           -> {rev, data}                     apply ops, bump rev
  *   POST /api/photo         -> {url, publicId}                 upload to Cloudinary
  *   POST /api/reset         -> {rev, data}                     reseed or blank
+ *   POST /api/backups       -> {id, createdAt, ...}            create a backup now (admin)
+ *   GET  /api/backups       -> {backups: [...]}                list backups, newest first (admin)
+ *   GET  /api/backups/:id   -> {collections, progress}         one backup's data, passwords stripped (admin)
+ *   POST /api/backups/:id/restore -> {rev, data}                overwrite the live board with a backup (admin)
+ *   DELETE /api/backups/:id -> {ok}                              permanently remove a backup (admin)
+ *   GET  /api/backup/scheduled    -> {id, createdAt, ...}       cron-triggered backup, no login — needs
+ *                                                                X-Cron-Secret header matching BACKUP_CRON_SECRET
  */
 
 require("dotenv").config();
@@ -144,6 +151,8 @@ async function connectMongo() {
   // sparse: users created before email-based login existed (or without an
   // email) don't collide with each other on a shared "" value.
   await mongoDb.collection("users").createIndex({ email: 1 }, { unique: true, sparse: true });
+  await mongoDb.collection("backups").createIndex({ id: 1 }, { unique: true });
+  await mongoDb.collection("backups").createIndex({ createdAt: -1 });
 
   const projectCount = await mongoDb.collection("projects").countDocuments();
   if (projectCount === 0) {
@@ -310,6 +319,68 @@ async function resetDb(mode) {
   return rev;
 }
 
+/* ----------------------------------------------------------------- backups
+   A `backups` document is a full point-in-time copy of every real
+   collection's raw documents — including passwordHash/passwordSalt, so a
+   restore brings logins back working too. Kept in Mongo only; never sent to
+   a browser in that raw form (list/download strip password fields, same as
+   getState()). This exists because a demo-reset or bad op has genuinely
+   wiped this shared board multiple times this session with no way back. */
+async function createBackup(createdBy) {
+  const collections = {};
+  for (const c of COLLECTIONS) {
+    collections[c] = await mongoDb.collection(c).find({}, { projection: { _id: 0 } }).toArray();
+  }
+  const progressDocs = await mongoDb.collection("progress").find({}).toArray();
+  const progress = {};
+  for (const p of progressDocs) { const { _id, ...rest } = p; progress[_id] = rest; }
+
+  const doc = {
+    id: "BK-" + Date.now().toString(36).toUpperCase(),
+    createdAt: Date.now(),
+    createdBy: createdBy || null,
+    collections,
+    progress
+  };
+  await mongoDb.collection("backups").insertOne(doc);
+  return doc;
+}
+
+function summarizeBackup(doc) {
+  const counts = {};
+  for (const c of Object.keys(doc.collections || {})) counts[c] = doc.collections[c].length;
+  return { id: doc.id, createdAt: doc.createdAt, createdBy: doc.createdBy, counts };
+}
+
+function stripBackupPasswords(doc) {
+  const collections = Object.assign({}, doc.collections);
+  if (collections.users) {
+    collections.users = collections.users.map((u) => {
+      const { passwordHash, passwordSalt, legacyPasswordHash, ...rest } = u;
+      return rest;
+    });
+  }
+  return Object.assign({}, doc, { collections });
+}
+
+async function restoreBackup(id) {
+  const doc = await mongoDb.collection("backups").findOne({ id });
+  if (!doc) { const e = new Error("Backup not found"); e.status = 404; throw e; }
+  for (const c of COLLECTIONS) {
+    await mongoDb.collection(c).deleteMany({});
+    const rows = doc.collections[c] || [];
+    if (rows.length) await mongoDb.collection(c).insertMany(rows);
+  }
+  await mongoDb.collection("progress").deleteMany({});
+  const progressEntries = Object.entries(doc.progress || {});
+  if (progressEntries.length) {
+    await mongoDb.collection("progress").insertMany(progressEntries.map(([key, patch]) => Object.assign({ _id: key }, patch)));
+  }
+  const rev = (await getRev()) + 1;
+  await mongoDb.collection("meta").updateOne({ _id: "rev" }, { $set: { value: rev } }, { upsert: true });
+  return rev;
+}
+
 /* ------------------------------------------------------------------ http */
 
 const MIME = {
@@ -446,13 +517,69 @@ async function handleApi(req, res, urlPath) {
     const state = await getState();
     return sendJson(res, 200, state);
   }
+  if (req.method === "POST" && urlPath === "/api/backups") {
+    const session = getSession(req);
+    if (!session) return sendJson(res, 401, { error: "Sign-in required" });
+    if (!session.isAdmin) return sendJson(res, 403, { error: "Admin access required" });
+    const doc = await createBackup(session.userId);
+    return sendJson(res, 200, summarizeBackup(doc));
+  }
+  if (req.method === "GET" && urlPath === "/api/backups") {
+    const session = getSession(req);
+    if (!session) return sendJson(res, 401, { error: "Sign-in required" });
+    if (!session.isAdmin) return sendJson(res, 403, { error: "Admin access required" });
+    const docs = await mongoDb.collection("backups").find({}).sort({ createdAt: -1 }).toArray();
+    return sendJson(res, 200, { backups: docs.map(summarizeBackup) });
+  }
+  const backupIdMatch = /^\/api\/backups\/([^/]+)$/.exec(urlPath);
+  if (req.method === "GET" && backupIdMatch) {
+    const session = getSession(req);
+    if (!session) return sendJson(res, 401, { error: "Sign-in required" });
+    if (!session.isAdmin) return sendJson(res, 403, { error: "Admin access required" });
+    const doc = await mongoDb.collection("backups").findOne({ id: backupIdMatch[1] });
+    if (!doc) return sendJson(res, 404, { error: "Backup not found" });
+    const { _id, ...safe } = stripBackupPasswords(doc);
+    return sendJson(res, 200, safe);
+  }
+  const restoreMatch = /^\/api\/backups\/([^/]+)\/restore$/.exec(urlPath);
+  if (req.method === "POST" && restoreMatch) {
+    const session = getSession(req);
+    if (!session) return sendJson(res, 401, { error: "Sign-in required" });
+    if (!session.isAdmin) return sendJson(res, 403, { error: "Admin access required" });
+    try {
+      await restoreBackup(restoreMatch[1]);
+    } catch (e) {
+      if (e.status) return sendJson(res, e.status, { error: e.message });
+      throw e;
+    }
+    const state = await getState();
+    return sendJson(res, 200, state);
+  }
+  if (req.method === "DELETE" && backupIdMatch) {
+    const session = getSession(req);
+    if (!session) return sendJson(res, 401, { error: "Sign-in required" });
+    if (!session.isAdmin) return sendJson(res, 403, { error: "Admin access required" });
+    const result = await mongoDb.collection("backups").deleteOne({ id: backupIdMatch[1] });
+    if (result.deletedCount === 0) return sendJson(res, 404, { error: "Backup not found" });
+    return sendJson(res, 200, { ok: true });
+  }
+  if (req.method === "GET" && urlPath === "/api/backup/scheduled") {
+    // No login required — this is for an external cron pinger (Render's
+    // free tier sleeps, so an in-process setInterval can't be relied on).
+    // Authorized via a shared secret header instead of a user session.
+    const secret = process.env.BACKUP_CRON_SECRET;
+    if (!secret) return sendJson(res, 501, { error: "BACKUP_CRON_SECRET is not configured" });
+    if (req.headers["x-cron-secret"] !== secret) return sendJson(res, 401, { error: "Invalid cron secret" });
+    const doc = await createBackup("scheduled");
+    return sendJson(res, 200, summarizeBackup(doc));
+  }
   return sendJson(res, 404, { error: "Unknown endpoint " + urlPath });
 }
 
 const server = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", ALLOWED_ORIGIN);
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   if (ALLOWED_ORIGIN !== "*") res.setHeader("Vary", "Origin");
   if (req.method === "OPTIONS") {
     res.writeHead(204);

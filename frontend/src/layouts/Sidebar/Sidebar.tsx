@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { useApp } from "../context/AppContext";
-import { coll, myAssignments, myReleases } from "../lib/rules";
-import NavIcon from "./NavIcon";
-import type { TabKey } from "../types";
+import { useApp } from "../../context/AppContext";
+import { coll, myAssignments, myReleases } from "../../shared/rules";
+import NavIcon from "../../components/NavIcon";
+import type { TabKey } from "../../types";
+import "./Sidebar.css";
 
 interface NavItem { key: TabKey; icon: string; label: string; badge?: number }
 
@@ -40,7 +41,13 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
         { key: "drawingRequests", icon: "drawing", label: "Drawing Requests" }
       ]
     },
-    { label: "Administration", items: [{ key: "masters", icon: "masters", label: "Masters" }] }
+    {
+      label: "Administration",
+      items: [
+        { key: "masters", icon: "masters", label: "Masters" },
+        ...(isAdmin ? [{ key: "backups" as TabKey, icon: "database", label: "Backups" }] : [])
+      ]
+    }
   ];
 
   return (

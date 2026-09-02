@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
-import { coll, refLabel, snagTarget } from "../lib/rules";
-import { dueLabel, ago } from "../lib/helpers";
+import { coll, refLabel, snagTarget } from "../shared/rules";
+import { dueLabel, ago } from "../shared/helpers";
 import NavIcon from "../components/NavIcon";
 
 export default function Snags() {

@@ -1,6 +1,6 @@
 import React from "react";
 import { useApp } from "../context/AppContext";
-import { projectFloors, floorUnits, trackStages, prog, floorReleased, floorBelow, unitSummary } from "../lib/rules";
+import { projectFloors, floorUnits, trackStages, prog, floorReleased, floorBelow, unitSummary } from "../shared/rules";
 import NavIcon from "../components/NavIcon";
 
 export default function TowerBoard() {

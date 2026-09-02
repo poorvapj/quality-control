@@ -37,16 +37,30 @@ export default function LoginScreen() {
     <div className="login-screen">
       <div className="login-card">
         <div className="login-brand">
-          <div className="brand-logo" style={{ width: 48, height: 48, fontSize: 20 }}>N</div>
+          <div
+            style={{
+              width: 48, height: 48, flexShrink: 0, borderRadius: 12,
+              background: "#ff7a00", color: "#fff", fontSize: 20, fontWeight: 800,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: "0 4px 12px rgba(255,122,0,0.3)"
+            }}
+          >
+            N
+          </div>
           <div>
-            <div className="brand-title" style={{ fontSize: 17 }}>NEOTERIC GROUP</div>
-            <div className="brand-sub">TOWER QUALITY BOARD</div>
+            <div className="brand-title" style={{ fontSize: 15, fontWeight: 700 }}>Neoteric Group</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 1 }}>Tower Quality Board</div>
           </div>
         </div>
 
+        <div style={{ marginTop: 22 }}>
+          <div style={{ fontSize: 19, fontWeight: 700, color: "#1A1A2E" }}>Sign in</div>
+          <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>Enter your credentials to continue</div>
+        </div>
+
         <form onSubmit={submit}>
-          <div className="field" style={{ marginTop: 22 }}>
-            <label>Email</label>
+          <div className="field" style={{ marginTop: 18 }}>
+            <label>Email <span style={{ color: "var(--color-fail)" }}>*</span></label>
             <input
               className="input"
               type="email"
@@ -58,7 +72,7 @@ export default function LoginScreen() {
             />
           </div>
           <div className="field" style={{ marginTop: 12 }}>
-            <label>Password</label>
+            <label>Password <span style={{ color: "var(--color-fail)" }}>*</span></label>
             <div style={{ position: "relative" }}>
               <input
                 className="input"

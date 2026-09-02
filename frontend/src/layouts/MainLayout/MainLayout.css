@@ -1,0 +1,32 @@
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+  background: #ffffff;
+}
+
+html.dark .app-shell {
+  background: var(--bg-page);
+}
+
+.main-area {
+  flex: 1;
+  min-width: 0;
+  background: #ffffff;
+}
+
+html.dark .main-area {
+  background: var(--bg-page);
+}
+
+.wrap {
+  max-width: none;
+  width: 100%;
+  margin: 0;
+  padding: 28px 32px 60px;
+}
+
+@media (max-width: 960px) {
+  .wrap {
+    padding: 18px 16px 40px;
+  }
+}

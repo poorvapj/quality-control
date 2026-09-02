@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { MASTERS } from "../services/config";
-import { coll, byId, refLabel } from "../lib/rules";
-import { exportSnagCsv } from "../lib/exportSnagCsv";
-import { downloadCsv } from "../lib/csv";
+import { coll, byId, refLabel } from "../shared/rules";
+import { exportSnagCsv } from "../shared/exportSnagCsv";
+import { downloadCsv } from "../shared/csv";
 import NavIcon from "../components/NavIcon";
 import type { MasterKey } from "../types";
 

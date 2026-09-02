@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
-import { coll } from "../lib/rules";
-import { nextId } from "../lib/helpers";
+import { coll } from "../shared/rules";
+import { nextId } from "../shared/helpers";
 import type { DailyProgressReport, DprWorkEntry, ShiftType, Photo } from "../types";
 import PhotoGroupUploader from "./PhotoGroupUploader";
 

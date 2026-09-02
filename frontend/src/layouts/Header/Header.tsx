@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useApp } from "../context/AppContext";
-import { ROLES } from "../services/config";
-import { coll, byId } from "../lib/rules";
+import { useApp } from "../../context/AppContext";
+import { ROLES } from "../../services/config";
+import { coll } from "../../shared/rules";
+import "./Header.css";
 
 export default function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
   const { mode, data, currentUserId, setCurrentUserId, me, logout } = useApp();
@@ -26,7 +27,7 @@ export default function Header({ onToggleSidebar }: { onToggleSidebar: () => voi
   const toggleTheme = () => {
     const next = !dark;
     setDark(next);
-    try { localStorage.setItem("neoteric_theme", next ? "dark" : "light"); } catch {}
+    try { localStorage.setItem("neoteric_theme", next ? "dark" : "light"); } catch { }
   };
 
   const users = coll(data, "users").filter((u) => u.active !== false);
@@ -47,9 +48,25 @@ export default function Header({ onToggleSidebar }: { onToggleSidebar: () => voi
       <div className="header-inner">
         <div className="header-left">
           <button className="btn-icon menu-btn" onClick={onToggleSidebar} title="Menu">☰</button>
+          <div
+            style={{
+              width: 36,
+              height: 36,
+              flexShrink: 0,
+              background: "#fff",
+              border: "1px solid #e5e7eb",
+              borderRadius: 9,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 5,
+            }}
+          >
+            <img src="/neoteric-logo.png" alt="Neoteric" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+          </div>
           <div style={{ minWidth: 0 }}>
-            <div className="brand-title" style={{ fontSize: 14 }}>Tower Quality Board</div>
-            <div className="header-subtitle" style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600 }}>Quality Control &amp; Handoff System</div>
+            <div className="brand-title" style={{ fontSize: 14, fontWeight: 700 }}>Neoteric Properties</div>
+            <div className="header-subtitle" style={{ fontSize: 11.5, color: "var(--text-muted)", fontWeight: 400 }}>Quality Control &amp; Handoff System</div>
           </div>
         </div>
         <div className="header-actions">
