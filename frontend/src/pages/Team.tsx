@@ -5,12 +5,18 @@ import { coll } from "../shared/rules";
 import NavIcon from "../components/NavIcon";
 
 export default function Team() {
-  const { data, currentProjectId, openAssignModal, openDrawer } = useApp();
+  const { data, openAssignModal, openDrawer } = useApp();
   const users = coll(data, "users").filter((u) => u.active !== false);
+  // Team workload is org-wide, not tied to whichever project happens to be
+  // globally selected — same class of bug fixed in My Work: scoping to
+  // `currentProjectId` alone silently hid a person's work on every other
+  // project, which is exactly why someone could show "0 work · 0 snags"
+  // here while genuinely having open items elsewhere.
+  const projectIds = coll(data, "projects").filter((p) => p.active !== false).map((p) => p.id);
   const rows = users
     .map((u) => {
-      const a = coll(data, "assignments").filter((x) => x.assignedTo === u.id && x.status !== "Done" && x.projectId === currentProjectId);
-      const s = coll(data, "snags").filter((x) => x.assignedTo === u.id && x.status !== "Closed" && x.projectId === currentProjectId);
+      const a = coll(data, "assignments").filter((x) => x.assignedTo === u.id && x.status !== "Done" && projectIds.includes(x.projectId));
+      const s = coll(data, "snags").filter((x) => x.assignedTo === u.id && x.status !== "Closed" && projectIds.includes(x.projectId));
       const overdue = a.filter((x) => x.dueAt && x.dueAt < Date.now()).length + s.filter((x) => x.dueAt && x.dueAt < Date.now()).length;
       return { u, a: a.length, s: s.length, overdue, load: a.length + s.length };
     })

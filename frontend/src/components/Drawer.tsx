@@ -251,11 +251,14 @@ function SnagDrawer({ id }: { id: string }) {
 }
 
 function UserDrawer({ id }: { id: string }) {
-  const { data, currentProjectId, closeDrawer, openAssignModal } = useApp();
+  const { data, closeDrawer, openAssignModal } = useApp();
   const u = byId(coll(data, "users"), id);
   if (!u) return null;
-  const asg = coll(data, "assignments").filter((a) => a.assignedTo === id && a.projectId === currentProjectId && a.status !== "Done");
-  const sng = coll(data, "snags").filter((s) => s.assignedTo === id && s.projectId === currentProjectId && s.status !== "Closed");
+  // Matches Team.tsx's row totals — aggregated across every active project,
+  // not just whichever one happens to be globally selected.
+  const projectIds = coll(data, "projects").filter((p) => p.active !== false).map((p) => p.id);
+  const asg = coll(data, "assignments").filter((a) => a.assignedTo === id && projectIds.includes(a.projectId) && a.status !== "Done");
+  const sng = coll(data, "snags").filter((s) => s.assignedTo === id && projectIds.includes(s.projectId) && s.status !== "Closed");
 
   return (
     <>
