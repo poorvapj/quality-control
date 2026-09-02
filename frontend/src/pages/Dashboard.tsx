@@ -11,6 +11,7 @@ import SnagRow from "../components/SnagRow";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
 import CalendarRangePicker from "../components/CalendarRangePicker";
+import WeekPicker from "../components/WeekPicker";
 import type { BoardData, Floor, TabKey } from "../types";
 
 const FLOOR_LIST_CAP = 40;
@@ -36,6 +37,7 @@ export default function Dashboard() {
   // so it must always stay a real single project id for them regardless of
   // what this page is showing.
   const [viewAllProjects, setViewAllProjects] = useState(true);
+  const [floorPage, setFloorPage] = useState(0);
 
   // Date-range filter — same preset set/logic as Daily Progress Report's
   // filter bar (frontend/src/shared/dateRange.ts), reused here so both
@@ -48,6 +50,8 @@ export default function Dashboard() {
   const nowForWeek = new Date();
   const [weekYear, setWeekYear] = useState(nowForWeek.getFullYear());
   const [weekNum, setWeekNum] = useState(1);
+  const [weekPickerOpen, setWeekPickerOpen] = useState(false);
+  const weekWrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!calendarOpen) return;
@@ -57,6 +61,15 @@ export default function Dashboard() {
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [calendarOpen]);
+
+  useEffect(() => {
+    if (!weekPickerOpen) return;
+    function onDocClick(e: MouseEvent) {
+      if (weekWrapRef.current && !weekWrapRef.current.contains(e.target as Node)) setWeekPickerOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [weekPickerOpen]);
 
   const bounds = fRange === "custom"
     ? (customFrom || customTo ? { from: customFrom || "0000-01-01", to: customTo || "9999-12-31" } : null)
@@ -126,8 +139,12 @@ export default function Dashboard() {
   // NOTE: this list itself is intentionally NOT date-filtered — a floor is a
   // long-lived record, not a dated event, so there's no "raised on"/"cast
   // on" moment on the record itself to filter by (unlike snags/assignments).
-  const floorRows: Floor[] = (() => {
-    if (!viewAllProjects) return floors.slice().reverse().slice(0, FLOOR_LIST_CAP);
+  // Full ordered list (no cap) — same "spread across every project, highest
+  // floor first" ordering as before, just no longer truncated here. Paged
+  // below instead, so every floor is reachable a page at a time rather than
+  // the first 40 being the only ones ever shown.
+  const orderedFloors: Floor[] = (() => {
+    if (!viewAllProjects) return floors.slice().reverse();
     const byProject = new Map<string, Floor[]>();
     for (const f of floors) {
       const list = byProject.get(f.projectId) || [];
@@ -137,14 +154,22 @@ export default function Dashboard() {
     for (const list of byProject.values()) list.reverse(); // highest floor first, per project
     const lists = Array.from(byProject.values());
     const out: Floor[] = [];
-    for (let i = 0; out.length < FLOOR_LIST_CAP && lists.some((l) => i < l.length); i++) {
+    for (let i = 0; lists.some((l) => i < l.length); i++) {
       for (const list of lists) {
         if (i < list.length) out.push(list[i]);
-        if (out.length >= FLOOR_LIST_CAP) break;
       }
     }
     return out;
   })();
+  const floorPageCount = Math.max(1, Math.ceil(orderedFloors.length / FLOOR_LIST_CAP));
+  const floorRows: Floor[] = orderedFloors.slice(floorPage * FLOOR_LIST_CAP, (floorPage + 1) * FLOOR_LIST_CAP);
+
+  // Reset to page 1 whenever the underlying floor set changes shape (project
+  // filter flipped, or a page became out of range) — never leave the user
+  // staring at a blank page 5 after switching to a project with 2 floors.
+  useEffect(() => {
+    setFloorPage((p) => Math.min(p, floorPageCount - 1));
+  }, [viewAllProjects, currentProjectId, floorPageCount]);
 
   return (
     <div>
@@ -204,16 +229,21 @@ export default function Dashboard() {
           </div>
         )}
         {fRange === "weekNumber" && (
-          <>
-            <div className="field" style={{ minWidth: 90 }}>
-              <label>Week</label>
-              <input className="input" type="number" min={1} max={53} value={weekNum} onChange={(e) => setWeekNum(Math.min(53, Math.max(1, Number(e.target.value) || 1)))} />
-            </div>
-            <div className="field" style={{ minWidth: 100 }}>
-              <label>Year</label>
-              <input className="input" type="number" value={weekYear} onChange={(e) => setWeekYear(Number(e.target.value) || nowForWeek.getFullYear())} />
-            </div>
-          </>
+          <div className="field" style={{ minWidth: 170, position: "relative" }} ref={weekWrapRef}>
+            <label>Week</label>
+            <button type="button" className="select" style={{ textAlign: "left" }} onClick={() => setWeekPickerOpen((o) => !o)}>
+              Wk {weekNum}, {weekYear}
+            </button>
+            {weekPickerOpen && (
+              <WeekPicker
+                year={weekYear}
+                week={weekNum}
+                onYearChange={setWeekYear}
+                onPickWeek={(w) => { setWeekNum(w); setWeekPickerOpen(false); }}
+                onBack={() => setWeekPickerOpen(false)}
+              />
+            )}
+          </div>
         )}
       </div>
 
@@ -269,8 +299,17 @@ export default function Dashboard() {
 
       <div className="section-header">
         <div className="section-title"><span className="icon-mono"><NavIcon name="trend" size={14} /></span> FLOOR PROGRESS</div>
-        {viewAllProjects && floors.length > FLOOR_LIST_CAP && (
-          <div className="section-sub">Showing {floorRows.length} of {floors.length} floors — a spread across every project, not just one</div>
+        {orderedFloors.length > FLOOR_LIST_CAP && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div className="section-sub">
+              Floors {floorPage * FLOOR_LIST_CAP + 1}–{Math.min(orderedFloors.length, (floorPage + 1) * FLOOR_LIST_CAP)} of {orderedFloors.length}
+              {viewAllProjects ? " — a spread across every project, not just one" : ""}
+            </div>
+            <div style={{ display: "flex", gap: 4 }}>
+              <button className="btn btn-secondary btn-sm" disabled={floorPage === 0} onClick={() => setFloorPage((p) => Math.max(0, p - 1))}>‹ Prev</button>
+              <button className="btn btn-secondary btn-sm" disabled={floorPage >= floorPageCount - 1} onClick={() => setFloorPage((p) => Math.min(floorPageCount - 1, p + 1))}>Next ›</button>
+            </div>
+          </div>
         )}
       </div>
       <div className="card card-pad">

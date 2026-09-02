@@ -2,7 +2,6 @@
   display: flex;
   min-height: 100vh;
   background: #ffffff;
-  overflow-x: hidden;
 }
 
 html.dark .app-shell {
@@ -14,22 +13,18 @@ html.dark .app-shell {
   min-width: 0;
   background: #ffffff;
   transition: transform 0.25s ease;
+  /* NOT on .app-shell — setting overflow-x there makes the browser treat
+     overflow-y as "auto" too (any explicit overflow on one axis forces the
+     other), which turns .app-shell into a scroll container and silently
+     breaks position:sticky on the sidebar (a sibling of this element) —
+     it stops tracking scroll and just scrolls away with the page instead
+     of staying pinned. Contained here instead, where it only needs to
+     clip the mobile drawer's translateX push. */
+  overflow-x: hidden;
 }
 
 html.dark .main-area {
   background: var(--bg-page);
-}
-
-/* On mobile the sidebar is an off-canvas drawer (position:fixed, see
-   Sidebar.css) — opening it used to just dim the page behind it, making
-   the content look "hidden". Pushing .main-area over by the drawer's own
-   width instead makes it read as shifted-aside, still visible (if
-   squeezed), and still dismissible via the overlay's click-to-close. */
-@media (max-width: 960px) {
-  .app-shell.sidebar-open .main-area {
-    transform: translateX(264px);
-    width: calc(100% - 264px);
-  }
 }
 
 .wrap {

@@ -2,17 +2,9 @@ import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll } from "../shared/rules";
 import { nextId } from "../shared/helpers";
-import type { DailyProgressReport, DprWorkEntry, ShiftType, Photo } from "../types";
+import { WORK_CATEGORIES } from "../services/config";
+import type { DailyProgressReport, DprWorkEntry, ShiftType, Photo, WorkTarget } from "../types";
 import PhotoGroupUploader from "./PhotoGroupUploader";
-
-/* Real site work-type checklist — matches the reference layout's 16-item,
-   4-column grid rather than the smaller Quality Parameter category set. */
-const WORK_CATEGORIES = [
-  "Civil", "RCC", "Electrical", "Painter",
-  "Plumbing", "Wooden", "Floor Grinding", "Core Cutting",
-  "Fire", "Waterproofing", "Carpenter", "Fabrication",
-  "UPVC", "Material Lifting", "Excavation", "Plantation"
-];
 
 function slugCode(name: string): string {
   return name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 20) || "VENDOR";
@@ -45,6 +37,15 @@ export default function DprForm({ isPublic, onDone }: { isPublic: boolean; onDon
     setEntries((e) => ({ ...e, [cat]: { ...e[cat], [group]: photos } }));
   }
 
+  function setEntryQty(cat: string, qty: string, unit: string) {
+    setEntries((e) => ({ ...e, [cat]: { ...e[cat], qty: qty === "" ? undefined : Number(qty), unit: unit || undefined } }));
+  }
+
+  const workTargets = coll(data, "workTargets") as WorkTarget[];
+  function targetFor(cat: string): WorkTarget | undefined {
+    return workTargets.find((t) => t.projectId === projectId && t.category === cat && t.active !== false);
+  }
+
   async function submit() {
     if (!projectId) { toast("Pick a project"); return; }
     if (!vendorName.trim()) { toast("Contractor name is required"); return; }
@@ -54,6 +55,11 @@ export default function DprForm({ isPublic, onDone }: { isPublic: boolean; onDon
     if (!Number.isFinite(labour) || labour < 0) { toast("Number of labourers must be a non-negative number"); return; }
 
     const workEntries = Object.keys(checked).filter((c) => checked[c]).map((c) => entries[c]);
+    if (workEntries.length === 0) { toast("Check at least one work type"); return; }
+    // Proof-of-work photo, not before/after (those stay optional extras) —
+    // matches the reference spec's "at least 1 image per work entry" rule.
+    const missingPhoto = workEntries.find((e) => e.generalPhotos.length === 0);
+    if (missingPhoto) { toast(`"${missingPhoto.category}" needs at least 1 photo`); return; }
     setSaving(true);
     const rec: DailyProgressReport = {
       id: nextId("DPR", coll(data, "dpr")),
@@ -134,14 +140,36 @@ export default function DprForm({ isPublic, onDone }: { isPublic: boolean; onDon
           ))}
         </div>
 
-        {WORK_CATEGORIES.filter((c) => checked[c]).map((cat) => (
-          <div key={cat} style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
-            <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 4 }}>{cat}</div>
-            <PhotoGroupUploader label="General / WIP photos" photos={entries[cat]?.generalPhotos || []} onChange={(p) => setEntryPhotos(cat, "generalPhotos", p)} />
-            <PhotoGroupUploader label="Before photos" photos={entries[cat]?.beforePhotos || []} onChange={(p) => setEntryPhotos(cat, "beforePhotos", p)} />
-            <PhotoGroupUploader label="After photos" photos={entries[cat]?.afterPhotos || []} onChange={(p) => setEntryPhotos(cat, "afterPhotos", p)} />
-          </div>
-        ))}
+        {WORK_CATEGORIES.filter((c) => checked[c]).map((cat) => {
+          const target = targetFor(cat);
+          return (
+            <div key={cat} style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
+              <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 4 }}>{cat}</div>
+              <div className="form-grid" style={{ marginBottom: 10 }}>
+                <div className="field">
+                  <label>Qty done today {target ? `(planned ${target.plannedQty} ${target.unit})` : ""}</label>
+                  <input
+                    className="input" type="number" min={0} step="any"
+                    placeholder={target ? `e.g. in ${target.unit}` : "optional"}
+                    value={entries[cat]?.qty ?? ""}
+                    onChange={(e) => setEntryQty(cat, e.target.value, entries[cat]?.unit || target?.unit || "")}
+                  />
+                </div>
+                <div className="field">
+                  <label>Unit</label>
+                  <input
+                    className="input" placeholder="e.g. sq.ft, cum, nos"
+                    value={entries[cat]?.unit ?? target?.unit ?? ""}
+                    onChange={(e) => setEntryQty(cat, entries[cat]?.qty != null ? String(entries[cat].qty) : "", e.target.value)}
+                  />
+                </div>
+              </div>
+              <PhotoGroupUploader label="General / WIP photos" photos={entries[cat]?.generalPhotos || []} onChange={(p) => setEntryPhotos(cat, "generalPhotos", p)} />
+              <PhotoGroupUploader label="Before photos" photos={entries[cat]?.beforePhotos || []} onChange={(p) => setEntryPhotos(cat, "beforePhotos", p)} />
+              <PhotoGroupUploader label="After photos" photos={entries[cat]?.afterPhotos || []} onChange={(p) => setEntryPhotos(cat, "afterPhotos", p)} />
+            </div>
+          );
+        })}
       </div>
 
       <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 20 }} disabled={saving} onClick={submit}>

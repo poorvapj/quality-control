@@ -7,6 +7,7 @@ import { useActions } from "../hooks/useActions";
 import AssignRow from "./AssignRow";
 import SnagRow from "./SnagRow";
 import NavIcon from "./NavIcon";
+import "./SharpPanel.css";
 
 export default function Drawer() {
   const { drawer, closeDrawer, data, currentProjectId, myRole } = useApp();
@@ -14,7 +15,7 @@ export default function Drawer() {
   return (
     <>
       <div className="overlay open" onClick={closeDrawer}></div>
-      <div className="drawer-sheet open">
+      <div className="drawer-sheet open sharp-panel">
         {drawer.kind === "unit" || drawer.kind === "floor"
           ? <TrackDrawer kind={drawer.kind} id={drawer.id} />
           : drawer.kind === "snag"
@@ -276,11 +277,11 @@ function UserDrawer({ id }: { id: string }) {
           <div><strong>Email</strong> · {u.email || "—"}</div>
         </div>
         <div className="micro-label">OPEN ASSIGNMENTS ({asg.length})</div>
-        <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card" style={{ marginBottom: 16, minHeight: 96, display: "flex", flexDirection: "column", justifyContent: asg.length ? "flex-start" : "center" }}>
           {asg.length ? asg.map((a) => <AssignRow key={a.id} a={a} />) : <div className="empty">None.</div>}
         </div>
         <div className="micro-label">OPEN SNAGS ({sng.length})</div>
-        <div className="card">
+        <div className="card" style={{ minHeight: 96, display: "flex", flexDirection: "column", justifyContent: sng.length ? "flex-start" : "center" }}>
           {sng.length ? sng.map((s) => <SnagRow key={s.id} s={s} />) : <div className="empty">None.</div>}
         </div>
         <button className="btn btn-primary btn-sm" style={{ marginTop: 16 }} onClick={() => openAssignModal({ targetType: "unit", targetId: "", stageId: "", presetUser: id })}>

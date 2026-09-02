@@ -1,0 +1,9 @@
+/* Sharp-cornered variant of the shared .drawer-sheet, opted into by
+   specific panels (currently Assign Work + Raise Snag) rather than applied
+   globally — every other drawer/form keeps the app's normal rounded
+   corners. Only the panel's own outer edge is affected — inputs/selects/
+   buttons/etc. inside it keep their normal rounded corners, so nothing
+   here targets descendants. */
+.sharp-panel {
+  border-radius: 0 !important;
+}

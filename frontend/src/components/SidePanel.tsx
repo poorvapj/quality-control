@@ -5,9 +5,13 @@ import React, { useEffect, useRef } from "react";
  *  already uses, just with an icon+title+description header instead of
  *  the Drawer's micro-label+title pairing. */
 export default function SidePanel({
-  open, icon, title, desc, onClose, children, footer, wide
+  open, icon, title, desc, onClose, children, footer, wide, panelClassName
 }: {
   open: boolean; icon: React.ReactNode; title: string; desc: string; onClose: () => void; children: React.ReactNode; footer?: React.ReactNode; wide?: boolean;
+  /** Extra class on the drawer-sheet itself, for a caller that needs to
+   *  override its own look (e.g. sharp corners) without touching the
+   *  shared .drawer-sheet styling every other panel uses. */
+  panelClassName?: string;
 }) {
   const sheetRef = useRef<HTMLDivElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
@@ -55,7 +59,7 @@ export default function SidePanel({
   return (
     <>
       <div className="overlay open" onClick={onClose}></div>
-      <div className={"drawer-sheet open" + (wide ? " wide" : "")} ref={sheetRef} role="dialog" aria-modal="true" aria-labelledby={titleId}>
+      <div className={"drawer-sheet open" + (wide ? " wide" : "") + (panelClassName ? " " + panelClassName : "")} ref={sheetRef} role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <div className="drawer-header">
           <div style={{ display: "flex", gap: 12, alignItems: "flex-start", minWidth: 0 }}>
             <div className="page-icon" style={{ width: 38, height: 38, fontSize: 17 }}>{icon}</div>

@@ -128,11 +128,11 @@ export function useActions() {
     toast(failed.length + " snag(s) raised · gate failed");
   }
 
-  async function saveAssignment(input: { targetType: Track; targetId: string; stageId: string; assignedTo: string; dueAt: number | null; note: string }) {
+  async function saveAssignment(input: { targetType: Track; targetId: string; stageId: string; assignedTo: string; dueAt: number | null; note: string; projectId?: string }) {
     if (!input.targetId) { toast("Pick a target first"); return; }
     const rec = {
       id: nextId("ASG", coll(data, "assignments")),
-      projectId: currentProjectId || "",
+      projectId: input.projectId || currentProjectId || "",
       targetType: input.targetType,
       targetId: input.targetId,
       stageId: input.stageId,
@@ -163,11 +163,11 @@ export function useActions() {
     toast("Assignment marked " + status.toLowerCase());
   }
 
-  async function saveSnag(input: { unitId: string; stageId: string; paramId: string; title: string; description: string; severity: "Critical" | "Major" | "Minor"; assignedTo: string; dueAt: number | null }) {
+  async function saveSnag(input: { unitId: string; stageId: string; paramId: string; title: string; description: string; severity: "Critical" | "Major" | "Minor"; assignedTo: string; dueAt: number | null; projectId?: string }) {
     if (!input.title.trim()) { toast("Give the snag a title"); return; }
     const rec = {
       id: nextId("SNG", coll(data, "snags")),
-      projectId: currentProjectId || "",
+      projectId: input.projectId || currentProjectId || "",
       unitId: input.unitId,
       stageId: input.stageId,
       paramId: input.paramId,

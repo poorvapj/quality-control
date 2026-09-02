@@ -210,6 +210,12 @@ export interface DprWorkEntry {
   generalPhotos: Photo[];
   beforePhotos: Photo[];
   afterPhotos: Photo[];
+  // Quantity of work actually done today against this category — optional,
+  // since not every category has a meaningful unit of measure. Feeds the
+  // report page's "Work Progress — Planned vs Completed" table by summing
+  // against WorkTarget.plannedQty for the same project+category.
+  qty?: number;
+  unit?: string;
 }
 
 export interface DailyProgressReport extends BaseRecord {
@@ -224,6 +230,18 @@ export interface DailyProgressReport extends BaseRecord {
   labourCount: number;
   workEntries: DprWorkEntry[];
   isPublic: boolean;
+}
+
+/* A one-time-set target, per project+category, that Daily Progress Report
+   submissions' qty entries are measured against. Deliberately NOT a full
+   Work Order/contract system (no vendor/scope-item/billing concepts) —
+   just enough for a Planned vs Completed rollup on the DPR report page. */
+export interface WorkTarget extends BaseRecord {
+  projectId: string;
+  category: string;
+  unit: string;
+  plannedQty: number;
+  active?: boolean;
 }
 
 /* -------------------------------------------------------- Drawing Requests */
@@ -298,6 +316,7 @@ export interface BoardData {
   dpr: DailyProgressReport[];
   drawingRequests: DrawingRequest[];
   permissions: UserPermission[];
+  workTargets: WorkTarget[];
   progress: Record<string, ProgressPatch>;
   events: EventLog[];
   [key: string]: unknown;
@@ -312,7 +331,7 @@ export type Op =
   | { op: "event"; ev: EventLog };
 
 export type TabKey = "dash" | "work" | "board" | "snags" | "team" | "masters" | "dpr" | "drawingRequests" | "backups";
-export type MasterKey = "projects" | "floors" | "units" | "stages" | "qparams" | "checklists" | "stagemap" | "users" | "permissions";
+export type MasterKey = "projects" | "floors" | "units" | "stages" | "qparams" | "checklists" | "stagemap" | "users" | "permissions" | "workTargets";
 
 export type FieldType = "text" | "number" | "date" | "color" | "select" | "ref" | "bool" | "textarea" | "items";
 

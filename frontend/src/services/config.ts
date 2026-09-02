@@ -29,6 +29,17 @@ export const API_BASE: string = (() => {
   return "https://quality-control-1t2r.onrender.com";
 })();
 
+/* Real site work-type checklist for Daily Progress Report — matches the
+   reference layout's 16-item, 4-column grid. Shared (not owned by
+   DprForm.tsx) because Work Targets (below) and the DPR report page's
+   category tallies both need the exact same list. */
+export const WORK_CATEGORIES = [
+  "Civil", "RCC", "Electrical", "Painter",
+  "Plumbing", "Wooden", "Floor Grinding", "Core Cutting",
+  "Fire", "Waterproofing", "Carpenter", "Fabrication",
+  "UPVC", "Material Lifting", "Excavation", "Plantation"
+];
+
 export const SEVERITIES: Severity[] = ["Critical", "Major", "Minor"];
 export const SNAG_STATUS = ["Open", "In Progress", "Closed"] as const;
 export const ASSIGN_STATUS = ["Assigned", "Accepted", "Done"] as const;
@@ -166,6 +177,18 @@ export const MASTERS: Record<MasterKey, MasterDef> = {
       { k: "canProduceStage2", label: "Can produce at Stage 2", type: "bool", default: false },
       { k: "canCrosscheckStage3", label: "Can cross-check at Stage 3", type: "bool", default: false },
       { k: "canFinalApproveStage4", label: "Can give final approval at Stage 4", type: "bool", default: false }
+    ]
+  },
+  workTargets: {
+    label: "Work Target", icon: "🎯", prefix: "WTG",
+    desc: "One planned quantity per project + work category — Daily Progress Report qty entries roll up against this on the report page's Planned vs Completed table.",
+    cols: ["projectId", "category", "unit", "plannedQty", "active"],
+    fields: [
+      { k: "projectId", label: "Project", type: "ref", coll: "projects", required: true },
+      { k: "category", label: "Work category", type: "select", options: WORK_CATEGORIES, required: true },
+      { k: "unit", label: "Unit", type: "text", required: true, hint: "e.g. sq.ft, cum, nos" },
+      { k: "plannedQty", label: "Planned quantity", type: "number", required: true },
+      { k: "active", label: "Active", type: "bool" }
     ]
   }
 };

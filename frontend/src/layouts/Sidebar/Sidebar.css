@@ -71,6 +71,7 @@
    wider than the app's default thin one, instead of a barely-visible or
    auto-hiding bar the user might not notice they can scroll. */
 .sidebar-nav-scroll {
+  overflow-x: hidden;
   scrollbar-width: auto;
   scrollbar-color: var(--border-strong) transparent;
 }

@@ -4,6 +4,7 @@ import { coll, refLabel, snagTarget } from "../shared/rules";
 import { dueLabel, ago } from "../shared/helpers";
 import { ESCALATION_DAYS, HOUR } from "../services/config";
 import NavIcon from "../components/NavIcon";
+import SearchDropdown from "../components/SearchDropdown";
 
 export default function Snags() {
   const { data, currentProjectId, currentUserId, openSnagModal, openDrawer, apply, toast } = useApp();
@@ -75,26 +76,50 @@ export default function Snags() {
         </div>
       )}
 
-      <div className="panel-card">
+      <div className="panel-card" style={{ minHeight: "70vh" }}>
         <div className="toolbar">
           <input className="input grow" placeholder="Search snags by title, unit or description…" value={q} onChange={(e) => setQ(e.target.value)} />
-          <select className="select" style={{ width: "auto" }} value={fs} onChange={(e) => setFs(e.target.value)}>
-            <option value="">All statuses</option>
-            <option value="Open">Open</option>
-            <option value="In Progress">In Progress</option>
-            <option value="Closed">Closed</option>
-          </select>
-          <select className="select" style={{ width: "auto" }} value={fv} onChange={(e) => setFv(e.target.value)}>
-            <option value="">All severities</option>
-            <option value="Critical">Critical</option>
-            <option value="Major">Major</option>
-            <option value="Minor">Minor</option>
-          </select>
-          <select className="select" style={{ width: "auto" }} value={fm} onChange={(e) => setFm(e.target.value)}>
-            <option value="">Everyone</option>
-            <option value="mine">Assigned to me</option>
-            <option value="raised">Raised by me</option>
-          </select>
+          <div style={{ width: 160 }}>
+            <SearchDropdown
+              searchable={false}
+              value={fs}
+              onChange={setFs}
+              options={[
+                { value: "", label: "All statuses" },
+                { value: "Open", label: "Open" },
+                { value: "In Progress", label: "In Progress" },
+                { value: "Closed", label: "Closed" }
+              ]}
+              neutralActive
+            />
+          </div>
+          <div style={{ width: 160 }}>
+            <SearchDropdown
+              searchable={false}
+              value={fv}
+              onChange={setFv}
+              options={[
+                { value: "", label: "All severities" },
+                { value: "Critical", label: "Critical" },
+                { value: "Major", label: "Major" },
+                { value: "Minor", label: "Minor" }
+              ]}
+              neutralActive
+            />
+          </div>
+          <div style={{ width: 170 }}>
+            <SearchDropdown
+              searchable={false}
+              value={fm}
+              onChange={setFm}
+              options={[
+                { value: "", label: "Everyone" },
+                { value: "mine", label: "Assigned to me" },
+                { value: "raised", label: "Raised by me" }
+              ]}
+              neutralActive
+            />
+          </div>
         </div>
         <div>
           {list.length === 0 && <div className="empty">No snags match these filters.</div>}

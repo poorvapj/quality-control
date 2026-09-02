@@ -41,7 +41,7 @@ function applyOpsLocal(d: BoardData, ops: Op[]) {
 
 interface DrawerRef { kind: "unit" | "floor" | "snag" | "user"; id: string }
 
-export interface AssignModalState { targetType: "unit" | "floor"; targetId: string; stageId: string; presetUser?: string }
+export interface AssignModalState { targetType: "unit" | "floor"; targetId: string; stageId: string; presetUser?: string; projectId?: string }
 export interface SnagModalState { unitId: string; stageId: string; preset?: string }
 export interface ChecklistModalState { kind: "unit" | "floor"; id: string; stageId: string; checklistId: string }
 export interface RecordModalState { master: MasterKey; id: string | null }

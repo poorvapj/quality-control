@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useApp } from "../../context/AppContext";
 import { ROLES } from "../../services/config";
 import { coll } from "../../shared/rules";
+import SearchDropdown from "../../components/SearchDropdown";
 import "./Header.css";
 
 export default function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
@@ -80,15 +81,14 @@ export default function Header({ onToggleSidebar }: { onToggleSidebar: () => voi
                 {u?.id === "U-ADMIN" && (
                   <>
                     <label className="micro-label">Switch role</label>
-                    <select
-                      className="select"
-                      value={currentUserId ?? ""}
-                      onChange={(e) => setCurrentUserId(e.target.value)}
-                    >
-                      {users.map((usr) => (
-                        <option key={usr.id} value={usr.id}>{usr.name} · {usr.role}</option>
-                      ))}
-                    </select>
+                    <div style={{ marginBottom: 10 }}>
+                      <SearchDropdown
+                        value={currentUserId ?? ""}
+                        onChange={setCurrentUserId}
+                        options={users.map((usr) => ({ value: usr.id, label: `${usr.name} · ${usr.role}` }))}
+                        neutralActive
+                      />
+                    </div>
                   </>
                 )}
                 <button className="btn btn-secondary btn-sm" onClick={() => { setMenuOpen(false); logout(); }}>Logout</button>

@@ -40,6 +40,13 @@
  *                                                                AUTOMATION_SECRET. Fires N8N_WEBHOOK_URL (if
  *                                                                set) on every real reviewStatus change, from
  *                                                                this route AND from a normal /api/ops upsert.
+ *
+ * n8n / Slack notifications (see notifyEvent, below): if N8N_WEBHOOK_URL is
+ * set, every drawing-request stage change, new/reassigned work assignment,
+ * new/reassigned snag, and snag reopen POSTs one JSON event there —
+ * {eventType, ...}. Routing that to an actual DM + a shared Slack channel is
+ * an n8n workflow, not this server; each payload carries the target's
+ * *Email field so n8n can resolve them to a Slack user.
  */
 
 require("dotenv").config();
@@ -118,6 +125,104 @@ const DRAWING_TRANSITIONS = {
 const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || "";
 const AUTOMATION_SECRET = process.env.AUTOMATION_SECRET || "";
 
+/* ------------------------------------------------------- Slack (no n8n)
+   Talks to Slack's Web API directly with a bot token — no middleman
+   workflow tool needed. Two things a bot token can do that's enough here:
+     - users.lookupByEmail  turns an app user's email into a Slack user id
+     - chat.postMessage     to that user id opens/reuses a DM; to a channel
+                             id posts there — same call either way
+   SLACK_BOT_TOKEN needs scopes: chat:write, users:read.email
+   Both env vars optional — everything below is a no-op with either unset. */
+const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN || "";
+const SLACK_CHANNEL_ID = process.env.SLACK_CHANNEL_ID || "";
+
+// email -> Slack user id | null. Small and long-lived (emails rarely change
+// Slack accounts) — avoids one lookupByEmail call per notification.
+const slackUserIdByEmail = new Map();
+
+async function slackUserIdForEmail(email) {
+  if (!email || !SLACK_BOT_TOKEN) return null;
+  if (slackUserIdByEmail.has(email)) return slackUserIdByEmail.get(email);
+  try {
+    const res = await fetch(`https://slack.com/api/users.lookupByEmail?email=${encodeURIComponent(email)}`, {
+      headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` }
+    });
+    const json = await res.json();
+    const id = json.ok ? json.user.id : null;
+    if (!json.ok) console.error("Slack users.lookupByEmail:", json.error, email);
+    slackUserIdByEmail.set(email, id);
+    return id;
+  } catch (e) {
+    console.error("Slack users.lookupByEmail failed:", e.message);
+    return null;
+  }
+}
+
+async function slackPostMessage(channel, text) {
+  if (!SLACK_BOT_TOKEN || !channel) return;
+  try {
+    const res = await fetch("https://slack.com/api/chat.postMessage", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ channel, text })
+    });
+    const json = await res.json();
+    if (!json.ok) console.error("Slack chat.postMessage:", json.error, channel);
+  } catch (e) {
+    console.error("Slack chat.postMessage failed:", e.message);
+  }
+}
+
+/* One line of Slack copy per event type, plus who the DM goes to. Returning
+   null means "nothing worth telling a human" (e.g. an intermediate drawing
+   stage most people don't need pinged for). */
+function slackMessageFor(eventType, payload) {
+  switch (eventType) {
+    case "drawing_request_stage_change":
+      if (payload.reviewStatus === "approved") {
+        return { text: `✅ Drawing request *${payload.ticketNo}* (${payload.projectName}) is fully *approved*.`, recipientEmail: payload.requesterEmail, who: payload.requesterName };
+      }
+      if (payload.reviewStatus === "returned") {
+        return { text: `↩️ Drawing request *${payload.ticketNo}* (${payload.projectName}) was *returned* to ${payload.requesterName} for changes.`, recipientEmail: payload.requesterEmail, who: payload.requesterName };
+      }
+      return null;
+    case "work_assigned":
+      return {
+        text: `🔧 *${payload.assignedByName}* assigned *${payload.assignedToName}* a new task (stage \`${payload.stageId}\`)`
+          + (payload.dueAt ? `, due ${new Date(payload.dueAt).toLocaleString()}` : "")
+          + (payload.note ? `.\n> ${payload.note}` : "."),
+        recipientEmail: payload.assignedToEmail,
+        who: payload.assignedToName
+      };
+    case "snag_assigned":
+      return { text: `🐞 Snag *${payload.title}* assigned to *${payload.assignedToName}*.`, recipientEmail: payload.assignedToEmail, who: payload.assignedToName };
+    case "snag_reopened":
+      return { text: `⚠️ Snag *${payload.title}* was *reopened* — assigned to *${payload.assignedToName}*, needs attention.`, recipientEmail: payload.assignedToEmail, who: payload.assignedToName };
+    default:
+      return null;
+  }
+}
+
+async function notifySlack(eventType, payload) {
+  if (!SLACK_BOT_TOKEN) return;
+  try {
+    const msg = slackMessageFor(eventType, payload);
+    if (!msg) return;
+    const tasks = [];
+    if (msg.recipientEmail) {
+      tasks.push(
+        slackUserIdForEmail(msg.recipientEmail).then((uid) => uid && slackPostMessage(uid, msg.text))
+      );
+    }
+    if (SLACK_CHANNEL_ID) {
+      tasks.push(slackPostMessage(SLACK_CHANNEL_ID, msg.text));
+    }
+    await Promise.all(tasks);
+  } catch (e) {
+    console.error(`notifySlack failed (${eventType}):`, e.message);
+  }
+}
+
 // The only two collections the public, no-login submission forms write to —
 // and only ever to CREATE a new ticket, never to edit one that already
 // exists. Everything else through /api/ops (including a second write to an
@@ -128,7 +233,7 @@ const PUBLIC_CREATE_ONLY = ["dpr", "drawingRequests"];
 // project itself is deleted, so removing a project doesn't leave its
 // floors/units/snags/etc. as orphaned records with a projectId that no
 // longer resolves to anything.
-const PROJECT_SCOPED_COLLECTIONS = ["floors", "units", "snags", "assignments", "dpr", "drawingRequests", "stagemap"];
+const PROJECT_SCOPED_COLLECTIONS = ["floors", "units", "snags", "assignments", "dpr", "drawingRequests", "stagemap", "workTargets"];
 
 /* Same constant-time comparison already used for password hashes
    (verifyPassword, below) — the cron/automation secret checks used to do a
@@ -148,16 +253,36 @@ function timingSafeStringEqual(a, b) {
   return crypto.timingSafeEqual(bufA, bufB);
 }
 
-/* Fire-and-forget notification to n8n on every real stage change — never
-   blocks or fails the request that triggered it (a Slack outage or a
-   misconfigured n8n instance must never stop someone from approving a
-   drawing on the board itself). */
-function notifyDrawingRequestStageChange(doc) {
+/* Fire-and-forget notification on every real event worth telling someone
+   about — never blocks or fails the request that triggered it (a Slack
+   outage or a misconfigured webhook must never stop someone from approving
+   a drawing, or assigning work, on the board itself).
+
+   Two independent, both-optional sinks for the same {eventType, ...}
+   payload: notifySlack talks to Slack directly (SLACK_BOT_TOKEN); the n8n
+   webhook below is only for anyone who'd rather route it through n8n
+   instead. Either, both, or neither can be configured. */
+function notifyEvent(eventType, payload) {
+  notifySlack(eventType, payload);
   if (!N8N_WEBHOOK_URL) return;
   fetch(N8N_WEBHOOK_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+    body: JSON.stringify(Object.assign({ eventType }, payload))
+  }).catch((e) => console.error(`n8n webhook notify failed (${eventType}):`, e.message));
+}
+
+async function notifyDrawingRequestStageChange(doc) {
+  // Callers fire this without awaiting it (see below) — never let a lookup
+  // failure here surface as an unhandled rejection and crash the process.
+  try {
+    // submittedByUserId, not requesterName (a free-typed string), is the
+    // reliable link back to a real account — resolve it here so n8n can
+    // match the requester to Slack by email without guessing off the name.
+    const requester = doc.submittedByUserId
+      ? await mongoDb.collection("users").findOne({ id: doc.submittedByUserId }, { projection: { email: 1 } })
+      : null;
+    notifyEvent("drawing_request_stage_change", {
       id: doc.id,
       ticketNo: doc.ticketNo,
       projectName: doc.projectName,
@@ -165,10 +290,56 @@ function notifyDrawingRequestStageChange(doc) {
       reviewStatus: doc.reviewStatus,
       priority: doc.priority || doc.requestedPriority || null,
       requesterName: doc.requesterName,
+      requesterEmail: requester?.email || null,
       assignedTo: doc.assignedTo || null,
       lastHistoryEntry: doc.reviewHistory?.[doc.reviewHistory.length - 1] || null
-    })
-  }).catch((e) => console.error("n8n webhook notify failed:", e.message));
+    });
+  } catch (e) {
+    console.error("notifyDrawingRequestStageChange failed:", e.message);
+  }
+}
+
+async function notifyAssignmentTarget(eventType, rec) {
+  try {
+    const [assignee, assigner] = await Promise.all([
+      mongoDb.collection("users").findOne({ id: rec.assignedTo }, { projection: { name: 1, email: 1 } }),
+      rec.assignedBy ? mongoDb.collection("users").findOne({ id: rec.assignedBy }, { projection: { name: 1 } }) : null
+    ]);
+    notifyEvent(eventType, {
+      id: rec.id,
+      projectId: rec.projectId || null,
+      targetType: rec.targetType || null,
+      targetId: rec.targetId || null,
+      stageId: rec.stageId || null,
+      note: rec.note || "",
+      dueAt: rec.dueAt || null,
+      assignedToId: rec.assignedTo,
+      assignedToName: assignee?.name || rec.assignedTo,
+      assignedToEmail: assignee?.email || null,
+      assignedByName: assigner?.name || "Someone"
+    });
+  } catch (e) {
+    console.error(`notifyAssignmentTarget failed (${eventType}):`, e.message);
+  }
+}
+
+async function notifySnagTarget(eventType, rec, existing) {
+  try {
+    const assignedTo = rec.assignedTo || existing?.assignedTo || null;
+    const assignee = assignedTo
+      ? await mongoDb.collection("users").findOne({ id: assignedTo }, { projection: { name: 1, email: 1 } })
+      : null;
+    notifyEvent(eventType, {
+      id: rec.id,
+      title: rec.title || existing?.title || "",
+      projectId: rec.projectId || existing?.projectId || null,
+      assignedToId: assignedTo,
+      assignedToName: assignee?.name || assignedTo,
+      assignedToEmail: assignee?.email || null
+    });
+  } catch (e) {
+    console.error(`notifySnagTarget failed (${eventType}):`, e.message);
+  }
 }
 
 function getSession(req) {
@@ -397,12 +568,43 @@ async function assertOpAllowed(op, session) {
         }
       }
     }
+    // An anonymous CREATE (the public no-login submission form) only ever
+    // legitimately sends description/drawingType/source/requesterName/
+    // requestedPriority/projectId — everything privilege-bearing here is
+    // force-reset to the same safe defaults the normal in-app create path
+    // uses, no matter what the request body actually contained. Closes the
+    // gap where an anonymous POST could plant a ticket that's pre-assigned,
+    // pre-prioritized, or carries a fabricated approval-history entry.
+    // Authenticated creates/edits are untouched — this only fires when
+    // there's no session and no existing record.
+    if (!existing && !session) {
+      Object.assign(op.rec, {
+        reviewStatus: "stage-1-screen",
+        reviewHistory: [{ stage: "stage-1-screen", action: "submitted", by: null, at: Date.now(), remarks: "Ticket created" }],
+        files: [],
+        assignedTo: null,
+        committedDate: null,
+        priority: "",
+        trackingStatus: "",
+        actualCompletionDate: null,
+        planningVerified: false,
+        projectAcknowledged: false,
+        submittedByUserId: null,
+        isPublic: true
+      });
+    }
     return;
   }
 
   if (op.op === "upsert" && op.coll === "dpr" && op.rec && op.rec.id) {
     const existing = await mongoDb.collection("dpr").findOne({ id: op.rec.id });
     if (existing && !session) { const e = new Error("Sign-in required"); e.status = 401; throw e; }
+    // Same reasoning as drawingRequests above — an anonymous submission can
+    // never claim to be from a real logged-in account.
+    if (!existing && !session) {
+      op.rec.submittedByUserId = null;
+      op.rec.isPublic = true;
+    }
     return;
   }
 
@@ -462,6 +664,32 @@ async function applyOps(ops, session) {
         if (rec.reviewStatus !== from) {
           const saved = await mongoDb.collection("drawingRequests").findOne({ id: op.rec.id }, { projection: { _id: 0 } });
           if (saved) notifyDrawingRequestStageChange(saved);
+        }
+      } else if (op.coll === "assignments" && rec.assignedTo) {
+        const existing = await mongoDb.collection("assignments").findOne({ id: op.rec.id }, { projection: { assignedTo: 1 } });
+        await mongoDb.collection(op.coll).updateOne({ id: op.rec.id }, update, { upsert: true });
+        // Notify on a brand-new assignment or a hand-off to someone else —
+        // not on every incidental field edit (e.g. a note tweak) to the
+        // same assignee.
+        if (!existing || existing.assignedTo !== rec.assignedTo) {
+          notifyAssignmentTarget("work_assigned", rec);
+        }
+      } else if (op.coll === "snags") {
+        const existing = await mongoDb.collection("snags").findOne(
+          { id: op.rec.id },
+          { projection: { assignedTo: 1, status: 1, reopenCount: 1, title: 1, projectId: 1 } }
+        );
+        await mongoDb.collection(op.coll).updateOne({ id: op.rec.id }, update, { upsert: true });
+        const reopened = !!existing && existing.status === "Closed" && rec.status && rec.status !== "Closed"
+          && (rec.reopenCount || 0) > (existing.reopenCount || 0);
+        const reassigned = !!rec.assignedTo && (!existing || existing.assignedTo !== rec.assignedTo);
+        // A single write can technically be both (reopened straight onto a
+        // new assignee) — the reopen is the more important thing to flag,
+        // so it wins rather than firing two events for one save.
+        if (reopened) {
+          notifySnagTarget("snag_reopened", rec, existing);
+        } else if (reassigned) {
+          notifySnagTarget("snag_assigned", rec, existing);
         }
       } else {
         await mongoDb.collection(op.coll).updateOne({ id: op.rec.id }, update, { upsert: true });

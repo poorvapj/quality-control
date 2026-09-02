@@ -6,11 +6,13 @@ import { useActions } from "../hooks/useActions";
 import SidePanel from "./SidePanel";
 import NavIcon from "./NavIcon";
 import type { Severity } from "../types";
+import "./SharpPanel.css";
 
 export default function SnagModal() {
-  const { snagModal, closeSnagModal, data, currentProjectId, toast } = useApp();
+  const { snagModal, closeSnagModal, data, toast, me } = useApp();
   const { saveSnag } = useActions();
 
+  const [projectId, setProjectId] = useState("");
   const [title, setTitle] = useState("");
   const [unitId, setUnitId] = useState("");
   const [stageId, setStageId] = useState("");
@@ -20,8 +22,15 @@ export default function SnagModal() {
   const [due, setDue] = useState("");
   const [desc, setDesc] = useState("");
 
+  const projects = coll(data, "projects").filter((p) => p.active !== false);
+  const currentUser = me();
+
   useEffect(() => {
     if (!snagModal) return;
+    // Starts unset ("Choose") rather than defaulting to whatever project
+    // happens to be globally selected — same reasoning as Assign Work:
+    // makes the choice explicit instead of silently picking one for you.
+    setProjectId("");
     setTitle(snagModal.preset || "");
     setUnitId(snagModal.unitId || "");
     setStageId(snagModal.stageId || "");
@@ -32,47 +41,78 @@ export default function SnagModal() {
     setDesc("");
   }, [snagModal]);
 
-  const units = projectUnits(data, currentProjectId);
-  const stages = trackStages(data, currentProjectId, "unit");
+  const units = projectUnits(data, projectId);
+  const stages = trackStages(data, projectId, "unit");
   const params = coll(data, "qparams").filter((p) => p.active !== false);
   const users = coll(data, "users").filter((u) => u.active !== false);
 
   async function submit() {
+    if (!projectId) { toast("Pick a project"); return; }
     if (!title.trim()) { toast("Title is required"); return; }
     if (!unitId) { toast("Pick a unit"); return; }
     if (!stageId) { toast("Pick a stage"); return; }
     if (!paramId) { toast("Pick a quality parameter"); return; }
     if (!assignedTo) { toast("Pick who this is assigned to"); return; }
     if (!due) { toast("Pick a due date"); return; }
-    await saveSnag({ unitId, stageId, paramId, title, description: desc, severity, assignedTo, dueAt: new Date(due).getTime() });
+    await saveSnag({ unitId, stageId, paramId, title, description: desc, severity, assignedTo, dueAt: new Date(due).getTime(), projectId });
     closeSnagModal();
   }
 
   return (
     <SidePanel
       open={!!snagModal}
+      wide
       icon={<NavIcon name="snags" size={17} />}
       title="Raise Snag"
       desc="Log a quality defect against a unit and stage, with severity and an owner."
       onClose={closeSnagModal}
+      panelClassName="sharp-panel"
+      footer={
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", gap: 12 }}>
+          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>* Required</span>
+          <button className="btn btn-primary" style={{ minWidth: 160, justifyContent: "center" }} onClick={submit}>
+            Raise snag
+          </button>
+        </div>
+      }
     >
+      <div
+        className="card card-pad"
+        style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 18, fontSize: 12.5, color: "var(--text-sub)" }}
+      >
+        <div><strong style={{ color: "var(--text-main)" }}>Raised by:</strong> {currentUser?.name || "—"}</div>
+        {currentUser?.email && <div><strong style={{ color: "var(--text-main)" }}>Contact:</strong> {currentUser.email}</div>}
+      </div>
+
       <div className="form-grid">
+        <div className="field">
+          <label>Project *</label>
+          <select
+            className="select"
+            value={projectId}
+            onChange={(e) => { setProjectId(e.target.value); setUnitId(""); setStageId(""); }}
+          >
+            <option value="">Choose</option>
+            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Which project this snag belongs to — unit and stage below follow this choice.</div>
+        </div>
         <div className="field full"><label>Title *</label><input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Short, specific: what is wrong and where" /></div>
         <div className="field"><label>Unit *</label>
           <select className="select" value={unitId} onChange={(e) => setUnitId(e.target.value)}>
-            <option value="">—</option>
+            <option value="">Choose</option>
             {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
           </select>
         </div>
         <div className="field"><label>Stage *</label>
           <select className="select" value={stageId} onChange={(e) => setStageId(e.target.value)}>
-            <option value="">—</option>
+            <option value="">Choose</option>
             {stages.map((x) => <option key={x.stage.id} value={x.stage.id}>{x.stage.name}</option>)}
           </select>
         </div>
         <div className="field"><label>Quality parameter *</label>
           <select className="select" value={paramId} onChange={(e) => setParamId(e.target.value)}>
-            <option value="">—</option>
+            <option value="">Choose</option>
             {params.map((p) => <option key={p.id} value={p.id}>{p.code} · {p.name}</option>)}
           </select>
         </div>
@@ -83,17 +123,13 @@ export default function SnagModal() {
         </div>
         <div className="field"><label>Assign to *</label>
           <select className="select" value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}>
-            <option value="">—</option>
+            <option value="">Choose</option>
             {users.map((u) => <option key={u.id} value={u.id}>{u.name} · {u.role}</option>)}
           </select>
         </div>
         <div className="field"><label>Due by *</label><input className="input" type="datetime-local" value={due} onChange={(e) => setDue(e.target.value)} /></div>
         <div className="field full"><label>Description</label><textarea className="textarea" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Extent, location within the unit, and what rectification is expected." /></div>
       </div>
-
-      <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 20 }} onClick={submit}>
-        Raise snag
-      </button>
     </SidePanel>
   );
 }

@@ -108,6 +108,7 @@
       inset: 0;
       background: transparent;
       z-index: 45;
+      transition: background 0.2s ease;
     }
 
     /* Only meaningful on mobile, where the sidebar is an off-canvas drawer —
@@ -116,6 +117,7 @@
     @media (max-width: 960px) {
       .sidebar-overlay.open {
         display: block;
+        background: rgba(15, 23, 42, 0.45);
       }
     }
 
@@ -1137,14 +1139,12 @@
       border-color: var(--theme-primary);
     }
 
-    /* Resolved (closed) snag history — whole tile, same treatment as
-       .has-snag, in a dark slate gray-blue: muted enough to read as "just
-       history, not an alert" but distinct from the two lighter grays
-       already used for Not started (--bg-subtle) and Structure not
-       released (--color-locked), so it never gets mistaken for those. */
+    /* Resolved (closed) snag history — whole tile, green like a cured/
+       handed-over unit (explicit choice: a resolved snag reads as "clear
+       now", same color family as complete). */
     .cell.has-resolved-snag {
-      background: #475569 !important;
-      border-color: #475569;
+      background: var(--color-pass) !important;
+      border-color: var(--color-pass);
     }
 
     .legend-bar {

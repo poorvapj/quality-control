@@ -1,12 +1,21 @@
-import React from "react";
+import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, projectFloors, floorUnits, trackStages, prog, floorReleased, floorBelow, unitSummary } from "../shared/rules";
 import NavIcon from "../components/NavIcon";
+import SearchDropdown from "../components/SearchDropdown";
 
 export default function TowerBoard() {
-  const { data, currentProjectId, openDrawer } = useApp();
-  const floors = projectFloors(data, currentProjectId);
-  const fstages = trackStages(data, currentProjectId, "floor");
+  const { data, currentProjectId, setCurrentProjectId, openDrawer } = useApp();
+  const allProjects = coll(data, "projects").filter((p) => p.active !== false);
+  // The filter itself starts unset ("Choose") rather than showing whatever
+  // project happens to be globally selected — but the board below still
+  // shows real data from the start (currentProjectId), exactly like
+  // before; only the dropdown's own label defaults to "Choose" until
+  // someone actively picks from it.
+  const [viewProjectId, setViewProjectId] = useState("");
+  const boardProjectId = viewProjectId || currentProjectId;
+  const floors = projectFloors(data, boardProjectId);
+  const fstages = trackStages(data, boardProjectId, "floor");
   // Resolved (closed) snags per unit — a lighter, corner-dot indicator since
   // unlike an open snag it isn't an active alert, just history worth seeing.
   const closedSnagsByUnit = new Map<string, number>();
@@ -26,6 +35,17 @@ export default function TowerBoard() {
           </div>
         </div>
       </div>
+      <div className="filter-bar" style={{ marginBottom: 16 }}>
+        <div className="field" style={{ maxWidth: 220 }}>
+          <label>Project</label>
+          <SearchDropdown
+            value={viewProjectId}
+            onChange={(v) => { setViewProjectId(v); setCurrentProjectId(v); }}
+            options={[{ value: "", label: "Choose" }, ...allProjects.map((p) => ({ value: p.id, label: p.name }))]}
+            neutralActive
+          />
+        </div>
+      </div>
       <div className="card card-pad">
         {floors.length === 0 && <div className="empty">No floors yet — add them in Masters ▸ Floor.</div>}
         {floors.slice().reverse().map((f) => {
@@ -35,9 +55,9 @@ export default function TowerBoard() {
             if (p.status === "done") fdone++;
             if (p.status === "fail") ffail = true;
           }
-          const cured = floorReleased(data, currentProjectId, f.id);
-          const below = floorBelow(data, currentProjectId, f.id);
-          const canCast = !below || floorReleased(data, currentProjectId, below.id);
+          const cured = floorReleased(data, boardProjectId, f.id);
+          const below = floorBelow(data, boardProjectId, f.id);
+          const canCast = !below || floorReleased(data, boardProjectId, below.id);
           const label = cured ? "CURED ✓" : !canCast ? "LOCKED" : fdone > 0 ? `RCC ${fdone}/${fstages.length}` : "NOT STARTED";
 
           return (
@@ -54,12 +74,12 @@ export default function TowerBoard() {
                 {f.code}<br /><span style={{ fontSize: 8, opacity: 0.75 }}>{label}</span>
               </div>
               <div className="cells-grid">
-                {floorUnits(data, currentProjectId, f.id).map((u) => {
-                  const s = unitSummary(data, currentProjectId, u.id);
+                {floorUnits(data, boardProjectId, f.id).map((u) => {
+                  const s = unitSummary(data, boardProjectId, u.id);
                   let bg = "var(--bg-subtle)";
                   if (s.locked) bg = "var(--color-locked)";
                   else if (s.fail) bg = "var(--color-fail)";
-                  else if (s.complete) bg = "var(--color-pass)";
+                  else if (s.complete) bg = "#64748b";
                   else if (s.done > 0) bg = "var(--color-mep)";
                   // An open snag is a real alert — flag the whole tile, not
                   // just a small dot in the corner, so it's obvious at a
@@ -87,13 +107,13 @@ export default function TowerBoard() {
           );
         })}
         <div className="legend-bar">
-          <div className="legend-item"><div className="legend-box" style={{ background: "var(--color-pass)" }}></div> Handed over</div>
+          <div className="legend-item"><div className="legend-box" style={{ background: "#64748b" }}></div> Handed over</div>
           <div className="legend-item"><div className="legend-box" style={{ background: "var(--color-mep)" }}></div> Trades in progress</div>
           <div className="legend-item"><div className="legend-box" style={{ background: "var(--color-fail)" }}></div> QC fail / rework</div>
           <div className="legend-item"><div className="legend-box" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}></div> Not started</div>
           <div className="legend-item"><div className="legend-box" style={{ background: "var(--color-locked)" }}></div> Structure not released</div>
           <div className="legend-item"><div className="legend-box" style={{ background: "var(--theme-primary)" }}></div> Open snag</div>
-          <div className="legend-item"><div className="legend-box" style={{ background: "#475569" }}></div> Resolved snag</div>
+          <div className="legend-item"><div className="legend-box" style={{ background: "var(--color-pass)" }}></div> Resolved snag</div>
         </div>
       </div>
     </div>
