@@ -6,11 +6,19 @@ import { ESCALATION_DAYS, HOUR } from "../services/config";
 import NavIcon from "../components/NavIcon";
 
 export default function Snags() {
-  const { data, currentProjectId, currentUserId, openSnagModal, openDrawer } = useApp();
+  const { data, currentProjectId, currentUserId, openSnagModal, openDrawer, apply, toast } = useApp();
+  const isAdmin = currentUserId === "U-ADMIN";
   const [q, setQ] = useState("");
   const [fs, setFs] = useState("");
   const [fv, setFv] = useState("");
   const [fm, setFm] = useState("");
+
+  async function deleteSnag(e: React.MouseEvent, s: { id: string; title: string }) {
+    e.stopPropagation();
+    if (!confirm(`Delete snag ${s.id} — "${s.title}"?\n\nThis removes it for everyone on the board.`)) return;
+    await apply([{ op: "delete", coll: "snags", id: s.id }]);
+    toast("Deleted " + s.id);
+  }
 
   let list = coll(data, "snags").filter((s) => s.projectId === currentProjectId);
   if (fs) list = list.filter((s) => s.status === fs);
@@ -112,6 +120,11 @@ export default function Snags() {
                   <span className={"badge-tag " + (s.severity === "Critical" ? "crit" : s.severity === "Major" ? "gate" : "mute")}>{s.severity}</span>
                   <span className={"badge-tag " + (closed ? "pass" : s.status === "In Progress" ? "wip" : "fail")}>{s.status}</span>
                   {!closed && <span className={"badge-tag " + d.cls}>{d.text}</span>}
+                  {isAdmin && (
+                    <button className="btn-icon" title="Delete" onClick={(e) => deleteSnag(e, s)} style={{ width: 28, height: 28 }}>
+                      <NavIcon name="trash" size={13} />
+                    </button>
+                  )}
                 </div>
               </div>
             );
