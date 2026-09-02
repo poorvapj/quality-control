@@ -79,7 +79,7 @@
     }
 
     ::-webkit-scrollbar-thumb:hover {
-      background: var(--theme-primary);
+      background: #9ca3af;
     }
 
     .wrap {
@@ -106,7 +106,7 @@
       display: none;
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.5);
+      background: transparent;
       z-index: 45;
     }
 
@@ -1127,15 +1127,24 @@
       box-shadow: none;
     }
 
-    .cell .snag-dot {
-      position: absolute;
-      top: 2px;
-      right: 2px;
-      width: 7px;
-      height: 7px;
-      border-radius: 99px;
-      background: var(--color-fail);
-      border: 1px solid rgba(0, 0, 0, 0.35);
+    /* Whole-tile alert for an open snag — replaces the old corner dot, which
+       was too easy to miss on a small cell. Orange (the app's theme-primary
+       accent) so it stays visually distinct from QC fail/rework's red
+       instead of collapsing into the same color. !important beats the
+       inline per-status `background` the tile also carries. */
+    .cell.has-snag {
+      background: var(--theme-primary) !important;
+      border-color: var(--theme-primary);
+    }
+
+    /* Resolved (closed) snag history — whole tile, same treatment as
+       .has-snag, in a dark slate gray-blue: muted enough to read as "just
+       history, not an alert" but distinct from the two lighter grays
+       already used for Not started (--bg-subtle) and Structure not
+       released (--color-locked), so it never gets mistaken for those. */
+    .cell.has-resolved-snag {
+      background: #475569 !important;
+      border-color: #475569;
     }
 
     .legend-bar {
@@ -1768,216 +1777,12 @@
       background: #ffffff;
     }
 
-    /* Sidebar — flush, full-height ERP navigation matching the reference
-       exactly: no floating card, no margin, no shadow — just a plain white
-       panel with a hairline right border. */
-    .sidebar {
-      width: 260px;
-      background: #fff;
-      border-right: 1px solid #edeff2;
-      box-shadow: none;
-      padding: 0;
-      box-sizing: border-box;
-      overflow-y: hidden;
-      transition: width 0.2s ease;
-    }
-
-    .sidebar.collapsed {
-      width: 68px;
-    }
-
-    /* Flat icons in collapsed mode — no rounded badge box, just the glyph
-       centered, matching a plain icon-rail look. */
-    .sidebar.collapsed .nx-nav-icon {
-      width: auto;
-      height: auto;
-      background: none !important;
-    }
-
-    .sidebar.collapsed .nx-nav-item {
-      padding: 10px 0;
-    }
-
-    .sidebar-inner {
-      background: transparent;
-      border: none;
-      border-radius: 0;
-      box-shadow: none;
-      overflow: hidden;
-      position: relative;
-      height: 100%;
-    }
-
-    /* Collapsed nav items center their icon since the label is unmounted. */
-    .sidebar.collapsed .nx-nav-item {
-      margin-left: auto;
-      margin-right: auto;
-      width: calc(100% - 20px);
-    }
-
-    /* Collapsing only makes sense on desktop — mobile already uses this
-       same element as a full-width overlay drawer. */
-    @media (max-width: 960px) {
-      .sidebar.collapsed {
-        width: 264px;
-      }
-    }
-
-    .sidebar-brand {
-      min-height: 76px;
-      padding: 16px 20px;
-      gap: 12px;
-      background: #fff;
-    }
-
-    .sidebar-brand .brand-logo {
-      width: 40px;
-      height: 40px;
-      border-radius: 11px;
-      background: #ff7a00;
-      color: #fff;
-      box-shadow: 0 4px 12px rgba(255, 122, 0, .18);
-    }
-
-    .sidebar-brand .brand-title {
-      font-size: 15px;
-      font-weight: 800;
-      letter-spacing: -.2px;
-    }
-
-    .sidebar-brand .brand-sub {
-      color: #ff7a00;
-      font-size: 10px;
-      font-weight: 800;
-      letter-spacing: .12em;
-    }
-
-    .sidebar-nav {
-      padding: 12px 10px 24px;
-    }
-
-    .nav-group-label {
-      font-size: 10px;
-      font-weight: 800;
-      letter-spacing: .08em;
-      color: #a0a8b7;
-      padding: 14px 10px 7px;
-    }
-
-    .nav-tabs {
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-    }
-
-    .tab-btn {
-      width: 100%;
-      min-height: 40px;
-      padding: 9px 12px;
-      border: 0;
-      border-radius: 9px;
-      background: transparent;
-      color: #475467;
-      font-size: 14px;
-      font-weight: 600;
-      text-align: left;
-      transition: background .15s, color .15s;
-    }
-
-    .tab-btn:hover {
-      background: #fff4ea;
-      color: #f56f00;
-    }
-
-    .tab-btn.active {
-      background: #fff0e5;
-      color: #f56f00;
-      font-weight: 700;
-    }
-
-    /* Icon sits inside its own small rounded-square badge, like the
-       reference's sidebar — not a bare emoji floating next to the label. */
-    .nav-icon {
-      width: 28px;
-      height: 28px;
-      flex-shrink: 0;
-      border-radius: var(--radius-sm);
-      background: var(--bg-subtle);
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 13px;
-    }
-
-    .tab-btn.active .nav-icon {
-      background: rgba(255, 122, 0, .16);
-    }
-
-    .nav-label {
-      flex: 1;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .tab-badge {
-      margin-left: auto;
-      min-width: 20px;
-      height: 20px;
-      padding: 0 6px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 999px;
-      background: #f2f4f7;
-      color: #64748b;
-      font-size: 10px;
-      font-weight: 700;
-    }
-
-    .tab-btn.active .tab-badge {
-      background: #fff;
-      color: #f56f00;
-    }
-
-    /* Main/header */
-    .main-area {
-      background: #ffffff;
-    }
-
-    /* Flush white bar, flat against the page — matches the reference
-       exactly: no floating margin, no radius, no shadow, just a hairline
-       bottom border. */
-    header {
-      height: 64px;
-      margin: 0;
-      border: none;
-      border-bottom: 1px solid #edeff2;
-      border-radius: 0;
-      background: rgba(255, 255, 255, .98);
-      box-shadow: none;
-    }
-
-    .header-inner {
-      height: 64px;
-      padding: 0 22px;
-    }
-
-    .header-left {
-      gap: 12px;
-    }
-
-    .menu-btn {
-      width: 38px;
-      height: 38px;
-      border: 1px solid #e4e7ec;
-      background: #fff;
-      border-radius: 9px;
-    }
-
-    .header-actions {
-      gap: 10px;
-    }
+    /* .sidebar / .sidebar-inner / .nx-nav-* styling now lives in
+       layouts/Sidebar/Sidebar.css, and header / .header-inner / .menu-btn /
+       .header-actions now live in layouts/Header/Header.css — this old
+       flush-layout block (and the legacy unused .sidebar-brand/.tab-btn/
+       .nav-tabs/.nav-icon/.tab-badge classnames from before that split)
+       used to actively conflict with those two files. */
 
     .sync-pill {
       border-radius: 999px;

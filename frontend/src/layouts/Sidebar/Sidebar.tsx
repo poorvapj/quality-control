@@ -103,7 +103,7 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
 
         {/* ── Nav Groups — scrolls on its own so the collapse toggle below
             always stays visible, even with a long nav list. ── */}
-        <nav style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "6px 0 10px" }}>
+        <nav className="sidebar-nav-scroll" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "6px 0 10px" }}>
           {groups.map((g, gi) => (
             <div key={g.label} style={{ marginTop: gi === 0 ? 4 : 0 }}>
               {!collapsed && (
@@ -162,6 +162,9 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
                           >
                             {it.badge}
                           </span>
+                        )}
+                        {isActive && (
+                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "currentColor", flexShrink: 0 }} />
                         )}
                       </span>
                     )}

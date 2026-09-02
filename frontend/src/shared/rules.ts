@@ -5,7 +5,7 @@
    =========================================================================== */
 
 import type {
-  BoardData, CollectionName, Track, Stage, StageMap, Unit, Floor, Role, User, Snag, Assignment
+  BoardData, CollectionName, Track, Stage, StageMap, Unit, Floor, Role, User, Snag, Assignment, ProgressHistoryEntry
 } from "../types";
 import { HOUR } from "../services/config";
 
@@ -20,6 +20,32 @@ export function byId<T extends { id: string }>(rows: T[], id: string | null | un
 export const pkey = (targetId: string, stageId: string) => targetId + "::" + stageId;
 export const prog = (data: BoardData | null, targetId: string, stageId: string) =>
   (data?.progress && data.progress[pkey(targetId, stageId)]) || {};
+
+export interface StageCycle { rel: number | null; ack: number | null; start: number | null; end: number | null; endStatus: "done" | "fail" | null; }
+
+/** Splits a stage instance's full `history` log into one entry per
+ *  released->(done|fail) attempt, so reports can see every rework cycle
+ *  instead of only the latest one (which is all `rel`/`ack`/`start`/`at`
+ *  on the patch itself ever hold — see ProgressPatch.history). A stage
+ *  still mid-cycle (no `done`/`fail` yet) is included with `end: null`. */
+export function stageCycles(patch: { history?: ProgressHistoryEntry[] } | undefined): StageCycle[] {
+  const history = patch?.history || [];
+  const cycles: StageCycle[] = [];
+  let cur: StageCycle | null = null;
+  for (const h of history) {
+    if (h.status === "released") {
+      if (cur) cycles.push(cur);
+      cur = { rel: h.ts, ack: null, start: null, end: null, endStatus: null };
+      continue;
+    }
+    if (!cur) cur = { rel: null, ack: null, start: null, end: null, endStatus: null };
+    if (h.status === "ack") cur.ack = h.ts;
+    else if (h.status === "wip") cur.start = h.ts;
+    else if (h.status === "done" || h.status === "fail") { cur.end = h.ts; cur.endStatus = h.status; cycles.push(cur); cur = null; }
+  }
+  if (cur) cycles.push(cur);
+  return cycles;
+}
 
 export interface JoinedStage { map: StageMap; stage: Stage; }
 
@@ -186,6 +212,27 @@ export function mySnags(data: BoardData | null, projectId: string | null, userId
   if (!data || !userId) return [];
   return data.snags
     .filter((s) => s.assignedTo === userId && s.status !== "Closed" && s.projectId === projectId)
+    .sort((a, b) => (a.dueAt || 0) - (b.dueAt || 0));
+}
+
+/** Work assignments this user has handed out to someone else (still open),
+ *  not what's on them — powers My Work's "Assigned by me" section. Excludes
+ *  self-assignment (assignedTo === assignedBy) since that isn't "handing
+ *  off" to anyone. */
+export function assignmentsByMe(data: BoardData | null, projectId: string | null, userId: string | null): Assignment[] {
+  if (!data || !userId) return [];
+  return data.assignments
+    .filter((a) => a.assignedBy === userId && a.assignedTo !== userId && a.status !== "Done" && a.projectId === projectId)
+    .sort((a, b) => (a.dueAt || 0) - (b.dueAt || 0));
+}
+
+/** Snags this user last reassigned to someone else (still open) — see
+ *  Snag.lastReassignedBy in types/index.ts for why this can't just reuse
+ *  mySnags(). */
+export function snagsByMe(data: BoardData | null, projectId: string | null, userId: string | null): Snag[] {
+  if (!data || !userId) return [];
+  return data.snags
+    .filter((s) => s.lastReassignedBy === userId && s.assignedTo !== userId && s.status !== "Closed" && s.projectId === projectId)
     .sort((a, b) => (a.dueAt || 0) - (b.dueAt || 0));
 }
 

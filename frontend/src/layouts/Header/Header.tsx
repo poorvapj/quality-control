@@ -5,7 +5,7 @@ import { coll } from "../../shared/rules";
 import "./Header.css";
 
 export default function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
-  const { mode, data, currentUserId, setCurrentUserId, me, logout } = useApp();
+  const { data, currentUserId, setCurrentUserId, me, logout } = useApp();
   const [dark, setDark] = useState(() => localStorage.getItem("neoteric_theme") !== "light");
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -35,14 +35,6 @@ export default function Header({ onToggleSidebar }: { onToggleSidebar: () => voi
   const roleLabel = u && ROLES[u.role] ? ROLES[u.role].name : u?.role || "—";
   const initials = u ? u.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase() : "--";
 
-  const syncMap: Record<string, [string, string]> = {
-    live: ["", "LIVE · SHARED"],
-    local: ["local", "THIS DEVICE ONLY"],
-    offline: ["off", "OFFLINE"],
-    connecting: ["local", "CONNECTING"]
-  };
-  const [syncCls, syncText] = syncMap[mode] || syncMap.connecting;
-
   return (
     <header>
       <div className="header-inner">
@@ -70,7 +62,6 @@ export default function Header({ onToggleSidebar }: { onToggleSidebar: () => voi
           </div>
         </div>
         <div className="header-actions">
-          <span className={"sync-pill " + syncCls}><span className="dot"></span> {syncText}</span>
           <button className="btn-icon" onClick={toggleTheme} title="Toggle theme">{dark ? "☾" : "☀"}</button>
           <div className="account-wrap">
             <button className="account-btn" ref={btnRef} onClick={() => setMenuOpen((o) => !o)}>

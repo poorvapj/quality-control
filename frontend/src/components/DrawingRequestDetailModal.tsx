@@ -190,7 +190,22 @@ export default function DrawingRequestDetailModal({ dr, onClose }: { dr: Drawing
               value={assignedTo} onChange={setAssignedTo}
               options={users.map((u) => ({ value: u.id, label: u.name }))}
             />
-            <div className="field"><label>Committed Date (optional)</label><input className="input" type="date" value={committedDate} onChange={(e) => setCommittedDate(e.target.value)} /></div>
+            <div className="field">
+              <label>Committed Date (optional)</label>
+              <div style={{ position: "relative" }}>
+                <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", display: "flex", pointerEvents: "none" }}>
+                  <NavIcon name="calendar" size={14} />
+                </span>
+                {!committedDate && <span style={{ position: "absolute", left: 34, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", fontSize: 13, pointerEvents: "none" }}>Select date</span>}
+                <input
+                  className="input date-compact"
+                  type="date"
+                  style={{ paddingLeft: 34, color: committedDate ? "var(--text-main)" : "transparent" }}
+                  value={committedDate}
+                  onChange={(e) => setCommittedDate(e.target.value)}
+                />
+              </div>
+            </div>
             <div className="field full"><textarea className="textarea" placeholder="Remarks (optional)" value={remarks} onChange={(e) => setRemarks(e.target.value)} /></div>
             <div className="field full" style={{ display: "flex", gap: 8 }}>
               <Btn variant="success" label="Yes — Forward to Architect" onClick={() => { forwardToStage2(dr.id, assignedTo || null, committedDate || null, remarks); setRemarks(""); }} />

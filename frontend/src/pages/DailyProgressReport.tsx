@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, refLabel, projectFloors, projectUnits, unitSummary } from "../shared/rules";
 import { downloadCsv } from "../shared/csv";
+import { type DateRange, DATE_RANGES, isoWeekBounds, dateRangeBounds } from "../shared/dateRange";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
 import CalendarRangePicker from "../components/CalendarRangePicker";
@@ -10,61 +11,6 @@ import DprForm from "../components/DprForm";
 import DrawingRequestForm from "../components/DrawingRequestForm";
 
 type DprTab = "work" | "drawing" | "summary";
-type DateRange = "all" | "today" | "yesterday" | "thisWeek" | "lastWeek" | "weekNumber" | "thisMonth" | "custom";
-
-const DATE_RANGES: { key: DateRange; label: string }[] = [
-  { key: "all", label: "All Time" },
-  { key: "today", label: "Today" },
-  { key: "yesterday", label: "Yesterday" },
-  { key: "thisWeek", label: "This Week" },
-  { key: "lastWeek", label: "Last Week" },
-  { key: "weekNumber", label: "Week Number" },
-  { key: "thisMonth", label: "This Month" },
-  { key: "custom", label: "Custom Range" }
-];
-
-/** Monday..Sunday bounds for ISO week `week` of `year`. */
-function isoWeekBounds(year: number, week: number): { from: string; to: string } {
-  const jan4 = new Date(year, 0, 4);
-  const jan4Dow = (jan4.getDay() + 6) % 7;
-  const mon = new Date(jan4); mon.setDate(jan4.getDate() - jan4Dow + (week - 1) * 7);
-  const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
-  return { from: ymd(mon), to: ymd(sun) };
-}
-
-function ymd(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
-/** Real [from, to] (inclusive, YYYY-MM-DD) for each preset — Monday-start weeks. */
-function dateRangeBounds(range: DateRange): { from: string; to: string } | null {
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const dow = (today.getDay() + 6) % 7; // 0 = Monday
-
-  if (range === "all") return null;
-  if (range === "today") return { from: ymd(today), to: ymd(today) };
-  if (range === "yesterday") {
-    const y = new Date(today); y.setDate(y.getDate() - 1);
-    return { from: ymd(y), to: ymd(y) };
-  }
-  if (range === "thisWeek") {
-    const mon = new Date(today); mon.setDate(mon.getDate() - dow);
-    const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
-    return { from: ymd(mon), to: ymd(sun) };
-  }
-  if (range === "lastWeek") {
-    const mon = new Date(today); mon.setDate(mon.getDate() - dow - 7);
-    const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
-    return { from: ymd(mon), to: ymd(sun) };
-  }
-  if (range === "thisMonth") {
-    const first = new Date(today.getFullYear(), today.getMonth(), 1);
-    const last = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    return { from: ymd(first), to: ymd(last) };
-  }
-  return null; // "custom" and "weekNumber" are handled separately, with their own inputs
-}
 
 const STAGE_LABEL: Record<string, string> = {
   "stage-1-screen": "Screening (L1)",
@@ -84,7 +30,9 @@ function fmtDate(ts: number): string {
 }
 
 export default function DailyProgressReportPage() {
-  const { data } = useApp();
+  const { data, currentUserId, myRole, setActiveTab: setGlobalTab } = useApp();
+  const isAdmin = currentUserId === "U-ADMIN";
+  const isDri = !isAdmin && myRole() === "DRI";
   const [open, setOpen] = useState(false);
   const [drOpen, setDrOpen] = useState(false);
   const [tab, setTab] = useState<DprTab>("work");
@@ -119,6 +67,9 @@ export default function DailyProgressReportPage() {
     : dateRangeBounds(fRange);
 
   let rows = allDpr.slice();
+  // A DRI isn't a reviewer here — see shared/permissions.ts — so this page
+  // only shows the reports they personally submitted, not every DRI's.
+  if (isDri) rows = rows.filter((r) => r.submittedByUserId === currentUserId);
   if (fProject) rows = rows.filter((r) => r.projectId === fProject);
   if (fUser) rows = rows.filter((r) => r.submittedByUserId === fUser);
   if (bounds) rows = rows.filter((r) => r.date >= bounds.from && r.date <= bounds.to);
@@ -241,22 +192,27 @@ export default function DailyProgressReportPage() {
       </div>
 
       <div className="stats-grid" style={{ marginBottom: 20 }}>
-        <div className="stat-card">
+        {/* Each card jumps to wherever that number is actually broken down:
+            labour and per-project totals live in this page's own "Work
+            Progress" tab, pending drawings in its "Drawing Requests" tab —
+            overall stage progress isn't tracked on this page at all, so
+            that one goes to the Dashboard KPI it mirrors instead. */}
+        <div className="stat-card" style={{ cursor: "pointer" }} onClick={() => setTab("work")}>
           <div className="stat-label">Total Labour (All Time)</div>
           <div className="stat-val">{totalLabour}</div>
           <div className="stat-icon"><NavIcon name="team" size={15} /></div>
         </div>
-        <div className="stat-card ok">
+        <div className="stat-card ok" style={{ cursor: "pointer" }} onClick={() => setGlobalTab("dash")}>
           <div className="stat-label">Work Progress (Overall)</div>
           <div className="stat-val">{overallProgress}%</div>
           <div className="stat-icon"><NavIcon name="trend" size={15} /></div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card" style={{ cursor: "pointer" }} onClick={() => setTab("drawing")}>
           <div className="stat-label">Pending Drawing Requests</div>
           <div className="stat-val">{pendingDrawingRequests}</div>
           <div className="stat-icon"><NavIcon name="drawing" size={15} /></div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card" style={{ cursor: "pointer" }} onClick={() => setTab("work")}>
           <div className="stat-label">Active Projects (All Time)</div>
           <div className="stat-val">{activeProjects}</div>
           <div className="stat-icon"><NavIcon name="board" size={15} /></div>
@@ -407,7 +363,7 @@ export default function DailyProgressReportPage() {
         )}
       </div>
 
-      <SidePanel open={open} icon={<NavIcon name="dpr" size={17} />} title="New Daily Progress Report" desc="Fill in today's site details, then check off what work happened." onClose={() => setOpen(false)}>
+      <SidePanel wide open={open} icon={<NavIcon name="dpr" size={17} />} title="New Daily Progress Report" desc="Fill in today's site details, then check off what work happened." onClose={() => setOpen(false)}>
         <DprForm isPublic={false} onDone={() => setOpen(false)} />
       </SidePanel>
 

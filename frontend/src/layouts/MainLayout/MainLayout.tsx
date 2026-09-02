@@ -33,7 +33,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   }
 
   return (
-    <div className="app-shell">
+    <div className={"app-shell" + (sidebarOpen ? " sidebar-open" : "")}>
       <div className={"sidebar-overlay" + (sidebarOpen ? " open" : "")} onClick={() => setSidebarOpen(false)}></div>
       <Sidebar open={sidebarOpen} collapsed={collapsed} onNavigate={() => setSidebarOpen(false)} />
       <div className="main-area">

@@ -18,16 +18,16 @@ export default function DrawingRequestForm({
 }: {
   isPublic: boolean; onDone: (ticketNo: string) => void; editRecord?: DrawingRequest | null;
 }) {
-  const { data, currentProjectId, me, toast, apply } = useApp();
+  const { data, toast, apply } = useApp();
   const { createDrawingRequest } = useDrawingRequestActions();
   const projects = coll(data, "projects").filter((p) => p.active !== false);
 
-  const [projectId, setProjectId] = useState(editRecord?.projectId || currentProjectId || projects[0]?.id || "");
+  const [projectId, setProjectId] = useState(editRecord?.projectId || "");
   const [description, setDescription] = useState(editRecord?.description || "");
   const [drawingType, setDrawingType] = useState<DrawingType | "">(editRecord?.drawingType || "");
   const [source, setSource] = useState<DrawingSource | "">(editRecord?.source || "");
   const [requestedPriority, setRequestedPriority] = useState<DrawingPriority | "">(editRecord?.requestedPriority || "");
-  const [requesterName, setRequesterName] = useState(editRecord?.requesterName || (isPublic ? "" : me()?.name || ""));
+  const [requesterName, setRequesterName] = useState(editRecord?.requesterName || "");
   const [saving, setSaving] = useState(false);
 
   async function submit() {

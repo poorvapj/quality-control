@@ -1,21 +1,34 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { SEVERITIES } from "../services/config";
 import {
   coll, projectUnits, projectFloors, floorUnits, unitSummary, slowHandoffs, floorReleased,
-  myAssignments, mySnags, refLabel
+  myAssignments, mySnags, refLabel, prog, trackStages
 } from "../shared/rules";
+import { type DateRange, DATE_RANGES, isoWeekBounds, dateRangeBounds, tsInBounds } from "../shared/dateRange";
 import AssignRow from "../components/AssignRow";
 import SnagRow from "../components/SnagRow";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
-import type { Floor } from "../types";
+import CalendarRangePicker from "../components/CalendarRangePicker";
+import type { BoardData, Floor, TabKey } from "../types";
 
 const FLOOR_LIST_CAP = 40;
 const ALL_PROJECTS_VALUE = "__all__";
 
+/** The timestamp a unit/floor's final stage was marked done — its real
+ *  "handed over"/"cured" moment — or null if it isn't complete yet. */
+function completionAt(data: BoardData | null, projectId: string | null, track: "unit" | "floor", targetId: string): number | null {
+  const list = trackStages(data, projectId, track);
+  const last = list[list.length - 1];
+  if (!last) return null;
+  const p = prog(data, targetId, last.stage.id);
+  return p.status === "done" ? p.at ?? null : null;
+}
+
 export default function Dashboard() {
-  const { data, currentProjectId, setCurrentProjectId, currentUserId, me, openDrawer } = useApp();
+  const { data, currentProjectId, setCurrentProjectId, currentUserId, me, openDrawer, setActiveTab } = useApp();
+  const slowSectionRef = useRef<HTMLDivElement>(null);
   const allProjects = coll(data, "projects").filter((p) => p.active !== false);
   // Dashboard-only "All Projects" view, owned entirely by this page.
   // Deliberately NOT stored on currentProjectId — that value is shared by
@@ -23,6 +36,34 @@ export default function Dashboard() {
   // so it must always stay a real single project id for them regardless of
   // what this page is showing.
   const [viewAllProjects, setViewAllProjects] = useState(true);
+
+  // Date-range filter — same preset set/logic as Daily Progress Report's
+  // filter bar (frontend/src/shared/dateRange.ts), reused here so both
+  // pages behave identically.
+  const [fRange, setFRange] = useState<DateRange>("all");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const calendarWrapRef = useRef<HTMLDivElement>(null);
+  const nowForWeek = new Date();
+  const [weekYear, setWeekYear] = useState(nowForWeek.getFullYear());
+  const [weekNum, setWeekNum] = useState(1);
+
+  useEffect(() => {
+    if (!calendarOpen) return;
+    function onDocClick(e: MouseEvent) {
+      if (calendarWrapRef.current && !calendarWrapRef.current.contains(e.target as Node)) setCalendarOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [calendarOpen]);
+
+  const bounds = fRange === "custom"
+    ? (customFrom || customTo ? { from: customFrom || "0000-01-01", to: customTo || "9999-12-31" } : null)
+    : fRange === "weekNumber"
+    ? isoWeekBounds(weekYear, weekNum)
+    : dateRangeBounds(fRange);
+
   // "All Projects" combines real per-project results — each helper below is
   // still called once per real project (never with a null/empty projectId),
   // so a floor's own project always drives its own stage list. No shared
@@ -30,28 +71,48 @@ export default function Dashboard() {
   const projectIds = viewAllProjects ? allProjects.map((p) => p.id) : [currentProjectId];
 
   const units = projectIds.flatMap((pid) => projectUnits(data, pid));
-  const summaries = projectIds.flatMap((pid) => projectUnits(data, pid).map((u) => unitSummary(data, pid, u.id)));
-  const handed = summaries.filter((s) => s.complete).length;
-  const stagesTotal = summaries.reduce((a, s) => a + s.total, 0) || 1;
-  const stagesDone = summaries.reduce((a, s) => a + s.done, 0);
+  const unitEntries = projectIds.flatMap((pid) => projectUnits(data, pid).map((u) => ({ pid, u, s: unitSummary(data, pid, u.id) })));
+  const handed = unitEntries.filter((e) => e.s.complete && tsInBounds(completionAt(data, e.pid, "unit", e.u.id), bounds)).length;
+  const stagesTotal = unitEntries.reduce((a, e) => a + e.s.total, 0) || 1;
+  const stagesDone = unitEntries.reduce((a, e) => a + e.s.done, 0);
   const pct = Math.round((stagesDone / stagesTotal) * 100);
-  const openSnags = viewAllProjects
+  // How many not-yet-complete units have an open snag sitting on them right
+  // now — surfaced on the KPI card so a stalled % has a visible reason
+  // instead of looking like it's just not moving for no reason. The %
+  // itself stays a pure done/total count — closing a snag still requires
+  // the explicit "Mark complete" action on its gate stage, same as always.
+  const snagBlockedUnits = unitEntries.filter((e) => !e.s.complete && e.s.snags > 0).length;
+  const openSnags = (viewAllProjects
     ? coll(data, "snags").filter((s) => s.status !== "Closed")
-    : coll(data, "snags").filter((s) => s.status !== "Closed" && s.projectId === currentProjectId);
+    : coll(data, "snags").filter((s) => s.status !== "Closed" && s.projectId === currentProjectId)
+  ).filter((s) => tsInBounds(s.raisedAt, bounds));
   const critical = openSnags.filter((s) => s.severity === "Critical").length;
-  const slow = projectIds.flatMap((pid) => slowHandoffs(data, pid)).sort((a, b) => b.hrs - a.hrs);
+  const slow = projectIds.flatMap((pid) => slowHandoffs(data, pid))
+    .filter((s) => tsInBounds(prog(data, s.targetId, s.stage.id).rel, bounds))
+    .sort((a, b) => b.hrs - a.hrs);
   const floors: Floor[] = projectIds.flatMap((pid) => projectFloors(data, pid));
-  const castFloors = floors.filter((f) => floorReleased(data, f.projectId, f.id)).length;
+  const castFloors = floors.filter((f) => floorReleased(data, f.projectId, f.id) && tsInBounds(completionAt(data, f.projectId, "floor", f.id), bounds)).length;
 
+  // Each card navigates somewhere useful — Tower Board for unit/floor
+  // status, Snags for the open-snag register, and Slow Handoffs smooth-
+  // scrolls to that section further down this same page (there's no
+  // separate page for it) rather than navigating away.
   const stats = [
-    { label: "UNITS HANDED OVER", val: `${handed}/${units.length}`, ok: true, icon: "award", foot: pct + "% of all stages complete" },
-    { label: "OPEN SNAGS", val: openSnags.length, bad: openSnags.length > 0, icon: "bug", foot: critical + " critical" },
-    { label: "SLOW HANDOFFS", val: slow.length, warn: slow.length > 0, icon: "clock", foot: "Released past SLA, not acknowledged" },
-    { label: "FLOORS CURED", val: `${castFloors}/${floors.length}`, icon: "board", foot: "Bottom-up casting enforced" }
+    {
+      label: "UNITS HANDED OVER", val: `${handed}/${units.length}`, ok: true, icon: "award",
+      foot: pct + "% of all stages complete" + (snagBlockedUnits > 0 ? ` · ${snagBlockedUnits} unit${snagBlockedUnits === 1 ? "" : "s"} blocked by open snags` : ""),
+      onClick: () => setActiveTab("board" as TabKey)
+    },
+    { label: "OPEN SNAGS", val: openSnags.length, bad: openSnags.length > 0, icon: "bug", foot: critical + " critical", onClick: () => setActiveTab("snags" as TabKey) },
+    {
+      label: "SLOW HANDOFFS", val: slow.length, warn: slow.length > 0, icon: "clock", foot: "Released past SLA, not acknowledged",
+      onClick: slow.length > 0 ? () => slowSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }) : undefined
+    },
+    { label: "FLOORS CURED", val: `${castFloors}/${floors.length}`, icon: "board", foot: "Bottom-up casting enforced", onClick: () => setActiveTab("board" as TabKey) }
   ];
 
-  const asg = projectIds.flatMap((pid) => myAssignments(data, pid, currentUserId));
-  const sng = projectIds.flatMap((pid) => mySnags(data, pid, currentUserId));
+  const asg = projectIds.flatMap((pid) => myAssignments(data, pid, currentUserId)).filter((a) => tsInBounds(a.assignedAt, bounds));
+  const sng = projectIds.flatMap((pid) => mySnags(data, pid, currentUserId)).filter((s) => tsInBounds(s.raisedAt, bounds));
   const myOpen = asg.length + sng.length;
   const bySeverity = SEVERITIES.map((sev) => ({ sev, n: openSnags.filter((s) => s.severity === sev).length }));
 
@@ -62,6 +123,9 @@ export default function Dashboard() {
   // project per pass (each project's own floors already ordered highest
   // first via projectFloors' seq sort + our own reverse), so every project
   // gets fair representation instead of one project dominating the list.
+  // NOTE: this list itself is intentionally NOT date-filtered — a floor is a
+  // long-lived record, not a dated event, so there's no "raised on"/"cast
+  // on" moment on the record itself to filter by (unlike snags/assignments).
   const floorRows: Floor[] = (() => {
     if (!viewAllProjects) return floors.slice().reverse().slice(0, FLOOR_LIST_CAP);
     const byProject = new Map<string, Floor[]>();
@@ -98,24 +162,70 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="field" style={{ maxWidth: 220, marginBottom: 24 }}>
-        <label>Active Project</label>
-        <SearchDropdown
-          value={viewAllProjects ? ALL_PROJECTS_VALUE : (currentProjectId ?? "")}
-          onChange={(v) => {
-            if (v === ALL_PROJECTS_VALUE) { setViewAllProjects(true); return; }
-            setViewAllProjects(false);
-            setCurrentProjectId(v);
-          }}
-          options={[{ value: ALL_PROJECTS_VALUE, label: "All Projects" }, ...allProjects.map((p) => ({ value: p.id, label: p.name }))]}
-          neutralActive
-        />
+      <div className="filter-bar" style={{ marginBottom: 24 }}>
+        <div className="field" style={{ maxWidth: 220 }}>
+          <label>Active Project</label>
+          <SearchDropdown
+            value={viewAllProjects ? ALL_PROJECTS_VALUE : (currentProjectId ?? "")}
+            onChange={(v) => {
+              if (v === ALL_PROJECTS_VALUE) { setViewAllProjects(true); return; }
+              setViewAllProjects(false);
+              setCurrentProjectId(v);
+            }}
+            options={[{ value: ALL_PROJECTS_VALUE, label: "All Projects" }, ...allProjects.map((p) => ({ value: p.id, label: p.name }))]}
+            neutralActive
+          />
+        </div>
+        <div className="field" style={{ minWidth: 150 }}>
+          <label>Date Range</label>
+          <SearchDropdown
+            icon="calendar"
+            searchable={false}
+            scrollable={false}
+            value={fRange}
+            onChange={(v) => setFRange(v as DateRange)}
+            options={DATE_RANGES.map((r) => ({ value: r.key, label: r.label }))}
+          />
+        </div>
+        {fRange === "custom" && (
+          <div className="field" style={{ minWidth: 190, position: "relative" }} ref={calendarWrapRef}>
+            <label>Range</label>
+            <button type="button" className="select" style={{ textAlign: "left" }} onClick={() => setCalendarOpen((o) => !o)}>
+              {customFrom && customTo ? customFrom + "  →  " + customTo : "Pick dates"}
+            </button>
+            {calendarOpen && (
+              <CalendarRangePicker
+                from={customFrom}
+                to={customTo}
+                onCancel={() => setCalendarOpen(false)}
+                onApply={(from, to) => { setCustomFrom(from); setCustomTo(to); setCalendarOpen(false); }}
+              />
+            )}
+          </div>
+        )}
+        {fRange === "weekNumber" && (
+          <>
+            <div className="field" style={{ minWidth: 90 }}>
+              <label>Week</label>
+              <input className="input" type="number" min={1} max={53} value={weekNum} onChange={(e) => setWeekNum(Math.min(53, Math.max(1, Number(e.target.value) || 1)))} />
+            </div>
+            <div className="field" style={{ minWidth: 100 }}>
+              <label>Year</label>
+              <input className="input" type="number" value={weekYear} onChange={(e) => setWeekYear(Number(e.target.value) || nowForWeek.getFullYear())} />
+            </div>
+          </>
+        )}
       </div>
 
       <div className="micro-label" style={{ marginBottom: 10 }}>KPI OVERVIEW</div>
       <div className="stats-grid" style={{ marginBottom: 24 }}>
         {stats.map((s) => (
-          <div key={s.label} className={"stat-card" + (s.bad ? " bad" : s.warn ? " warn" : s.ok ? " ok" : "")}>
+          <div
+            key={s.label}
+            className={"stat-card" + (s.bad ? " bad" : s.warn ? " warn" : s.ok ? " ok" : "")}
+            style={s.onClick ? { cursor: "pointer" } : undefined}
+            onClick={s.onClick}
+          >
             <div className="micro-label">{s.label}</div>
             <div className="stat-val">{s.val}</div>
             <div className="stat-foot">{s.foot}</div>
@@ -135,7 +245,7 @@ export default function Dashboard() {
       </div>
 
       {slow.length > 0 && (
-        <>
+        <div ref={slowSectionRef}>
           <div className="section-header">
             <div className="section-title"><span className="icon-mono"><NavIcon name="clock" size={14} /></span> SLOW HANDOFFS</div>
             <div className="section-sub">Released to a trade but never acknowledged — these are the huddle agenda</div>
@@ -154,7 +264,7 @@ export default function Dashboard() {
               );
             })}
           </div>
-        </>
+        </div>
       )}
 
       <div className="section-header">

@@ -34,6 +34,11 @@ export const SNAG_STATUS = ["Open", "In Progress", "Closed"] as const;
 export const ASSIGN_STATUS = ["Assigned", "Accepted", "Done"] as const;
 export const HOUR = 3600000;
 
+/** An open snag overdue by this many days shows up in the Snags page's
+ *  "Escalations" banner — computed on read from `dueAt` (no cron, no
+ *  persisted escalation state), so it always reflects the live picture. */
+export const ESCALATION_DAYS = 3;
+
 export const MASTERS: Record<MasterKey, MasterDef> = {
   projects: {
     label: "Project", icon: "🏗️", prefix: "PRJ",

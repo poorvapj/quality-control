@@ -66,6 +66,29 @@
   position: relative;
 }
 
+/* On a short/minimized viewport the nav list can overflow (especially
+   collapsed to the icon rail) — always show a visible scrollbar there,
+   wider than the app's default thin one, instead of a barely-visible or
+   auto-hiding bar the user might not notice they can scroll. */
+.sidebar-nav-scroll {
+  scrollbar-width: auto;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.sidebar-nav-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+
+.sidebar-nav-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 99px;
+  border: 2px solid var(--bg-card);
+}
+
+.sidebar-nav-scroll::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
 html.dark .sidebar-inner {
   background: var(--bg-card);
   border-color: var(--border);
@@ -74,10 +97,10 @@ html.dark .sidebar-inner {
 .nx-nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
-  padding: 8px 12px;
-  margin: 2px 10px;
+  padding: 6px 12px;
+  margin: 3px 10px;
   border-radius: 10px;
   font-size: 14px;
   font-weight: 500;
@@ -112,14 +135,16 @@ html.dark .sidebar-inner {
 }
 
 .nx-nav-icon {
-  width: 18px;
-  height: 18px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
   flex-shrink: 0;
   color: #98a2b3;
+  background: var(--bg-card-hover);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: color .15s ease;
+  transition: color .15s ease, background .15s ease;
 }
 
 .nx-nav-item:hover .nx-nav-icon {
@@ -128,4 +153,5 @@ html.dark .sidebar-inner {
 
 .nx-nav-item--active .nx-nav-icon {
   color: var(--theme-primary);
+  background: color-mix(in srgb, var(--theme-primary) 12%, transparent);
 }

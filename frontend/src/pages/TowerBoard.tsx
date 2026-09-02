@@ -1,12 +1,19 @@
 import React from "react";
 import { useApp } from "../context/AppContext";
-import { projectFloors, floorUnits, trackStages, prog, floorReleased, floorBelow, unitSummary } from "../shared/rules";
+import { coll, projectFloors, floorUnits, trackStages, prog, floorReleased, floorBelow, unitSummary } from "../shared/rules";
 import NavIcon from "../components/NavIcon";
 
 export default function TowerBoard() {
   const { data, currentProjectId, openDrawer } = useApp();
   const floors = projectFloors(data, currentProjectId);
   const fstages = trackStages(data, currentProjectId, "floor");
+  // Resolved (closed) snags per unit — a lighter, corner-dot indicator since
+  // unlike an open snag it isn't an active alert, just history worth seeing.
+  const closedSnagsByUnit = new Map<string, number>();
+  for (const sn of coll(data, "snags")) {
+    if (sn.status !== "Closed" || !sn.unitId) continue;
+    closedSnagsByUnit.set(sn.unitId, (closedSnagsByUnit.get(sn.unitId) || 0) + 1);
+  }
 
   return (
     <div>
@@ -37,7 +44,11 @@ export default function TowerBoard() {
             <div className="floor-row" key={f.id}>
               <div
                 className="floor-label"
-                style={ffail ? { borderColor: "var(--color-fail)", color: "var(--color-fail)" } : undefined}
+                style={
+                  ffail ? { borderColor: "var(--color-fail)", color: "var(--color-fail)" }
+                  : cured ? { background: "var(--color-pass)", borderColor: "var(--color-pass)", color: "#fff" }
+                  : undefined
+                }
                 onClick={() => openDrawer({ kind: "floor", id: f.id })}
               >
                 {f.code}<br /><span style={{ fontSize: 8, opacity: 0.75 }}>{label}</span>
@@ -50,17 +61,24 @@ export default function TowerBoard() {
                   else if (s.fail) bg = "var(--color-fail)";
                   else if (s.complete) bg = "var(--color-pass)";
                   else if (s.done > 0) bg = "var(--color-mep)";
-                  const tip = `${u.name} · ${u.type || ""} · ${s.done}/${s.total} stages${s.snags ? " · " + s.snags + " open snag(s)" : ""}`;
+                  // An open snag is a real alert — flag the whole tile, not
+                  // just a small dot in the corner, so it's obvious at a
+                  // glance even on a locked/not-started (gray) unit.
+                  const hasSnag = s.snags > 0;
+                  const closedSnags = closedSnagsByUnit.get(u.id) || 0;
+                  const tip = `${u.name} · ${u.type || ""} · ${s.done}/${s.total} stages`
+                    + (hasSnag ? " · " + s.snags + " open snag(s)" : "")
+                    + (closedSnags ? " · " + closedSnags + " resolved snag(s)" : "");
+                  const hasResolvedOnly = !hasSnag && closedSnags > 0;
                   return (
                     <div
                       key={u.id}
-                      className={"cell" + (s.locked ? " lockedcell" : "") + (s.fail ? " pulse" : "")}
+                      className={"cell" + (s.locked ? " lockedcell" : "") + (s.fail ? " pulse" : "") + (hasSnag ? " has-snag" : "") + (hasResolvedOnly ? " has-resolved-snag" : "")}
                       style={{ background: bg }}
                       title={tip}
                       onClick={() => { if (!s.locked) openDrawer({ kind: "unit", id: u.id }); }}
                     >
                       {u.seq != null ? u.seq : u.code}
-                      {s.snags > 0 && <span className="snag-dot"></span>}
                     </div>
                   );
                 })}
@@ -74,7 +92,8 @@ export default function TowerBoard() {
           <div className="legend-item"><div className="legend-box" style={{ background: "var(--color-fail)" }}></div> QC fail / rework</div>
           <div className="legend-item"><div className="legend-box" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}></div> Not started</div>
           <div className="legend-item"><div className="legend-box" style={{ background: "var(--color-locked)" }}></div> Structure not released</div>
-          <div className="legend-item"><span className="snag-dot" style={{ position: "static", display: "inline-block" }}></span> Open snag</div>
+          <div className="legend-item"><div className="legend-box" style={{ background: "var(--theme-primary)" }}></div> Open snag</div>
+          <div className="legend-item"><div className="legend-box" style={{ background: "#475569" }}></div> Resolved snag</div>
         </div>
       </div>
     </div>

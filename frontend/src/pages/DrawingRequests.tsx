@@ -17,8 +17,19 @@ const STAGE_LABEL: Record<string, string> = {
   returned: "Returned"
 };
 
+// Tailwind's default palette values, used verbatim so these badges match the
+// reference app's ui/Badge.tsx COLOR_CLASSES exactly (bg-{color}-50 / text-{color}-600).
+const TONE = {
+  gray: { bg: "#F3F4F6", text: "#4B5563" },
+  amber: { bg: "#FFFBEB", text: "#D97706" },
+  green: { bg: "#ECFDF5", text: "#059669" },
+  red: { bg: "#FEF2F2", text: "#DC2626" },
+  blue: { bg: "#EFF6FF", text: "#2563EB" }
+};
+
 export default function DrawingRequestsPage() {
-  const { data, myRole, apply, toast } = useApp();
+  const { data, myRole, currentUserId, apply, toast } = useApp();
+  const isAdmin = currentUserId === "U-ADMIN";
   const editable = myRole() === "DRI";
   const [createOpen, setCreateOpen] = useState(false);
   const [detail, setDetail] = useState<DrawingRequest | null>(null);
@@ -50,6 +61,10 @@ export default function DrawingRequestsPage() {
   }
 
   let rows = coll(data, "drawingRequests").slice();
+  // DRI isn't a reviewer here (see shared/permissions.ts — only Admin +
+  // explicitly-granted reviewers act on stages), so the board itself should
+  // only surface the tickets they personally raised, not everyone's.
+  if (!isAdmin && myRole() === "DRI") rows = rows.filter((r) => r.submittedByUserId === currentUserId);
   if (fStatus) rows = rows.filter((r) => r.reviewStatus === fStatus);
   if (fTracking) rows = rows.filter((r) => r.trackingStatus === fTracking);
   if (fPriority) rows = rows.filter((r) => r.priority === fPriority);
@@ -76,177 +91,227 @@ export default function DrawingRequestsPage() {
     toast("Deleted " + r.ticketNo);
   }
 
-  const inputBase: React.CSSProperties = {
-    height: 36, boxSizing: "border-box", fontSize: 13, border: "1px solid #E5E7EB", borderRadius: 8,
-    color: "#374151", background: "#fff", outline: "none"
+  // Matches ui/Filters.tsx's SelectFilter/SearchFilter: h-10 (40px), text-sm (14px),
+  // rounded-lg (8px), border-gray-200 (#E5E7EB).
+  const filterInput: React.CSSProperties = {
+    height: 40, boxSizing: "border-box", fontSize: 14, border: "1px solid #E5E7EB", borderRadius: 8,
+    color: "#6B7280", background: "#fff", outline: "none"
   };
-  const selectStyle: React.CSSProperties = { ...inputBase, padding: "8px 10px", fontWeight: 500, cursor: "pointer" };
+  const selectStyle: React.CSSProperties = { ...filterInput, padding: "0 12px", cursor: "pointer" };
+  // Matches ui/DatePicker.tsx's DateRangePicker: h-9 (36px), text-[13px], pl-8/pr-2.5.
+  const dateInput: React.CSSProperties = {
+    height: 36, boxSizing: "border-box", fontSize: 13, border: "1px solid #E5E7EB", borderRadius: 8,
+    color: "#1A1A2E", background: "#fff", outline: "none"
+  };
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 20 }}>
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 10, background: "#FFF1E0", color: "#F97316", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <NavIcon name="drawing" size={18} />
+      {/* Matches ui/PageHeader.tsx exactly: w-10 h-10 (40px) rounded-xl (12px)
+          bg-primary/10, icon w-5 h-5 (20px) text-primary; title text-xl (20px)
+          font-bold #1A1A2E; subtitle text-sm (14px) text-gray-500; gap-3 (12px);
+          mb-6 (24px). */}
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 24 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+          <div style={{ width: 40, height: 40, borderRadius: 12, background: "rgba(255,122,0,0.1)", color: "#FF7A00", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <NavIcon name="drawing" size={20} />
           </div>
-          <div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: "#111827", lineHeight: 1.3, marginBottom: 2 }}>Drawing Requests</div>
-            <div style={{ fontSize: 13, fontWeight: 400, color: "#6B7280", lineHeight: 1.4 }}>Manage drawing requests — {rows.length} total</div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color: "#1A1A2E", lineHeight: 1.3 }}>Drawing Requests</div>
+            <div style={{ fontSize: 14, fontWeight: 400, color: "#6B7280", lineHeight: 1.4 }}>Manage drawing requests — {rows.length} total</div>
           </div>
         </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          {/* Matches ui/Btn.tsx's outline variant: border-gray-200, bg-white, text-gray-700, h-10, px-6, text-[13px], rounded-md (6px), font-bold. */}
+          <button
+            onClick={() => setCreateOpen(true)}
+            style={{
+              height: 40, padding: "0 24px", border: "1px solid #E5E7EB", borderRadius: 6, background: "#fff",
+              fontSize: 13, fontWeight: 700, color: "#374151", display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer"
+            }}
+          >
+            <NavIcon name="drawing" size={16} /> Drawing Request
+          </button>
+        </div>
+      </div>
+
+      {/* Matches ui/Filters.tsx's FilterRow: flex flex-wrap items-end gap-3 (12px) mb-4 (16px). */}
+      <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", rowGap: 12, columnGap: 12, marginBottom: 16 }}>
+        <div style={{ position: "relative", flex: 1, minWidth: 180 }}>
+          <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", display: "flex" }}>
+            <NavIcon name="search" size={16} />
+          </span>
+          <input
+            style={{ ...filterInput, width: "100%", padding: "0 12px 0 36px" }}
+            placeholder="Search project…"
+            value={dSearch}
+            onChange={(e) => setDSearch(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") runSearch(); }}
+          />
+        </div>
+        <span style={{ position: "relative", flexShrink: 0 }}>
+          <select style={{ ...selectStyle, width: 110, appearance: "none", paddingRight: 26 }} value={dType} onChange={(e) => setDType(e.target.value)}>
+            <option value="">All Types</option>
+            {["Architectural", "Structural", "MEP", "Civil", "Interior", "Landscape", "Shop Drawing", "As-Built", "Other"].map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none", display: "flex" }}><NavIcon name="chevronDown" size={14} /></span>
+        </span>
+        <span style={{ position: "relative", flexShrink: 0 }}>
+          <select style={{ ...selectStyle, width: 120, appearance: "none", paddingRight: 26 }} value={dPriority} onChange={(e) => setDPriority(e.target.value)}>
+            <option value="">All Priorities</option>
+            <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="urgent">Urgent</option>
+          </select>
+          <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none", display: "flex" }}><NavIcon name="chevronDown" size={14} /></span>
+        </span>
+        <span style={{ position: "relative", flexShrink: 0 }}>
+          <select style={{ ...selectStyle, width: 115, appearance: "none", paddingRight: 26 }} value={dStatus} onChange={(e) => setDStatus(e.target.value)}>
+            <option value="">All Statuses</option>
+            {Object.entries(STAGE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+          <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none", display: "flex" }}><NavIcon name="chevronDown" size={14} /></span>
+        </span>
+        <span style={{ position: "relative", flexShrink: 0 }}>
+          <select style={{ ...selectStyle, width: 168, appearance: "none", paddingRight: 26 }} value={dTracking} onChange={(e) => setDTracking(e.target.value)}>
+            <option value="">All Review Stages</option>
+            <option value="pending">Pending</option><option value="committed">Committed</option><option value="completed">Completed</option><option value="delayed">Delayed</option>
+          </select>
+          <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none", display: "flex" }}><NavIcon name="chevronDown" size={14} /></span>
+        </span>
+        <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+          <span style={{ position: "relative" }}>
+            <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", display: "flex", pointerEvents: "none" }}>
+              <NavIcon name="calendar" size={16} />
+            </span>
+            {!dFrom && <span style={{ position: "absolute", left: 32, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", fontSize: 13, pointerEvents: "none" }}>From</span>}
+            <input
+              className="date-compact"
+              type="date"
+              style={{ ...dateInput, width: 116, padding: "0 10px 0 32px", color: dFrom ? "#1A1A2E" : "transparent" }}
+              value={dFrom}
+              onChange={(e) => setDFrom(e.target.value)}
+            />
+          </span>
+          <span style={{ color: "#9CA3AF", fontSize: 14, margin: "0 8px" }}>to</span>
+          <span style={{ position: "relative" }}>
+            <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", display: "flex", pointerEvents: "none" }}>
+              <NavIcon name="calendar" size={16} />
+            </span>
+            {!dTo && <span style={{ position: "absolute", left: 32, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", fontSize: 13, pointerEvents: "none" }}>To</span>}
+            <input
+              className="date-compact"
+              type="date"
+              style={{ ...dateInput, width: 116, padding: "0 10px 0 32px", color: dTo ? "#1A1A2E" : "transparent" }}
+              value={dTo}
+              onChange={(e) => setDTo(e.target.value)}
+            />
+          </span>
+        </div>
+        {/* Matches ui/Btn.tsx's "purple" color: bg #8B5CF6, hover #7C3AED, text white, h-10, px-6, text-[13px], rounded-md (6px), font-bold. */}
         <button
-          onClick={() => setCreateOpen(true)}
+          onClick={runSearch}
           style={{
-            height: 36, padding: "8px 14px", border: "1px solid #E5E7EB", borderRadius: 8, background: "#fff",
-            fontSize: 13, fontWeight: 600, color: "#111827", display: "flex", alignItems: "center", gap: 6, cursor: "pointer", flexShrink: 0
+            height: 40, padding: "0 24px", background: "#8B5CF6", borderRadius: 6, border: "none",
+            fontSize: 13, fontWeight: 700, color: "#fff", display: "inline-flex", alignItems: "center", gap: 6,
+            cursor: "pointer", flexShrink: 0
           }}
         >
-          <NavIcon name="drawing" size={14} /> Drawing Request
+          <NavIcon name="eye" size={16} /> Search
         </button>
       </div>
 
-      <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, overflow: "hidden" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 16, flexWrap: "nowrap", overflowX: "auto" }}>
-          <div style={{ position: "relative", flex: 1, minWidth: 180 }}>
-            <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", display: "flex" }}>
-              <NavIcon name="search" size={14} />
-            </span>
-            <input
-              style={{ ...inputBase, width: "100%", padding: "8px 10px 8px 32px" }}
-              placeholder="Search project…"
-              value={dSearch}
-              onChange={(e) => setDSearch(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") runSearch(); }}
-            />
-          </div>
-          <span style={{ position: "relative", flexShrink: 0 }}>
-            <select style={{ ...selectStyle, width: 110, appearance: "none", paddingRight: 26 }} value={dType} onChange={(e) => setDType(e.target.value)}>
-              <option value="">All Types</option>
-              {["Architectural", "Structural", "MEP", "Civil", "Interior", "Landscape", "Shop Drawing", "As-Built", "Other"].map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-            <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none", display: "flex" }}><NavIcon name="chevronDown" size={14} /></span>
-          </span>
-          <span style={{ position: "relative", flexShrink: 0 }}>
-            <select style={{ ...selectStyle, width: 120, appearance: "none", paddingRight: 26 }} value={dPriority} onChange={(e) => setDPriority(e.target.value)}>
-              <option value="">All Priorities</option>
-              <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="urgent">Urgent</option>
-            </select>
-            <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none", display: "flex" }}><NavIcon name="chevronDown" size={14} /></span>
-          </span>
-          <span style={{ position: "relative", flexShrink: 0 }}>
-            <select style={{ ...selectStyle, width: 115, appearance: "none", paddingRight: 26 }} value={dStatus} onChange={(e) => setDStatus(e.target.value)}>
-              <option value="">All Statuses</option>
-              {Object.entries(STAGE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-            </select>
-            <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none", display: "flex" }}><NavIcon name="chevronDown" size={14} /></span>
-          </span>
-          <span style={{ position: "relative", flexShrink: 0 }}>
-            <select style={{ ...selectStyle, width: 140, appearance: "none", paddingRight: 26 }} value={dTracking} onChange={(e) => setDTracking(e.target.value)}>
-              <option value="">All Review Stages</option>
-              <option value="pending">Pending</option><option value="committed">Committed</option><option value="completed">Completed</option><option value="delayed">Delayed</option>
-            </select>
-            <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none", display: "flex" }}><NavIcon name="chevronDown" size={14} /></span>
-          </span>
-          <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
-            <span style={{ position: "relative" }}>
-              <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", display: "flex", pointerEvents: "none" }}>
-                <NavIcon name="calendar" size={13} />
-              </span>
-              {!dFrom && <span style={{ position: "absolute", left: 27, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", fontSize: 13, pointerEvents: "none" }}>From</span>}
-              <input
-                className="date-compact"
-                type="date"
-                style={{ ...inputBase, width: 110, padding: "8px 10px 8px 28px", color: dFrom ? "#111827" : "transparent" }}
-                value={dFrom}
-                onChange={(e) => setDFrom(e.target.value)}
-              />
-            </span>
-            <span style={{ color: "#9CA3AF", fontSize: 13, margin: "0 8px" }}>to</span>
-            <span style={{ position: "relative" }}>
-              <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", display: "flex", pointerEvents: "none" }}>
-                <NavIcon name="calendar" size={13} />
-              </span>
-              {!dTo && <span style={{ position: "absolute", left: 27, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", fontSize: 13, pointerEvents: "none" }}>To</span>}
-              <input
-                className="date-compact"
-                type="date"
-                style={{ ...inputBase, width: 110, padding: "8px 10px 8px 28px", color: dTo ? "#111827" : "transparent" }}
-                value={dTo}
-                onChange={(e) => setDTo(e.target.value)}
-              />
-            </span>
-          </div>
-          <button
-            onClick={runSearch}
-            style={{
-              height: 36, padding: "8px 16px", background: "#6366F1", borderRadius: 8, border: "none",
-              fontSize: 13, fontWeight: 600, color: "#fff", display: "flex", alignItems: "center", gap: 6,
-              cursor: "pointer", flexShrink: 0, minWidth: 90, justifyContent: "center"
-            }}
-          >
-            <NavIcon name="search" size={14} /> Search
-          </button>
-        </div>
-
-        <div className="table-scroll">
-          {rows.length === 0 ? (
-            <div className="empty">No drawing requests yet.</div>
-          ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 620 }}>
-              <thead>
-                <tr>
-                  {["Ticket No", "Project", "Description", "Type", "Source", "Requested by", "Request date", "Review", "Priority", "Status", "Plan verified", "Proj. ack.", "Remarks", "Action"].map((h) => (
-                    <th key={h} style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "#6B7280", padding: "12px 16px", borderBottom: "1px solid #E5E7EB", background: "transparent", whiteSpace: "nowrap", textAlign: "left" }}>
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => {
-                  const priorityVal = r.priority || r.requestedPriority;
-                  const priorityColor = priorityVal === "urgent" || priorityVal === "high" ? "#DC2626" : priorityVal === "medium" ? "#D97706" : "#6B7280";
-                  const trackingVal = r.trackingStatus || "pending";
-                  const trackingColor = trackingVal === "completed" ? "#16A34A" : trackingVal === "delayed" ? "#DC2626" : trackingVal === "committed" ? "#2563EB" : "#EA8C00";
-                  const td: React.CSSProperties = { padding: "16px", borderBottom: "1px solid #F3F4F6", fontSize: 13, fontWeight: 400, color: "#111827", verticalAlign: "middle" };
-                  const ellipsis: React.CSSProperties = { ...td, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 160 };
-                  return (
-                    <tr key={r.id}>
-                      <td style={td}><strong style={{ fontSize: 13, fontWeight: 600, color: "#6366F1" }}>{r.ticketNo}</strong></td>
-                      <td style={ellipsis} title={r.projectName}>{r.projectName}</td>
-                      <td style={ellipsis} title={r.description}>{r.description}</td>
-                      <td style={td}>{r.drawingType}</td>
-                      <td style={td}>{r.source || "—"}</td>
-                      <td style={td}>{r.requesterName}</td>
-                      <td style={td}>{r.createdAt ? fmtDate(r.createdAt) : "—"}</td>
-                      <td style={td}>
-                        <span style={{ padding: "4px 10px", borderRadius: 6, background: "#FFF3D6", fontSize: 11, fontWeight: 700, color: "#C2650A", whiteSpace: "nowrap" }}>
-                          {STAGE_LABEL[r.reviewStatus]}
-                        </span>
-                      </td>
-                      <td style={td}>{priorityVal ? <strong style={{ color: priorityColor, textTransform: "uppercase", fontSize: 12, fontWeight: 700 }}>{priorityVal}</strong> : "—"}</td>
-                      <td style={td}><strong style={{ color: trackingColor, textTransform: "uppercase", fontSize: 12, fontWeight: 700 }}>{trackingVal}</strong></td>
-                      <td style={td}>{r.planningVerified ? "Yes" : "No"}</td>
-                      <td style={td}>{r.projectAcknowledged ? "Yes" : "No"}</td>
-                      <td style={td}>{r.remarks || "—"}</td>
+      {/* Matches ui/Table.tsx exactly: rounded-lg (8px) border-gray-200 wrapper,
+          text-sm (14px) table, bg-gray-50 thead, px-4 py-3 (16/12) cells,
+          text-[11px] font-bold uppercase tracking-wider text-gray-500 headers,
+          divide-y divide-gray-100 rows, hover:bg-gray-50. */}
+      <div style={{ width: "100%", overflowX: "auto", borderRadius: 8, border: "1px solid #E5E7EB" }}>
+        {rows.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "56px 0", color: "#9CA3AF", fontSize: 14 }}>No drawing requests match these filters</div>
+        ) : (
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, minWidth: 620 }}>
+            <thead style={{ background: "#F9FAFB" }}>
+              <tr>
+                {["Ticket No", "Project", "Description", "Type", "Source", "Requested by", "Request date", "Review", "Priority", "Status", "Plan verified", "Proj. ack.", "Remarks", "Action"].map((h) => (
+                  <th key={h} style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "#6B7280", padding: "12px 16px", whiteSpace: "nowrap", textAlign: "left" }}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => {
+                const priorityVal = r.priority || r.requestedPriority;
+                const priorityTone = priorityVal === "urgent" || priorityVal === "high" ? TONE.red : priorityVal === "medium" ? TONE.amber : TONE.gray;
+                const trackingVal = r.trackingStatus || "pending";
+                const trackingTone = trackingVal === "completed" ? TONE.green : trackingVal === "delayed" ? TONE.red : trackingVal === "committed" ? TONE.blue : TONE.amber;
+                const reviewTone = r.reviewStatus === "approved" ? TONE.green : r.reviewStatus === "returned" ? TONE.red : TONE.amber;
+                // Matches ui/Table.tsx's Td: px-4 py-3 (16/12) align-middle.
+                const td: React.CSSProperties = { padding: "12px 16px", borderTop: i === 0 ? "none" : "1px solid #F3F4F6", verticalAlign: "middle", color: "#1A1A2E" };
+                const ellipsis = (max: number): React.CSSProperties => ({ ...td, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: max });
+                // Matches ui/Badge.tsx's `small` variant: px-1.5 py-0.5 (6/2), text-[10px], rounded-full, font-bold uppercase tracking-wide.
+                const badge = (tone: { bg: string; text: string }): React.CSSProperties => ({
+                  display: "inline-flex", alignItems: "center", padding: "2px 6px", borderRadius: 999,
+                  fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.025em",
+                  background: tone.bg, color: tone.text, whiteSpace: "nowrap"
+                });
+                // Status is shown as plain colored text rather than a pill, matching the reference table.
+                const statusText: React.CSSProperties = {
+                  fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.025em",
+                  color: trackingTone.text
+                };
+                return (
+                  <tr
+                    key={r.id}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = "#F9FAFB"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                    style={{ transition: "background-color .15s ease" }}
+                  >
+                    {/* Matches "font-mono font-bold text-purple-600" on the ticket number. */}
+                    <td style={td}><strong style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontWeight: 700, color: "#9333EA" }}>{r.ticketNo}</strong></td>
+                    <td style={ellipsis(160)} title={r.projectName}><strong style={{ fontWeight: 600, color: "#1A1A2E" }}>{r.projectName}</strong></td>
+                    <td style={ellipsis(180)} title={r.description}>{r.description}</td>
+                    <td style={td}>{r.drawingType}</td>
+                    <td style={td}>{r.source || <span style={{ color: "#D1D5DB" }}>—</span>}</td>
+                    <td style={td}>{r.requesterName}</td>
+                    <td style={td}>{r.createdAt ? fmtDate(r.createdAt) : "—"}</td>
+                    <td style={td}><span style={{ ...badge(reviewTone), whiteSpace: "normal", textAlign: "center", maxWidth: 100 }}>{STAGE_LABEL[r.reviewStatus]}</span></td>
+                    <td style={td}>{priorityVal ? <span style={badge(priorityTone)}>{priorityVal}</span> : <span style={{ color: "#D1D5DB" }}>—</span>}</td>
+                    <td style={td}><span style={statusText}>{trackingVal}</span></td>
+                    <td style={td}><span style={{ color: r.planningVerified ? "#059669" : "#9CA3AF", fontWeight: r.planningVerified ? 600 : 400 }}>{r.planningVerified ? "Yes" : "No"}</span></td>
+                    <td style={td}><span style={{ color: r.projectAcknowledged ? "#059669" : "#9CA3AF", fontWeight: r.projectAcknowledged ? 600 : 400 }}>{r.projectAcknowledged ? "Yes" : "No"}</span></td>
+                    <td style={ellipsis(140)} title={r.remarks}>{r.remarks || <span style={{ color: "#D1D5DB" }}>—</span>}</td>
                     <td style={td}>
-                      <div className="row-actions">
-                        <button className="btn btn-secondary btn-sm" title="View" onClick={() => setDetail(r)}><NavIcon name="eye" size={13} /></button>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        {/* Matches ui/Btn.tsx's `small outline`: h-8 (32px) px-3 (12px) text-[11px] rounded-md (6px) border-gray-200 bg-white text-gray-700. */}
+                        <button
+                          title="View" onClick={() => setDetail(r)}
+                          style={{ height: 32, padding: "0 12px", border: "1px solid #E5E7EB", borderRadius: 6, background: "#fff", color: "#374151", display: "inline-flex", alignItems: "center", cursor: "pointer" }}
+                        >
+                          <NavIcon name="eye" size={14} />
+                        </button>
                         {editable && (
                           <>
-                            <button className="btn btn-secondary btn-sm" title="Edit" onClick={() => setEditing(r)}><NavIcon name="edit" size={13} /></button>
-                            <button className="btn btn-danger btn-sm solid" title="Delete" onClick={() => deleteRequest(r)}><NavIcon name="trash" size={13} /></button>
+                            <button
+                              title="Edit" onClick={() => setEditing(r)}
+                              style={{ height: 32, padding: "0 12px", border: "1px solid #E5E7EB", borderRadius: 6, background: "#fff", color: "#374151", display: "inline-flex", alignItems: "center", cursor: "pointer" }}
+                            >
+                              <NavIcon name="edit" size={14} />
+                            </button>
+                            {/* Matches ui/Btn.tsx's `small color="red"`: bg #EF4444, hover #DC2626, text white. */}
+                            <button
+                              title="Delete" onClick={() => deleteRequest(r)}
+                              style={{ height: 32, padding: "0 12px", border: "none", borderRadius: 6, background: "#EF4444", color: "#fff", display: "inline-flex", alignItems: "center", cursor: "pointer" }}
+                            >
+                              <NavIcon name="trash" size={14} />
+                            </button>
                           </>
                         )}
                       </div>
                     </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
 
       <SidePanel open={createOpen} icon={<NavIcon name="drawing" size={17} />} title="Request a Drawing" desc="Ask Planning/Design for a drawing you need on site" onClose={() => setCreateOpen(false)}>

@@ -1,6 +1,6 @@
 import { useApp } from "../context/AppContext";
 import { API_BASE, HOUR } from "../services/config";
-import type { Op, Track, EventLog } from "../types";
+import type { Op, Track, EventLog, ProgressPatch } from "../types";
 import { pkey, prog, trackStages, byId, coll, refLabel } from "../shared/rules";
 import { nextId } from "../shared/helpers";
 
@@ -12,13 +12,25 @@ export function useActions() {
     return { op: "event", ev };
   }
 
+  // Every status-changing progress write goes through here so `history` keeps
+  // growing across rework cycles instead of getting silently overwritten —
+  // `rel`/`ack`/`start`/`at` on the patch itself only ever hold the latest
+  // cycle's timestamps (see ProgressPatch.history in types/index.ts).
+  function progressOp(id: string, stageId: string, patch: Partial<ProgressPatch>): Op {
+    if (!patch.status) return { op: "progress", key: pkey(id, stageId), patch };
+    const existing = prog(data, id, stageId);
+    const ts = patch.rel ?? patch.ack ?? patch.start ?? patch.at ?? Date.now();
+    const history = [...(existing.history || []), { status: patch.status, ts, by: patch.by }];
+    return { op: "progress", key: pkey(id, stageId), patch: { ...patch, history } };
+  }
+
   function reopenDrawer() {
     if (drawer) openDrawer(drawer);
   }
 
   async function ackStage(kind: Track, id: string, stageId: string) {
     await apply([
-      { op: "progress", key: pkey(id, stageId), patch: { status: "ack", ack: Date.now(), by: currentUserId || "" } },
+      progressOp(id, stageId, { status: "ack", ack: Date.now(), by: currentUserId || "" }),
       logEvent("ACK", id, stageId, "Acknowledged release")
     ]);
     reopenDrawer();
@@ -28,7 +40,7 @@ export function useActions() {
   async function startStage(kind: Track, id: string, stageId: string) {
     const p = prog(data, id, stageId);
     await apply([
-      { op: "progress", key: pkey(id, stageId), patch: { status: "wip", ack: p.ack || Date.now(), start: Date.now(), by: currentUserId || "" } },
+      progressOp(id, stageId, { status: "wip", ack: p.ack || Date.now(), start: Date.now(), by: currentUserId || "" }),
       logEvent("START", id, stageId, "Work started")
     ]);
     reopenDrawer();
@@ -41,12 +53,12 @@ export function useActions() {
     if (i === -1 || i + 1 >= list.length) return [];
     const nxt = list[i + 1].stage;
     if (prog(data, id, nxt.id).status) return [];
-    return [{ op: "progress", key: pkey(id, nxt.id), patch: { status: "released", rel: Date.now() } }];
+    return [progressOp(id, nxt.id, { status: "released", rel: Date.now() })];
   }
 
   async function completeStage(kind: Track, id: string, stageId: string) {
     const ops: Op[] = [
-      { op: "progress", key: pkey(id, stageId), patch: { status: "done", at: Date.now(), by: currentUserId || "", note: null } },
+      progressOp(id, stageId, { status: "done", at: Date.now(), by: currentUserId || "", note: null }),
       logEvent("COMPLETE", id, stageId, "Stage completed"),
       ...releaseNextOps(kind, id, stageId)
     ];
@@ -59,7 +71,7 @@ export function useActions() {
     const reason = prompt("QC failure reason (mandatory):");
     if (!reason) return;
     await apply([
-      { op: "progress", key: pkey(id, stageId), patch: { status: "fail", at: Date.now(), by: currentUserId || "", note: reason } },
+      progressOp(id, stageId, { status: "fail", at: Date.now(), by: currentUserId || "", note: reason }),
       logEvent("QC_FAIL", id, stageId, reason)
     ]);
     reopenDrawer();
@@ -73,7 +85,7 @@ export function useActions() {
 
     if (!failed.length) {
       const ops: Op[] = [
-        { op: "progress", key: pkey(id, stageId), patch: { status: "done", at: now, by: currentUserId || "", note: null, checklistId, checklist: results } },
+        progressOp(id, stageId, { status: "done", at: now, by: currentUserId || "", note: null, checklistId, checklist: results }),
         logEvent("QC_PASS", id, stageId, "Checklist passed (" + results.length + " lines)"),
         ...releaseNextOps(kind, id, stageId)
       ];
@@ -86,7 +98,7 @@ export function useActions() {
     const stage = byId(coll(data, "stages"), stageId);
     const owner = coll(data, "users").find((u) => u.role === stage?.role && u.active !== false) || byId(coll(data, "users"), currentUserId);
     const ops: Op[] = [
-      { op: "progress", key: pkey(id, stageId), patch: { status: "fail", at: now, by: currentUserId || "", checklistId, checklist: results, note: failed.length + " parameter(s) failed" } },
+      progressOp(id, stageId, { status: "fail", at: now, by: currentUserId || "", checklistId, checklist: results, note: failed.length + " parameter(s) failed" }),
       logEvent("QC_FAIL", id, stageId, failed.length + " parameter(s) failed")
     ];
     let n = 0;
@@ -179,22 +191,28 @@ export function useActions() {
   async function setSnagStatus(id: string, status: "Open" | "In Progress" | "Closed") {
     const s = byId(coll(data, "snags"), id);
     if (!s) return;
+    const reopening = s.status === "Closed" && status !== "Closed";
     const patch: any = Object.assign({}, s, { status });
     if (status === "Closed") { patch.closedAt = Date.now(); patch.closedBy = currentUserId; }
     else { patch.closedAt = null; patch.closedBy = null; }
+    if (reopening) {
+      patch.reopenCount = (s.reopenCount || 0) + 1;
+      patch.reopenedAt = Date.now();
+      patch.reopenedBy = currentUserId;
+    }
     await apply([
       { op: "upsert", coll: "snags", rec: patch },
-      logEvent("SNAG_" + status.toUpperCase().replace(" ", "_"), s.unitId || "", s.stageId, s.title)
+      logEvent(reopening ? "SNAG_REOPEN" : "SNAG_" + status.toUpperCase().replace(" ", "_"), s.unitId || "", s.stageId, s.title)
     ]);
     reopenDrawer();
-    toast("Snag " + status.toLowerCase());
+    toast(reopening ? "Snag reopened" : "Snag " + status.toLowerCase());
   }
 
   async function saveSnagAssignee(id: string, to: string) {
     const s = byId(coll(data, "snags"), id);
     if (!s) return;
     await apply([
-      { op: "upsert", coll: "snags", rec: Object.assign({}, s, { assignedTo: to }) },
+      { op: "upsert", coll: "snags", rec: Object.assign({}, s, { assignedTo: to, lastReassignedBy: currentUserId, lastReassignedAt: Date.now() }) },
       logEvent("SNAG_REASSIGN", s.unitId || "", s.stageId, "to " + refLabel(data, "users", to))
     ]);
     reopenDrawer();

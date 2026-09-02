@@ -6,6 +6,7 @@ import { fmtDT, ago, dueLabel } from "../shared/helpers";
 import { useActions } from "../hooks/useActions";
 import AssignRow from "./AssignRow";
 import SnagRow from "./SnagRow";
+import NavIcon from "./NavIcon";
 
 export default function Drawer() {
   const { drawer, closeDrawer, data, currentProjectId, myRole } = useApp();
@@ -150,14 +151,36 @@ function SnagDrawer({ id }: { id: string }) {
   const closed = s.status === "Closed";
   const users = coll(data, "users").filter((u) => u.active !== false);
 
+  const label: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: "#9CA3AF", marginBottom: 4 };
+  const value: React.CSSProperties = { fontSize: 14, fontWeight: 500, color: "var(--text-main)", lineHeight: 1.4 };
+  const empty: React.CSSProperties = { fontSize: 14, fontWeight: 500, color: "#9CA3AF" };
+  function Field({ full, children }: { full?: boolean; children: React.ReactNode }) {
+    return <div style={full ? { gridColumn: "1 / -1" } : undefined}>{children}</div>;
+  }
+
   return (
     <>
       <div className="drawer-header">
-        <div style={{ minWidth: 0 }}>
-          <div className="micro-label">SNAG {s.id}</div>
-          <div style={{ fontSize: 16, fontWeight: 800 }}>{s.title}</div>
+        <div style={{ display: "flex", gap: 12, alignItems: "flex-start", minWidth: 0 }}>
+          <div className="page-icon" style={{ width: 38, height: 38, fontSize: 17, flexShrink: 0 }}>
+            <NavIcon name="snags" size={18} />
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div className="micro-label">SNAG {s.id}</div>
+            <div style={{ fontSize: 16, fontWeight: 800 }}>{s.title}</div>
+          </div>
         </div>
-        <button className="btn-icon" onClick={closeDrawer}>✕</button>
+        <button
+          onClick={closeDrawer}
+          aria-label="Close"
+          style={{
+            width: 32, height: 32, flexShrink: 0, border: "none", background: "none",
+            color: "var(--text-muted)", fontSize: 16, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center"
+          }}
+        >
+          ✕
+        </button>
       </div>
       <div className="drawer-body">
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
@@ -165,28 +188,43 @@ function SnagDrawer({ id }: { id: string }) {
           <span className={"badge-tag " + (closed ? "pass" : s.status === "In Progress" ? "wip" : "fail")}>{s.status}</span>
           {!closed && <span className={"badge-tag " + d.cls}>{d.text}</span>}
         </div>
-        <div style={{ fontSize: 13, lineHeight: 1.6, marginBottom: 16 }}>{s.description || "No description."}</div>
-        <div className="card card-pad" style={{ fontSize: 12, lineHeight: 1.9 }}>
-          <div><strong>Location</strong> · {snagTarget(data, s)}</div>
-          <div><strong>Stage</strong> · {refLabel(data, "stages", s.stageId)}</div>
-          {s.paramId && <div><strong>Parameter</strong> · {refLabel(data, "qparams", s.paramId)}</div>}
-          <div><strong>Raised by</strong> · {refLabel(data, "users", s.raisedBy)} {ago(s.raisedAt)}</div>
-          <div><strong>Assigned to</strong> · {refLabel(data, "users", s.assignedTo)}</div>
-          {s.closedAt && <div><strong>Closed</strong> · {fmtDT(s.closedAt)} by {refLabel(data, "users", s.closedBy)}</div>}
+
+        <div style={label}>Description</div>
+        <div style={{ ...value, marginBottom: 20 }}>{s.description || <span style={empty}>No description.</span>}</div>
+
+        <div style={{ borderTop: "1px solid var(--border)", margin: "4px 0 20px" }} />
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: 32, rowGap: 16, marginBottom: 20 }}>
+          <Field full><div style={label}>Location</div><div style={value}>{snagTarget(data, s)}</div></Field>
+          <Field><div style={label}>Stage</div><div style={value}>{refLabel(data, "stages", s.stageId)}</div></Field>
+          <Field><div style={label}>Parameter</div><div style={s.paramId ? value : empty}>{s.paramId ? refLabel(data, "qparams", s.paramId) : "—"}</div></Field>
+          <Field><div style={label}>Raised By</div><div style={value}>{refLabel(data, "users", s.raisedBy)}<div style={{ fontSize: 11.5, color: "var(--text-sub)", marginTop: 2 }}>{ago(s.raisedAt)}</div></div></Field>
+          <Field><div style={label}>Assigned To</div><div style={value}>{refLabel(data, "users", s.assignedTo)}</div></Field>
+          {s.closedAt && (
+            <Field full><div style={label}>Closed</div><div style={value}>{fmtDT(s.closedAt)} by {refLabel(data, "users", s.closedBy)}</div></Field>
+          )}
+          {!!s.reopenCount && (
+            <Field full><div style={label}>Reopened</div><div style={value}>{s.reopenCount}× · last {fmtDT(s.reopenedAt)} by {refLabel(data, "users", s.reopenedBy)}</div></Field>
+          )}
         </div>
+
         {(s.photos || []).length > 0 && (
-          <div className="photo-strip">
-            {(s.photos || []).map((p, i) => (
-              <img key={i} className="photo-thumb" src={p.url} onClick={() => window.open(p.url, "_blank")} />
-            ))}
-          </div>
+          <>
+            <div style={label}>Photos</div>
+            <div className="photo-strip" style={{ marginBottom: 20 }}>
+              {(s.photos || []).map((p, i) => (
+                <img key={i} className="photo-thumb" src={p.url} onClick={() => window.open(p.url, "_blank")} />
+              ))}
+            </div>
+          </>
         )}
-        <div style={{ marginTop: 16 }}>
-          <div className="micro-label">REASSIGN</div>
-          <select className="select" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
-            {users.map((u) => <option key={u.id} value={u.id}>{u.name} · {u.role}</option>)}
-          </select>
-        </div>
+
+        <div style={{ borderTop: "1px solid var(--border)", margin: "4px 0 20px" }} />
+
+        <div style={label}>Reassign</div>
+        <select className="select" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
+          {users.map((u) => <option key={u.id} value={u.id}>{u.name} · {u.role}</option>)}
+        </select>
       </div>
       <div className="drawer-footer">
         <button className="btn btn-secondary btn-sm" onClick={() => fileRef.current?.click()}>📸 Add photo</button>

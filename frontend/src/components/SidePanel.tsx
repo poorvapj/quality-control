@@ -64,7 +64,18 @@ export default function SidePanel({
               <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>{desc}</div>
             </div>
           </div>
-          <button ref={closeBtnRef} className="btn-icon" aria-label="Close" onClick={onClose}>✕</button>
+          <button
+            ref={closeBtnRef}
+            aria-label="Close"
+            onClick={onClose}
+            style={{
+              width: 32, height: 32, flexShrink: 0, border: "none", background: "none",
+              color: "var(--text-muted)", fontSize: 16, cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center"
+            }}
+          >
+            ✕
+          </button>
         </div>
         <div className="drawer-body">{children}</div>
         {footer && <div className="drawer-footer">{footer}</div>}
