@@ -1,0 +1,157 @@
+/* Floating boxed sidebar — a white rounded card with a hairline border and
+   soft shadow, sitting with a gap on the light page background. Matches
+   the reference app's sidebar exactly (same treatment as Header.css). */
+.sidebar {
+  width: 264px;
+  flex-shrink: 0;
+  background: transparent;
+  border-right: none;
+  box-shadow: none;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  padding: 14px 0 14px 14px;
+  box-sizing: border-box;
+  overflow-y: hidden;
+  z-index: 50;
+  transition: transform 0.25s ease, width 0.2s ease;
+}
+
+/* Off-canvas drawer on mobile — the hamburger toggles `.open` here instead
+   of the desktop `.collapsed` state. */
+@media (max-width: 960px) {
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    transform: translateX(-100%);
+    box-shadow: var(--shadow-drawer);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+}
+
+.sidebar.collapsed {
+  width: 92px;
+}
+
+.sidebar.collapsed .nx-nav-icon {
+  width: auto;
+  height: auto;
+}
+
+.sidebar.collapsed .nx-nav-item {
+  padding: 10px 0;
+  margin-left: auto;
+  margin-right: auto;
+  width: calc(100% - 20px);
+}
+
+@media (max-width: 960px) {
+  .sidebar.collapsed {
+    width: 264px;
+  }
+}
+
+.sidebar-inner {
+  width: 100%;
+  height: 100%;
+  background: var(--bg-card);
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+  overflow: hidden;
+  position: relative;
+}
+
+/* On a short/minimized viewport the nav list can overflow (especially
+   collapsed to the icon rail) — always show a visible scrollbar there,
+   wider than the app's default thin one, instead of a barely-visible or
+   auto-hiding bar the user might not notice they can scroll. */
+.sidebar-nav-scroll {
+  scrollbar-width: auto;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.sidebar-nav-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+
+.sidebar-nav-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 99px;
+  border: 2px solid var(--bg-card);
+}
+
+.sidebar-nav-scroll::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+html.dark .sidebar-inner {
+  background: var(--bg-card);
+  border-color: var(--border);
+}
+
+.nx-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 6px 12px;
+  margin: 3px 10px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--nx-sidebar-text);
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+  outline: none;
+  border: none;
+  background: transparent;
+  text-align: left;
+}
+
+.nx-nav-item:focus-visible {
+  outline: 2px solid var(--theme-primary);
+  outline-offset: -2px;
+}
+
+.nx-nav-item:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-main);
+}
+
+.nx-nav-item--active {
+  background: transparent;
+  color: var(--theme-primary);
+  font-weight: 650;
+}
+
+.nx-nav-item--active:hover {
+  background: var(--bg-card-hover);
+  color: var(--theme-primary-hover);
+}
+
+.nx-nav-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  color: #98a2b3;
+  background: var(--bg-card-hover);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color .15s ease, background .15s ease;
+}
+
+.nx-nav-item:hover .nx-nav-icon {
+  color: var(--text-main);
+}
+
+.nx-nav-item--active .nx-nav-icon {
+  color: var(--theme-primary);
+  background: color-mix(in srgb, var(--theme-primary) 12%, transparent);
+}

@@ -1,13 +1,13 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { BoardData, Op, Role, StoreMode, TabKey, MasterKey, User } from "../types";
 import { API_BASE } from "../services/config";
-import { byId, coll } from "../lib/rules";
+import { byId, coll } from "../shared/rules";
 
 const LS_KEY = "neoteric_board_v5";
 const SESSION_KEY = "neoteric_session";
 const TOKEN_KEY = "neoteric_token";
 
-function authHeaders(): Record<string, string> {
+export function authHeaders(): Record<string, string> {
   try {
     const token = localStorage.getItem(TOKEN_KEY);
     return token ? { Authorization: "Bearer " + token } : {};
@@ -234,7 +234,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     if (LOGIN_GATE_ENABLED) {
       const sessionActive = localStorage.getItem(SESSION_KEY) === "1";
-      setLoggedIn(!!(sessionActive && validUser));
+      // A session flag with no stored token (e.g. from before auth used
+      // real tokens, or if it was ever cleared independently) would show
+      // the UI as "logged in" while every admin-gated request silently
+      // 401s. Require both, and if the token's missing, force a fresh
+      // login instead of a session that looks fine but can't do anything.
+      const hasToken = !!localStorage.getItem(TOKEN_KEY);
+      setLoggedIn(!!(sessionActive && validUser && hasToken));
     }
   }, [data]);
 

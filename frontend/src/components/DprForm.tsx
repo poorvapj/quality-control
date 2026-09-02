@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
-import { coll } from "../lib/rules";
-import { nextId } from "../lib/helpers";
+import { coll } from "../shared/rules";
+import { nextId } from "../shared/helpers";
 import type { DailyProgressReport, DprWorkEntry, ShiftType, Photo } from "../types";
 import PhotoGroupUploader from "./PhotoGroupUploader";
 
@@ -19,12 +19,12 @@ function slugCode(name: string): string {
 }
 
 export default function DprForm({ isPublic, onDone }: { isPublic: boolean; onDone: (id: string) => void }) {
-  const { data, apply, toast, currentUserId, currentProjectId, me } = useApp();
+  const { data, apply, toast, currentUserId } = useApp();
   const projects = coll(data, "projects").filter((p) => p.active !== false);
   const users = coll(data, "users").filter((u) => u.active !== false);
 
-  const [projectId, setProjectId] = useState(currentProjectId || projects[0]?.id || "");
-  const [submittedByName, setSubmittedByName] = useState(isPublic ? "" : me()?.name || "");
+  const [projectId, setProjectId] = useState("");
+  const [submittedByName, setSubmittedByName] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [vendorName, setVendorName] = useState("");
   const [shift, setShift] = useState<ShiftType | "">("");

@@ -12,8 +12,8 @@
    =========================================================================== */
 
 import { useApp } from "../context/AppContext";
-import { byId, coll } from "./rules";
-import { nextId } from "./helpers";
+import { byId, coll } from "../shared/rules";
+import { nextId } from "../shared/helpers";
 import type { DrawingRequest, ReviewHistoryEntry, DrawingPriority, DrawingFile } from "../types";
 
 export function useDrawingRequestActions() {

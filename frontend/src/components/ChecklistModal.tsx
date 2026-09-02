@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useApp } from "../context/AppContext";
-import { byId, coll, refLabel } from "../lib/rules";
-import { useActions } from "../lib/useActions";
+import { byId, coll, refLabel } from "../shared/rules";
+import { useActions } from "../hooks/useActions";
 import Modal from "./Modal";
 
 interface RowState { paramId: string; result: "pass" | "fail" | "na"; remark: string }

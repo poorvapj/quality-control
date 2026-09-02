@@ -1,8 +1,8 @@
 import React from "react";
 import { useApp } from "../context/AppContext";
-import { refLabel } from "../lib/rules";
-import { dueLabel, ago } from "../lib/helpers";
-import { useActions } from "../lib/useActions";
+import { refLabel } from "../shared/rules";
+import { dueLabel, ago } from "../shared/helpers";
+import { useActions } from "../hooks/useActions";
 import type { Assignment } from "../types";
 
 export default function AssignRow({ a }: { a: Assignment }) {

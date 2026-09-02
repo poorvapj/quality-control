@@ -1,7 +1,7 @@
 import React from "react";
 import { useApp } from "../context/AppContext";
 import { ROLES } from "../services/config";
-import { coll } from "../lib/rules";
+import { coll } from "../shared/rules";
 import NavIcon from "../components/NavIcon";
 
 export default function Team() {

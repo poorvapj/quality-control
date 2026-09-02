@@ -128,9 +128,21 @@ export interface Snag extends BaseRecord {
   raisedBy: string;
   raisedAt: number;
   assignedTo: string;
+  /** Who last reassigned this snag's `assignedTo`, and when — set by
+   *  saveSnagAssignee() in useActions.ts. Powers My Work's "Assigned by me"
+   *  section (Snag has no separate `assignedBy` at raise-time like
+   *  Assignment does, so this is the only "who handed this to whom" trail). */
+  lastReassignedBy?: string | null;
+  lastReassignedAt?: number | null;
   dueAt?: number | null;
   closedAt?: number | null;
   closedBy?: string | null;
+  /** How many times this snag has been reopened after being Closed, and
+   *  when/by whom the most recent reopen happened — set by setSnagStatus()
+   *  in useActions.ts, never by the generic status toggle alone. */
+  reopenCount?: number;
+  reopenedAt?: number | null;
+  reopenedBy?: string | null;
   photos?: Photo[];
   comments?: unknown[];
 }
@@ -152,6 +164,12 @@ export interface Assignment extends BaseRecord {
 
 export type ProgressStatus = "released" | "ack" | "wip" | "done" | "fail";
 
+export interface ProgressHistoryEntry {
+  status: ProgressStatus;
+  ts: number;
+  by?: string;
+}
+
 export interface ProgressPatch {
   status?: ProgressStatus;
   rel?: number;
@@ -165,6 +183,13 @@ export interface ProgressPatch {
   photo?: Photo;
   checklistId?: string;
   checklist?: { paramId: string; result: string; remark: string }[];
+  /** Every status transition this stage instance has ever gone through, oldest
+   *  first — never trimmed on rework. `rel`/`ack`/`start`/`at` above only ever
+   *  hold the LATEST cycle's timestamps (each write shallow-merges over the
+   *  previous one), so a fail -> rework -> done stage silently loses its
+   *  earlier cycle's timing there. This log is the only durable source for
+   *  full cycle-time/SLA reporting across rework. */
+  history?: ProgressHistoryEntry[];
 }
 
 export interface EventLog {
@@ -286,7 +311,7 @@ export type Op =
   | { op: "progress"; key: string; patch: Partial<ProgressPatch> }
   | { op: "event"; ev: EventLog };
 
-export type TabKey = "dash" | "work" | "board" | "snags" | "team" | "masters" | "dpr" | "drawingRequests";
+export type TabKey = "dash" | "work" | "board" | "snags" | "team" | "masters" | "dpr" | "drawingRequests" | "backups";
 export type MasterKey = "projects" | "floors" | "units" | "stages" | "qparams" | "checklists" | "stagemap" | "users" | "permissions";
 
 export type FieldType = "text" | "number" | "date" | "color" | "select" | "ref" | "bool" | "textarea" | "items";

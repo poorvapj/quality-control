@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
-import { coll, refLabel, snagTarget } from "../lib/rules";
-import { dueLabel, ago } from "../lib/helpers";
+import { coll, refLabel, snagTarget } from "../shared/rules";
+import { dueLabel, ago } from "../shared/helpers";
+import { ESCALATION_DAYS, HOUR } from "../services/config";
 import NavIcon from "../components/NavIcon";
 
 export default function Snags() {
@@ -27,6 +28,12 @@ export default function Snags() {
   const all = coll(data, "snags").filter((s) => s.projectId === currentProjectId);
   const open = all.filter((s) => s.status !== "Closed");
   const overdue = open.filter((s) => s.dueAt && s.dueAt < Date.now());
+  // Escalation is deliberately computed on read, not a cron job or persisted
+  // flag — always reflects the live picture, no scheduler/notification
+  // infra needed. Threshold: overdue by ESCALATION_DAYS+ still-open days.
+  const escalated = open
+    .filter((s) => s.dueAt && Date.now() - s.dueAt >= ESCALATION_DAYS * 24 * HOUR)
+    .sort((a, b) => (a.dueAt || 0) - (b.dueAt || 0));
 
   return (
     <div>
@@ -42,6 +49,23 @@ export default function Snags() {
           <button className="btn btn-primary btn-sm" onClick={() => openSnagModal({ unitId: "", stageId: "" })}>＋ Raise snag</button>
         </div>
       </div>
+
+      {escalated.length > 0 && (
+        <div className="card card-pad" style={{ marginBottom: 16, borderColor: "var(--color-fail)", background: "rgba(239,68,68,0.06)" }}>
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: "var(--color-fail)", marginBottom: 8 }}>
+            ⚠ {escalated.length} snag{escalated.length === 1 ? "" : "s"} escalated — overdue {ESCALATION_DAYS}+ days, needs senior attention
+          </div>
+          {escalated.map((s) => (
+            <div key={s.id} className="qitem alert" onClick={() => openDrawer({ kind: "snag", id: s.id })} style={{ cursor: "pointer" }}>
+              <div className="qitem-main">
+                <div className="qitem-title">{s.id} · {s.title}</div>
+                <div className="qitem-sub">{snagTarget(data, s)} · assigned to {refLabel(data, "users", s.assignedTo)} · {dueLabel(s.dueAt).text}</div>
+              </div>
+              <span className={"badge-tag " + (s.severity === "Critical" ? "crit" : s.severity === "Major" ? "gate" : "mute")}>{s.severity}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="panel-card">
         <div className="toolbar">

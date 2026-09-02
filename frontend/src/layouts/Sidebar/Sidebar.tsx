@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { useApp } from "../context/AppContext";
-import { coll, myAssignments, myReleases } from "../lib/rules";
-import NavIcon from "./NavIcon";
-import type { TabKey } from "../types";
+import { useApp } from "../../context/AppContext";
+import { coll, myAssignments, myReleases } from "../../shared/rules";
+import NavIcon from "../../components/NavIcon";
+import type { TabKey } from "../../types";
+import "./Sidebar.css";
 
 interface NavItem { key: TabKey; icon: string; label: string; badge?: number }
 
@@ -40,7 +41,13 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
         { key: "drawingRequests", icon: "drawing", label: "Drawing Requests" }
       ]
     },
-    { label: "Administration", items: [{ key: "masters", icon: "masters", label: "Masters" }] }
+    {
+      label: "Administration",
+      items: [
+        { key: "masters", icon: "masters", label: "Masters" },
+        ...(isAdmin ? [{ key: "backups" as TabKey, icon: "database", label: "Backups" }] : [])
+      ]
+    }
   ];
 
   return (
@@ -96,7 +103,7 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
 
         {/* ── Nav Groups — scrolls on its own so the collapse toggle below
             always stays visible, even with a long nav list. ── */}
-        <nav style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "6px 0 10px" }}>
+        <nav className="sidebar-nav-scroll" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "6px 0 10px" }}>
           {groups.map((g, gi) => (
             <div key={g.label} style={{ marginTop: gi === 0 ? 4 : 0 }}>
               {!collapsed && (
@@ -155,6 +162,9 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
                           >
                             {it.badge}
                           </span>
+                        )}
+                        {isActive && (
+                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "currentColor", flexShrink: 0 }} />
                         )}
                       </span>
                     )}

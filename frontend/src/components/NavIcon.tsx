@@ -140,6 +140,27 @@ const PATHS: Record<string, React.ReactNode> = {
       <line x1="8" y1="2" x2="8" y2="6" />
       <line x1="3" y1="10" x2="21" y2="10" />
     </>
+  ),
+  download: (
+    <>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </>
+  ),
+  database: (
+    <>
+      <ellipse cx="12" cy="5" rx="9" ry="3" />
+      <path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5" />
+      <path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3" />
+    </>
+  ),
+  moreHorizontal: (
+    <>
+      <circle cx="12" cy="12" r="1" />
+      <circle cx="19" cy="12" r="1" />
+      <circle cx="5" cy="12" r="1" />
+    </>
   )
 };
 

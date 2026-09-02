@@ -5,10 +5,12 @@
    stage. Stored in a standalone `permissions` collection (one record per
    user, id === userId), separate from the User master record.
 
-   The existing "DRI" role already acts as the board's owner/super-admin
-   everywhere else in this app (Masters edit rights, resets, etc.) — the spec
-   says a super-admin/owner role must always bypass the per-user check, so
-   DRI is that bypass role here too, for consistency with the rest of the app.
+   DRI does NOT get a role-based bypass here, unlike the rest of the app —
+   Drawing Request review/approval is deliberately restricted to the Admin
+   account (U-ADMIN) plus whoever is explicitly granted a stage via the
+   per-user `permissions` collection (e.g. a GM reviewing Stage 1
+   screening). A DRI account only gets a stage if they're also granted it
+   there.
    =========================================================================== */
 
 import type { BoardData, Role, UserPermission } from "../types";
@@ -22,7 +24,7 @@ export function getUserPermission(data: BoardData | null, userId: string | null)
 }
 
 export function canActOnStage(data: BoardData | null, userId: string | null, role: Role, stageKey: StageKey): boolean {
-  if (role === "DRI") return true; // super-admin/owner bypass
+  if (userId === "U-ADMIN") return true; // Admin account bypass
   const p = getUserPermission(data, userId);
   return !!p && !!p[stageKey];
 }

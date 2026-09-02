@@ -1,14 +1,14 @@
 import React from "react";
 import { useApp } from "../context/AppContext";
-import { refLabel, snagTarget } from "../lib/rules";
-import { dueLabel, ago } from "../lib/helpers";
+import { refLabel, snagTarget } from "../shared/rules";
+import { dueLabel, ago } from "../shared/helpers";
 import type { Snag } from "../types";
 
 export default function SnagRow({ s }: { s: Snag }) {
   const { data, openDrawer } = useApp();
   const d = dueLabel(s.dueAt);
   return (
-    <div className={"qitem" + (s.severity === "Critical" ? " alert" : "")} onClick={(e) => { e.stopPropagation(); openDrawer({ kind: "snag", id: s.id }); }}>
+    <div className={"qitem" + (s.severity === "Critical" ? " alert" : " warn")} onClick={(e) => { e.stopPropagation(); openDrawer({ kind: "snag", id: s.id }); }}>
       <div className="qitem-main">
         <div className="qitem-title">🐞 {s.title}</div>
         <div className="qitem-sub">{snagTarget(data, s)} · {refLabel(data, "stages", s.stageId)} · raised by {refLabel(data, "users", s.raisedBy)} {ago(s.raisedAt)}</div>
