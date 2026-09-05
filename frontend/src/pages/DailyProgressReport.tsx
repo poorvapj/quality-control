@@ -242,6 +242,7 @@ export default function DailyProgressReportPage() {
             value={fRange}
             onChange={(v) => setFRange(v as DateRange)}
             options={DATE_RANGES.map((r) => ({ value: r.key, label: r.label }))}
+            neutralActive
           />
         </div>
         {fRange === "custom" && (
@@ -278,6 +279,7 @@ export default function DailyProgressReportPage() {
             value={fProject}
             onChange={setFProject}
             options={[{ value: "", label: "All Projects" }, ...projects.map((p) => ({ value: p.id, label: p.name }))]}
+            neutralActive
           />
         </div>
         <div className="field" style={{ minWidth: 170 }}>
@@ -286,6 +288,7 @@ export default function DailyProgressReportPage() {
             value={fUser}
             onChange={setFUser}
             options={[{ value: "", label: "All DRI" }, ...users.map((u) => ({ value: u.id, label: u.name }))]}
+            neutralActive
           />
         </div>
         <button className="btn btn-primary" onClick={generateReport}>⬇ Generate Report</button>

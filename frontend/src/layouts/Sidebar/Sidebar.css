@@ -66,28 +66,8 @@
   position: relative;
 }
 
-/* On a short/minimized viewport the nav list can overflow (especially
-   collapsed to the icon rail) — always show a visible scrollbar there,
-   wider than the app's default thin one, instead of a barely-visible or
-   auto-hiding bar the user might not notice they can scroll. */
 .sidebar-nav-scroll {
   overflow-x: hidden;
-  scrollbar-width: auto;
-  scrollbar-color: var(--border-strong) transparent;
-}
-
-.sidebar-nav-scroll::-webkit-scrollbar {
-  width: 10px;
-}
-
-.sidebar-nav-scroll::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
-  border-radius: 99px;
-  border: 2px solid var(--bg-card);
-}
-
-.sidebar-nav-scroll::-webkit-scrollbar-thumb:hover {
-  background: #9ca3af;
 }
 
 html.dark .sidebar-inner {

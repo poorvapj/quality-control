@@ -1,25 +1,35 @@
 @import "tailwindcss";
 
-/* Maps the app's existing design tokens (defined in index.html's :root)
-   onto Tailwind's theme, so new components can use Tailwind utilities
-   (bg-primary, text-primary, rounded-radius-lg, …) that resolve to the
-   exact same colors/radii the rest of the app already uses — instead of
-   picking a second, slightly-different orange by accident. */
+/* Ties Tailwind's `dark:` variant to this app's own theme toggle
+   (`document.documentElement.classList.toggle("dark", ...)` in
+   layouts/Header/Header.tsx) instead of the v4 default, which only
+   responds to the OS-level `prefers-color-scheme` media query. Without
+   this, no `dark:` utility class would ever react to the in-app
+   sun/moon button. */
+@variant dark (&:where(.dark, .dark *));
+
+/* Only truly theme-invariant values go in @theme (its values must be
+   static — no var() — so anything that actually swaps between light/dark
+   CANNOT live here without freezing at whichever value was compiled in).
+   --theme-primary is the same orange in both modes, so it's safe here as
+   `bg-primary`/`text-primary`/etc.
+
+   Everything that DOES swap between light/dark (backgrounds, borders,
+   text colors, shadows — see the `html.dark` overrides in index.css) is
+   deliberately NOT duplicated here as a second set of tokens. Reference
+   those directly with Tailwind's arbitrary-value syntax instead, e.g.
+   `bg-[var(--bg-card)]` / `text-[var(--text-muted)]` / `shadow-[var(--shadow-card)]`
+   — that resolves the SAME live CSS custom property index.css already
+   swaps under `html.dark`, so it just stays correct with zero extra
+   `dark:` variants needed. Baking a static copy in here would both freeze
+   it at the light-mode value and risk drifting to a slightly different
+   color over time, which is exactly what this split avoids. */
 @theme {
-  --color-primary: #ff7a00;
-  --color-primary-hover: #e56e00;
-  --color-primary-light: #fff4e8;
+  --color-primary: #f97316;
+  --color-primary-hover: #ea580c;
+  --color-primary-light: rgba(249, 115, 22, 0.12);
 
-  --color-bg-page: #f8fafc;
-  --color-bg-card: #ffffff;
-  --color-bg-subtle: #f3f4f6;
-  --color-border: #e5e7eb;
-  --color-border-strong: #cbd5e1;
-  --color-text-main: #111827;
-  --color-text-muted: #6b7280;
-  --color-text-sub: #9ca3af;
-
-  --radius-radius-sm: 8px;
+  --radius-radius-sm: 6px;
   --radius-radius-md: 10px;
-  --radius-radius-lg: 14px;
+  --radius-radius-lg: 16px;
 }

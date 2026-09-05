@@ -45,7 +45,8 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
       label: "Administration",
       items: [
         { key: "masters", icon: "masters", label: "Masters" },
-        ...(isAdmin ? [{ key: "backups" as TabKey, icon: "database", label: "Backups" }] : [])
+        ...(isAdmin ? [{ key: "backups" as TabKey, icon: "database", label: "Backups" }] : []),
+        ...(isAdmin ? [{ key: "auditLog" as TabKey, icon: "clock", label: "Audit Logs" }] : [])
       ]
     }
   ];

@@ -5,6 +5,7 @@ import { HOUR } from "../services/config";
 import { useActions } from "../hooks/useActions";
 import SidePanel from "./SidePanel";
 import NavIcon from "./NavIcon";
+import SearchDropdown from "./SearchDropdown";
 import type { Track } from "../types";
 import "./SharpPanel.css";
 
@@ -109,22 +110,23 @@ export default function AssignModal() {
       <div className="form-grid">
         <div className="field">
           <label>Project *</label>
-          <select
-            className="select"
+          <SearchDropdown
             value={projectId}
-            onChange={(e) => { setProjectId(e.target.value); setTargetId(""); setBulkTargetIds([]); setStageId(""); }}
-          >
-            <option value="">Choose</option>
-            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+            onChange={(v) => { setProjectId(v); setTargetId(""); setBulkTargetIds([]); setStageId(""); }}
+            options={[{ value: "", label: "Choose" }, ...projects.map((p) => ({ value: p.id, label: p.name }))]}
+            neutralActive
+          />
           <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Which project this assignment belongs to — targets and stages below follow this choice.</div>
         </div>
         <div className="field">
           <label>Target type</label>
-          <select className="select" value={targetType} onChange={(e) => { const t = e.target.value as Track; setTargetType(t); setTargetId(""); setBulkTargetIds([]); setStageId(""); }}>
-            <option value="unit">Unit / Flat</option>
-            <option value="floor">Floor / Structure</option>
-          </select>
+          <SearchDropdown
+            searchable={false}
+            value={targetType}
+            onChange={(v) => { const t = v as Track; setTargetType(t); setTargetId(""); setBulkTargetIds([]); setStageId(""); }}
+            options={[{ value: "unit", label: "Unit / Flat" }, { value: "floor", label: "Floor / Structure" }]}
+            neutralActive
+          />
         </div>
         <div className="field full" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <input id="bulk-assign-toggle" type="checkbox" checked={bulk} onChange={(e) => { setBulk(e.target.checked); setTargetId(""); setBulkTargetIds([]); }} />
@@ -151,25 +153,31 @@ export default function AssignModal() {
         ) : (
           <div className="field">
             <label>Target *</label>
-            <select className="select" value={targetId} onChange={(e) => setTargetId(e.target.value)}>
-              <option value="">Choose</option>
-              {targets.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
+            <SearchDropdown
+              value={targetId}
+              onChange={setTargetId}
+              options={[{ value: "", label: "Choose" }, ...targets.map((t) => ({ value: t.id, label: t.name }))]}
+              neutralActive
+            />
           </div>
         )}
         <div className="field">
           <label>Stage *</label>
-          <select className="select" value={stageId} onChange={(e) => setStageId(e.target.value)}>
-            <option value="">Choose</option>
-            {stages.map((x) => <option key={x.stage.id} value={x.stage.id}>{x.stage.name}</option>)}
-          </select>
+          <SearchDropdown
+            value={stageId}
+            onChange={setStageId}
+            options={[{ value: "", label: "Choose" }, ...stages.map((x) => ({ value: x.stage.id, label: x.stage.name }))]}
+            neutralActive
+          />
         </div>
         <div className="field">
           <label>Assign to *</label>
-          <select className="select" value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}>
-            <option value="">Choose</option>
-            {users.map((u) => <option key={u.id} value={u.id}>{u.name} · {u.role}</option>)}
-          </select>
+          <SearchDropdown
+            value={assignedTo}
+            onChange={setAssignedTo}
+            options={[{ value: "", label: "Choose" }, ...users.map((u) => ({ value: u.id, label: `${u.name} · ${u.role}` }))]}
+            neutralActive
+          />
         </div>
         <div className="field"><label>Due by *</label><input className="input" type="datetime-local" value={due} onChange={(e) => setDue(e.target.value)} /></div>
         <div className="field full">

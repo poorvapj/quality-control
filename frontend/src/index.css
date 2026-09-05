@@ -49,12 +49,20 @@
       --shadow-drawer: -8px 0 40px rgba(0, 0, 0, 0.5);
     }
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      font-family: 'Inter', system-ui, sans-serif;
-      -webkit-tap-highlight-color: transparent;
+    /* @layer base puts this at the same cascade-layer priority as
+       Tailwind's own Preflight reset — plain unlayered CSS (which this was)
+       always wins over ANY `@layer` content regardless of selector
+       specificity, so this universal margin/padding reset was silently
+       overriding every Tailwind spacing utility (mb-*, gap-*, p-*, …) app
+       -wide, not just on pages already converted to Tailwind. */
+    @layer base {
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        font-family: 'Inter', system-ui, sans-serif;
+        -webkit-tap-highlight-color: transparent;
+      }
     }
 
     body {
@@ -65,21 +73,59 @@
     }
 
     ::-webkit-scrollbar {
-      width: 6px;
-      height: 6px;
+      width: 14px;
+      height: 14px;
     }
 
     ::-webkit-scrollbar-track {
-      background: transparent;
+      background: var(--bg-subtle);
     }
 
     ::-webkit-scrollbar-thumb {
       background: var(--border-strong);
-      border-radius: 99px;
+      border-radius: 3px;
+      border: 3px solid var(--bg-subtle);
     }
 
     ::-webkit-scrollbar-thumb:hover {
       background: #9ca3af;
+    }
+
+    /* Classic up/down arrow caps at each end of the track — the "single
+       arrow at each end" style, drawn with the border-triangle trick since
+       that's the only way Chromium/Edge let you customize scrollbar-button
+       content. Firefox has no button-customization API at all, so it just
+       gets the plain thumb/track above (scrollbar-width/-color, set per
+       element where needed) with no arrows — an unavoidable gap, not a bug. */
+    ::-webkit-scrollbar-button:single-button {
+      background-color: var(--bg-subtle);
+      display: block;
+      width: 14px;
+      height: 14px;
+    }
+
+    ::-webkit-scrollbar-button:single-button:vertical:decrement {
+      border-style: solid;
+      border-width: 0 6px 7px 6px;
+      border-color: transparent transparent var(--text-muted) transparent;
+    }
+
+    ::-webkit-scrollbar-button:single-button:vertical:increment {
+      border-style: solid;
+      border-width: 7px 6px 0 6px;
+      border-color: var(--text-muted) transparent transparent transparent;
+    }
+
+    ::-webkit-scrollbar-button:single-button:horizontal:decrement {
+      border-style: solid;
+      border-width: 6px 7px 6px 0;
+      border-color: transparent var(--text-muted) transparent transparent;
+    }
+
+    ::-webkit-scrollbar-button:single-button:horizontal:increment {
+      border-style: solid;
+      border-width: 6px 0 6px 7px;
+      border-color: transparent transparent transparent var(--text-muted);
     }
 
     .wrap {
@@ -337,6 +383,44 @@
     .account-menu .btn {
       width: 100%;
       justify-content: center;
+    }
+
+    .account-menu-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      padding: 9px 8px;
+      border: none;
+      background: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-main);
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .account-menu-row:hover {
+      background: var(--bg-card-hover);
+    }
+
+    .account-menu-row.danger {
+      color: var(--color-fail);
+    }
+
+    .account-menu-back {
+      border: none;
+      background: none;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 6px 8px 10px;
+    }
+
+    .account-menu-back:hover {
+      color: var(--text-main);
     }
 
     /* ------------------------------------------------------- user bar */
@@ -1357,11 +1441,18 @@
       padding: 9px 0;
     }
 
+    /* Every checkbox app-wide uses the theme's orange accent, not the
+       browser's default blue — previously scoped to .check-row only, so
+       plain checkboxes elsewhere (bulk-assign toggle, target checklists)
+       still rendered in the browser's native blue. */
+    input[type=checkbox] {
+      accent-color: var(--theme-primary);
+      cursor: pointer;
+    }
+
     .check-row input[type=checkbox] {
       width: 17px;
       height: 17px;
-      accent-color: var(--theme-primary);
-      cursor: pointer;
       flex-shrink: 0;
     }
 

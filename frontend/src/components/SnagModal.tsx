@@ -5,6 +5,7 @@ import { HOUR, SEVERITIES } from "../services/config";
 import { useActions } from "../hooks/useActions";
 import SidePanel from "./SidePanel";
 import NavIcon from "./NavIcon";
+import SearchDropdown from "./SearchDropdown";
 import type { Severity } from "../types";
 import "./SharpPanel.css";
 
@@ -87,45 +88,55 @@ export default function SnagModal() {
       <div className="form-grid">
         <div className="field">
           <label>Project *</label>
-          <select
-            className="select"
+          <SearchDropdown
             value={projectId}
-            onChange={(e) => { setProjectId(e.target.value); setUnitId(""); setStageId(""); }}
-          >
-            <option value="">Choose</option>
-            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+            onChange={(v) => { setProjectId(v); setUnitId(""); setStageId(""); }}
+            options={[{ value: "", label: "Choose" }, ...projects.map((p) => ({ value: p.id, label: p.name }))]}
+            neutralActive
+          />
           <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Which project this snag belongs to — unit and stage below follow this choice.</div>
         </div>
         <div className="field full"><label>Title *</label><input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Short, specific: what is wrong and where" /></div>
         <div className="field"><label>Unit *</label>
-          <select className="select" value={unitId} onChange={(e) => setUnitId(e.target.value)}>
-            <option value="">Choose</option>
-            {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </select>
+          <SearchDropdown
+            value={unitId}
+            onChange={setUnitId}
+            options={[{ value: "", label: "Choose" }, ...units.map((u) => ({ value: u.id, label: u.name }))]}
+            neutralActive
+          />
         </div>
         <div className="field"><label>Stage *</label>
-          <select className="select" value={stageId} onChange={(e) => setStageId(e.target.value)}>
-            <option value="">Choose</option>
-            {stages.map((x) => <option key={x.stage.id} value={x.stage.id}>{x.stage.name}</option>)}
-          </select>
+          <SearchDropdown
+            value={stageId}
+            onChange={setStageId}
+            options={[{ value: "", label: "Choose" }, ...stages.map((x) => ({ value: x.stage.id, label: x.stage.name }))]}
+            neutralActive
+          />
         </div>
         <div className="field"><label>Quality parameter *</label>
-          <select className="select" value={paramId} onChange={(e) => setParamId(e.target.value)}>
-            <option value="">Choose</option>
-            {params.map((p) => <option key={p.id} value={p.id}>{p.code} · {p.name}</option>)}
-          </select>
+          <SearchDropdown
+            value={paramId}
+            onChange={setParamId}
+            options={[{ value: "", label: "Choose" }, ...params.map((p) => ({ value: p.id, label: `${p.code} · ${p.name}` }))]}
+            neutralActive
+          />
         </div>
         <div className="field"><label>Severity *</label>
-          <select className="select" value={severity} onChange={(e) => setSeverity(e.target.value as Severity)}>
-            {SEVERITIES.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
+          <SearchDropdown
+            searchable={false}
+            value={severity}
+            onChange={(v) => setSeverity(v as Severity)}
+            options={SEVERITIES.map((s) => ({ value: s, label: s }))}
+            neutralActive
+          />
         </div>
         <div className="field"><label>Assign to *</label>
-          <select className="select" value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}>
-            <option value="">Choose</option>
-            {users.map((u) => <option key={u.id} value={u.id}>{u.name} · {u.role}</option>)}
-          </select>
+          <SearchDropdown
+            value={assignedTo}
+            onChange={setAssignedTo}
+            options={[{ value: "", label: "Choose" }, ...users.map((u) => ({ value: u.id, label: `${u.name} · ${u.role}` }))]}
+            neutralActive
+          />
         </div>
         <div className="field"><label>Due by *</label><input className="input" type="datetime-local" value={due} onChange={(e) => setDue(e.target.value)} /></div>
         <div className="field full"><label>Description</label><textarea className="textarea" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Extent, location within the unit, and what rectification is expected." /></div>

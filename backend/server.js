@@ -557,17 +557,6 @@ async function assertOpAllowed(op, session) {
     // etc. on an existing ticket without ever touching reviewStatus (the
     // only field the old check looked at).
     if (existing && !session) { const e = new Error("Sign-in required"); e.status = 401; throw e; }
-    if (op.rec.reviewStatus) {
-      const from = existing ? existing.reviewStatus : "stage-1-screen";
-      if (op.rec.reviewStatus !== from) {
-        const allowed = DRAWING_TRANSITIONS[from] || [];
-        if (!allowed.includes(op.rec.reviewStatus)) {
-          const e = new Error(`Invalid drawing request transition: ${from} -> ${op.rec.reviewStatus}`);
-          e.status = 400;
-          throw e;
-        }
-      }
-    }
     // An anonymous CREATE (the public no-login submission form) only ever
     // legitimately sends description/drawingType/source/requesterName/
     // requestedPriority/projectId — everything privilege-bearing here is
@@ -576,7 +565,11 @@ async function assertOpAllowed(op, session) {
     // gap where an anonymous POST could plant a ticket that's pre-assigned,
     // pre-prioritized, or carries a fabricated approval-history entry.
     // Authenticated creates/edits are untouched — this only fires when
-    // there's no session and no existing record.
+    // there's no session and no existing record. Runs BEFORE the
+    // transition check below so a spoofed `reviewStatus` in the request
+    // body gets silently normalized away instead of surfacing as a
+    // confusing "Invalid transition" 400 to a legitimate anonymous
+    // submitter who happened to send some other status.
     if (!existing && !session) {
       Object.assign(op.rec, {
         reviewStatus: "stage-1-screen",
@@ -592,6 +585,17 @@ async function assertOpAllowed(op, session) {
         submittedByUserId: null,
         isPublic: true
       });
+    }
+    if (op.rec.reviewStatus) {
+      const from = existing ? existing.reviewStatus : "stage-1-screen";
+      if (op.rec.reviewStatus !== from) {
+        const allowed = DRAWING_TRANSITIONS[from] || [];
+        if (!allowed.includes(op.rec.reviewStatus)) {
+          const e = new Error(`Invalid drawing request transition: ${from} -> ${op.rec.reviewStatus}`);
+          e.status = 400;
+          throw e;
+        }
+      }
     }
     return;
   }

@@ -5,6 +5,13 @@ import { dueLabel, ago } from "../shared/helpers";
 import { ESCALATION_DAYS, HOUR } from "../services/config";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
+import Card from "../ui/tw/Card";
+import Btn from "../ui/tw/Btn";
+import Badge, { type BadgeColor } from "../ui/tw/Badge";
+
+const DUE_BADGE_COLOR: Record<"mute" | "fail" | "gate", BadgeColor> = { mute: "gray", fail: "red", gate: "amber" };
+const SEVERITY_BADGE_COLOR: Record<string, BadgeColor> = { Critical: "red", Major: "amber" };
+const STATUS_BADGE_COLOR: Record<string, BadgeColor> = { "In Progress": "blue" };
 
 export default function Snags() {
   const { data, currentProjectId, currentUserId, openSnagModal, openDrawer, apply, toast } = useApp();
@@ -46,40 +53,46 @@ export default function Snags() {
 
   return (
     <div>
-      <div className="page-header">
-        <div className="page-header-left">
-          <div className="page-icon"><NavIcon name="snags" size={20} /></div>
+      <div className="flex items-start justify-between gap-4 flex-wrap mt-0.5 mb-6">
+        <div className="flex gap-3.5 items-start min-w-0">
+          <div className="w-11 h-11 shrink-0 rounded-radius-md bg-primary-light text-primary flex items-center justify-center">
+            <NavIcon name="snags" size={20} />
+          </div>
           <div>
-            <div className="page-title">Snag Register</div>
-            <div className="page-desc">{open.length} open · {overdue.length} overdue · {all.length - open.length} closed</div>
+            <div className="text-xl font-semibold tracking-tight leading-tight">Snag Register</div>
+            <div className="text-[12.5px] text-[var(--text-muted)] mt-1 leading-normal">
+              {open.length} open · {overdue.length} overdue · {all.length - open.length} closed
+            </div>
           </div>
         </div>
-        <div className="page-header-actions">
-          <button className="btn btn-primary btn-sm" onClick={() => openSnagModal({ unitId: "", stageId: "" })}>＋ Raise snag</button>
-        </div>
+        <Btn label="＋ Raise snag" size="sm" onClick={() => openSnagModal({ unitId: "", stageId: "" })} />
       </div>
 
       {escalated.length > 0 && (
-        <div className="card card-pad" style={{ marginBottom: 16, borderColor: "var(--color-fail)", background: "rgba(239,68,68,0.06)" }}>
-          <div style={{ fontSize: 12.5, fontWeight: 800, color: "var(--color-fail)", marginBottom: 8 }}>
+        <Card className="mb-4 border-[var(--color-fail)] bg-[rgba(239,68,68,0.06)]">
+          <div className="text-[12.5px] font-extrabold text-[var(--color-fail)] mb-2">
             ⚠ {escalated.length} snag{escalated.length === 1 ? "" : "s"} escalated — overdue {ESCALATION_DAYS}+ days, needs senior attention
           </div>
           {escalated.map((s) => (
-            <div key={s.id} className="qitem alert" onClick={() => openDrawer({ kind: "snag", id: s.id })} style={{ cursor: "pointer" }}>
-              <div className="qitem-main">
-                <div className="qitem-title">{s.id} · {s.title}</div>
-                <div className="qitem-sub">{snagTarget(data, s)} · assigned to {refLabel(data, "users", s.assignedTo)} · {dueLabel(s.dueAt).text}</div>
+            <div
+              key={s.id}
+              className="flex items-center justify-between gap-3 py-3.5 px-4 border-b border-[var(--border)] cursor-pointer transition-colors last:border-b-0 border-l-4 border-l-[var(--color-fail)] bg-[rgba(239,68,68,0.05)]"
+              onClick={() => openDrawer({ kind: "snag", id: s.id })}
+            >
+              <div className="min-w-0 flex-1">
+                <div className="text-[13px] font-bold">{s.id} · {s.title}</div>
+                <div className="text-[11px] text-[var(--text-muted)] mt-0.5 leading-normal">{snagTarget(data, s)} · assigned to {refLabel(data, "users", s.assignedTo)} · {dueLabel(s.dueAt).text}</div>
               </div>
-              <span className={"badge-tag " + (s.severity === "Critical" ? "crit" : s.severity === "Major" ? "gate" : "mute")}>{s.severity}</span>
+              <Badge color={SEVERITY_BADGE_COLOR[s.severity] || "gray"}>{s.severity}</Badge>
             </div>
           ))}
-        </div>
+        </Card>
       )}
 
-      <div className="panel-card" style={{ minHeight: "70vh" }}>
-        <div className="toolbar">
+      <Card padded={false} className="min-h-[70vh] p-4.5">
+        <div className="flex gap-2.5 items-center flex-wrap mb-4 pb-1">
           <input className="input grow" placeholder="Search snags by title, unit or description…" value={q} onChange={(e) => setQ(e.target.value)} />
-          <div style={{ width: 160 }}>
+          <div className="w-40">
             <SearchDropdown
               searchable={false}
               value={fs}
@@ -93,7 +106,7 @@ export default function Snags() {
               neutralActive
             />
           </div>
-          <div style={{ width: 160 }}>
+          <div className="w-40">
             <SearchDropdown
               searchable={false}
               value={fv}
@@ -107,7 +120,7 @@ export default function Snags() {
               neutralActive
             />
           </div>
-          <div style={{ width: 170 }}>
+          <div className="w-[170px]">
             <SearchDropdown
               searchable={false}
               value={fm}
@@ -122,31 +135,38 @@ export default function Snags() {
           </div>
         </div>
         <div>
-          {list.length === 0 && <div className="empty">No snags match these filters.</div>}
+          {list.length === 0 && <div className="py-7.5 px-5 text-center text-[var(--text-muted)] text-[13px]">No snags match these filters.</div>}
           {list.map((s) => {
             const d = dueLabel(s.dueAt);
             const closed = s.status === "Closed";
             return (
               <div
                 key={s.id}
-                className={"qitem" + (!closed && s.severity === "Critical" ? " alert" : "")}
-                style={closed ? { opacity: 0.6 } : undefined}
+                className={
+                  "flex items-center justify-between gap-3 py-3.5 px-4 border-b border-[var(--border)] cursor-pointer transition-colors last:border-b-0" +
+                  (closed ? " opacity-60" : "") +
+                  (!closed && s.severity === "Critical" ? " border-l-4 border-l-[var(--color-fail)] bg-[rgba(239,68,68,0.05)]" : "")
+                }
                 onClick={() => openDrawer({ kind: "snag", id: s.id })}
               >
-                <div className="qitem-main">
-                  <div className="qitem-title">{s.id} · {s.title}</div>
-                  <div className="qitem-sub">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] font-bold">{s.id} · {s.title}</div>
+                  <div className="text-[11px] text-[var(--text-muted)] mt-0.5 leading-normal">
                     {snagTarget(data, s)} · {refLabel(data, "stages", s.stageId)} ·{" "}
                     {s.paramId ? refLabel(data, "qparams", s.paramId) + " · " : ""}
                     raised by {refLabel(data, "users", s.raisedBy)} {ago(s.raisedAt)} · on {refLabel(data, "users", s.assignedTo)}
                   </div>
                 </div>
-                <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
-                  <span className={"badge-tag " + (s.severity === "Critical" ? "crit" : s.severity === "Major" ? "gate" : "mute")}>{s.severity}</span>
-                  <span className={"badge-tag " + (closed ? "pass" : s.status === "In Progress" ? "wip" : "fail")}>{s.status}</span>
-                  {!closed && <span className={"badge-tag " + d.cls}>{d.text}</span>}
+                <div className="flex gap-1.5 items-center shrink-0">
+                  <Badge color={SEVERITY_BADGE_COLOR[s.severity] || "gray"}>{s.severity}</Badge>
+                  <Badge color={closed ? "green" : STATUS_BADGE_COLOR[s.status] || "red"}>{s.status}</Badge>
+                  {!closed && <Badge color={DUE_BADGE_COLOR[d.cls]}>{d.text}</Badge>}
                   {isAdmin && (
-                    <button className="btn-icon" title="Delete" onClick={(e) => deleteSnag(e, s)} style={{ width: 28, height: 28 }}>
+                    <button
+                      title="Delete"
+                      onClick={(e) => deleteSnag(e, s)}
+                      className="w-7 h-7 shrink-0 rounded-radius-md border border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-muted)] flex items-center justify-center hover:bg-[var(--bg-card-hover)]"
+                    >
                       <NavIcon name="trash" size={13} />
                     </button>
                   )}
@@ -155,7 +175,7 @@ export default function Snags() {
             );
           })}
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

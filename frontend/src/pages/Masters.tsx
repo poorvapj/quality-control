@@ -44,9 +44,17 @@ export default function Masters() {
   }
 
   async function deleteRecord(id: string) {
-    const rec = byId(coll(data, activeMaster), id);
+    const rec = byId(coll(data, activeMaster), id) as any;
     if (!rec) return;
-    if (!confirm(`Delete ${master.label.toLowerCase()} "${(rec as any).name || rec.code || id}"?\n\nThis removes it for everyone on the board.`)) return;
+    // Work Targets have neither a real `name` nor a meaningful `code` — the
+    // project + category combination is what actually identifies one, so
+    // the confirm dialog should show that instead of falling through to the
+    // bare id (which tells the person deleting nothing about which target
+    // it actually is).
+    const identity = activeMaster === "workTargets"
+      ? `${refLabel(data, "projects", rec.projectId)} · ${rec.category}`
+      : (rec.name || rec.code || id);
+    if (!confirm(`Delete ${master.label.toLowerCase()} "${identity}"?\n\nThis removes it for everyone on the board.`)) return;
     await apply([{ op: "delete", coll: activeMaster, id }]);
     toast("Deleted " + id);
   }

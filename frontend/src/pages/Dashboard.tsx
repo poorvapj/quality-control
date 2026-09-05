@@ -12,6 +12,10 @@ import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
 import CalendarRangePicker from "../components/CalendarRangePicker";
 import WeekPicker from "../components/WeekPicker";
+import Card from "../ui/tw/Card";
+import Btn from "../ui/tw/Btn";
+import Badge from "../ui/tw/Badge";
+import Field from "../ui/tw/Field";
 import type { BoardData, Floor, TabKey } from "../types";
 
 const FLOOR_LIST_CAP = 40;
@@ -27,6 +31,12 @@ function completionAt(data: BoardData | null, projectId: string | null, track: "
   return p.status === "done" ? p.at ?? null : null;
 }
 
+/* This page has been converted to Tailwind utilities (+ ui/tw/ primitives)
+   as the pilot for the app-wide migration — see the plan file for why
+   `ui/tw/` exists as a separate subfolder from the pre-existing plain-CSS
+   `ui/` components (Field/Btn/Card/Badge already live elsewhere, e.g.
+   DrawingRequestForm.tsx). Every other page still uses the old
+   index.css classes and is unaffected by this. */
 export default function Dashboard() {
   const { data, currentProjectId, setCurrentProjectId, currentUserId, me, openDrawer, setActiveTab } = useApp();
   const slowSectionRef = useRef<HTMLDivElement>(null);
@@ -112,17 +122,20 @@ export default function Dashboard() {
   // separate page for it) rather than navigating away.
   const stats = [
     {
-      label: "UNITS HANDED OVER", val: `${handed}/${units.length}`, ok: true, icon: "award",
+      label: "UNITS HANDED OVER", val: `${handed}/${units.length}`, tone: "ok" as const, icon: "award",
       foot: pct + "% of all stages complete" + (snagBlockedUnits > 0 ? ` · ${snagBlockedUnits} unit${snagBlockedUnits === 1 ? "" : "s"} blocked by open snags` : ""),
       onClick: () => setActiveTab("board" as TabKey)
     },
-    { label: "OPEN SNAGS", val: openSnags.length, bad: openSnags.length > 0, icon: "bug", foot: critical + " critical", onClick: () => setActiveTab("snags" as TabKey) },
+    { label: "OPEN SNAGS", val: openSnags.length, tone: openSnags.length > 0 ? "bad" as const : undefined, icon: "bug", foot: critical + " critical", onClick: () => setActiveTab("snags" as TabKey) },
     {
-      label: "SLOW HANDOFFS", val: slow.length, warn: slow.length > 0, icon: "clock", foot: "Released past SLA, not acknowledged",
+      label: "SLOW HANDOFFS", val: slow.length, tone: slow.length > 0 ? "warn" as const : undefined, icon: "clock", foot: "Released past SLA, not acknowledged",
       onClick: slow.length > 0 ? () => slowSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }) : undefined
     },
-    { label: "FLOORS CURED", val: `${castFloors}/${floors.length}`, icon: "board", foot: "Bottom-up casting enforced", onClick: () => setActiveTab("board" as TabKey) }
+    { label: "FLOORS CURED", val: `${castFloors}/${floors.length}`, tone: undefined, icon: "board", foot: "Bottom-up casting enforced", onClick: () => setActiveTab("board" as TabKey) }
   ];
+  const STAT_VAL_CLS: Record<string, string> = {
+    ok: "text-[var(--text-main)]", bad: "text-[var(--color-fail)]", warn: "text-[var(--color-gate)]"
+  };
 
   const asg = projectIds.flatMap((pid) => myAssignments(data, pid, currentUserId)).filter((a) => tsInBounds(a.assignedAt, bounds));
   const sng = projectIds.flatMap((pid) => mySnags(data, pid, currentUserId)).filter((s) => tsInBounds(s.raisedAt, bounds));
@@ -173,12 +186,14 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div className="page-header">
-        <div className="page-header-left">
-          <div className="page-icon"><NavIcon name="dashboard" size={20} /></div>
+      <div className="flex items-start justify-between gap-4 flex-wrap mt-0.5 mb-6">
+        <div className="flex gap-3.5 items-start min-w-0">
+          <div className="w-11 h-11 shrink-0 rounded-radius-md bg-primary-light text-primary flex items-center justify-center">
+            <NavIcon name="dashboard" size={20} />
+          </div>
           <div>
-            <div className="page-title">Dashboard</div>
-            <div className="page-desc">
+            <div className="text-xl font-semibold tracking-tight leading-tight">Dashboard</div>
+            <div className="text-[12.5px] text-[var(--text-muted)] mt-1 leading-normal">
               {viewAllProjects
                 ? "Combined KPIs, what needs you, and floor-by-floor progress across all projects."
                 : "Site-wide KPIs, what needs you, and floor-by-floor progress."}
@@ -187,37 +202,40 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="filter-bar" style={{ marginBottom: 24 }}>
-        <div className="field" style={{ maxWidth: 220 }}>
-          <label>Active Project</label>
-          <SearchDropdown
-            value={viewAllProjects ? ALL_PROJECTS_VALUE : (currentProjectId ?? "")}
-            onChange={(v) => {
-              if (v === ALL_PROJECTS_VALUE) { setViewAllProjects(true); return; }
-              setViewAllProjects(false);
-              setCurrentProjectId(v);
-            }}
-            options={[{ value: ALL_PROJECTS_VALUE, label: "All Projects" }, ...allProjects.map((p) => ({ value: p.id, label: p.name }))]}
-            neutralActive
-          />
+      <Card className="flex gap-3.5 flex-wrap mb-6">
+        <div className="max-w-[220px]">
+          <Field label="Active Project">
+            <SearchDropdown
+              value={viewAllProjects ? ALL_PROJECTS_VALUE : (currentProjectId ?? "")}
+              onChange={(v) => {
+                if (v === ALL_PROJECTS_VALUE) { setViewAllProjects(true); return; }
+                setViewAllProjects(false);
+                setCurrentProjectId(v);
+              }}
+              options={[{ value: ALL_PROJECTS_VALUE, label: "All Projects" }, ...allProjects.map((p) => ({ value: p.id, label: p.name }))]}
+              neutralActive
+            />
+          </Field>
         </div>
-        <div className="field" style={{ minWidth: 150 }}>
-          <label>Date Range</label>
-          <SearchDropdown
-            icon="calendar"
-            searchable={false}
-            scrollable={false}
-            value={fRange}
-            onChange={(v) => setFRange(v as DateRange)}
-            options={DATE_RANGES.map((r) => ({ value: r.key, label: r.label }))}
-          />
+        <div className="min-w-[150px]">
+          <Field label="Date Range">
+            <SearchDropdown
+              icon="calendar"
+              searchable={false}
+              scrollable={false}
+              value={fRange}
+              onChange={(v) => setFRange(v as DateRange)}
+              options={DATE_RANGES.map((r) => ({ value: r.key, label: r.label }))}
+            />
+          </Field>
         </div>
         {fRange === "custom" && (
-          <div className="field" style={{ minWidth: 190, position: "relative" }} ref={calendarWrapRef}>
-            <label>Range</label>
-            <button type="button" className="select" style={{ textAlign: "left" }} onClick={() => setCalendarOpen((o) => !o)}>
-              {customFrom && customTo ? customFrom + "  →  " + customTo : "Pick dates"}
-            </button>
+          <div className="min-w-[190px] relative" ref={calendarWrapRef}>
+            <Field label="Range">
+              <button type="button" className="select text-left" onClick={() => setCalendarOpen((o) => !o)}>
+                {customFrom && customTo ? customFrom + "  →  " + customTo : "Pick dates"}
+              </button>
+            </Field>
             {calendarOpen && (
               <CalendarRangePicker
                 from={customFrom}
@@ -229,11 +247,12 @@ export default function Dashboard() {
           </div>
         )}
         {fRange === "weekNumber" && (
-          <div className="field" style={{ minWidth: 170, position: "relative" }} ref={weekWrapRef}>
-            <label>Week</label>
-            <button type="button" className="select" style={{ textAlign: "left" }} onClick={() => setWeekPickerOpen((o) => !o)}>
-              Wk {weekNum}, {weekYear}
-            </button>
+          <div className="min-w-[170px] relative" ref={weekWrapRef}>
+            <Field label="Week">
+              <button type="button" className="select text-left" onClick={() => setWeekPickerOpen((o) => !o)}>
+                Wk {weekNum}, {weekYear}
+              </button>
+            </Field>
             {weekPickerOpen && (
               <WeekPicker
                 year={weekYear}
@@ -245,74 +264,85 @@ export default function Dashboard() {
             )}
           </div>
         )}
-      </div>
+      </Card>
 
-      <div className="micro-label" style={{ marginBottom: 10 }}>KPI OVERVIEW</div>
-      <div className="stats-grid" style={{ marginBottom: 24 }}>
+      <div className="text-[9px] font-semibold uppercase tracking-[0.1em] text-[var(--text-sub)] mb-1">KPI OVERVIEW</div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 mb-7">
         {stats.map((s) => (
-          <div
+          <Card
             key={s.label}
-            className={"stat-card" + (s.bad ? " bad" : s.warn ? " warn" : s.ok ? " ok" : "")}
-            style={s.onClick ? { cursor: "pointer" } : undefined}
+            className={"relative transition-shadow" + (s.onClick ? " cursor-pointer" : "")}
             onClick={s.onClick}
           >
-            <div className="micro-label">{s.label}</div>
-            <div className="stat-val">{s.val}</div>
-            <div className="stat-foot">{s.foot}</div>
-            <div className="stat-icon"><NavIcon name={s.icon} size={15} /></div>
-          </div>
+            <div className="text-[9px] font-semibold uppercase tracking-[0.1em] text-[var(--text-sub)] mb-1">{s.label}</div>
+            <div className={`text-[32px] font-extrabold mt-1.5 tracking-tight ${s.tone ? STAT_VAL_CLS[s.tone] : "text-[var(--text-main)]"}`}>{s.val}</div>
+            <div className="text-[10px] text-[var(--text-sub)] mt-1 font-semibold">{s.foot}</div>
+            <div className="absolute top-3.5 right-3.5 w-8 h-8 rounded-radius-sm bg-[var(--bg-subtle)] text-[var(--text-muted)] flex items-center justify-center">
+              <NavIcon name={s.icon} size={15} />
+            </div>
+          </Card>
         ))}
       </div>
 
-      <div className="section-header">
-        <div className="section-title"><span className="icon-mono"><NavIcon name="pin" size={14} /></span> WHAT NEEDS ME</div>
-        <div className="section-sub">{myOpen} open item{myOpen === 1 ? "" : "s"} for {me()?.name || ""}</div>
+      <div className="flex items-center justify-between gap-3 flex-wrap my-7">
+        <div className="text-[15px] font-semibold tracking-tight flex items-center gap-2">
+          <span className="inline-block grayscale opacity-70"><NavIcon name="pin" size={14} /></span> WHAT NEEDS ME
+        </div>
+        <div className="text-[11px] text-[var(--text-muted)] font-medium">{myOpen} open item{myOpen === 1 ? "" : "s"} for {me()?.name || ""}</div>
       </div>
-      <div className="card">
+      <Card padded={false}>
         {myOpen === 0
-          ? <div className="empty">🎉 Nothing assigned to you right now.</div>
+          ? <div className="py-7.5 px-5 text-center text-[var(--text-muted)] text-[13px]">🎉 Nothing assigned to you right now.</div>
           : <>{asg.slice(0, 4).map((a) => <AssignRow key={a.id} a={a} />)}{sng.slice(0, 4).map((s) => <SnagRow key={s.id} s={s} />)}</>}
-      </div>
+      </Card>
 
       {slow.length > 0 && (
         <div ref={slowSectionRef}>
-          <div className="section-header">
-            <div className="section-title"><span className="icon-mono"><NavIcon name="clock" size={14} /></span> SLOW HANDOFFS</div>
-            <div className="section-sub">Released to a trade but never acknowledged — these are the huddle agenda</div>
+          <div className="flex items-center justify-between gap-3 flex-wrap my-7">
+            <div className="text-[15px] font-semibold tracking-tight flex items-center gap-2">
+              <span className="inline-block grayscale opacity-70"><NavIcon name="clock" size={14} /></span> SLOW HANDOFFS
+            </div>
+            <div className="text-[11px] text-[var(--text-muted)] font-medium">Released to a trade but never acknowledged — these are the huddle agenda</div>
           </div>
-          <div className="card">
+          <Card padded={false}>
             {slow.slice(0, 6).map((s, i) => {
               const name = s.targetType === "unit" ? refLabel(data, "units", s.targetId) : refLabel(data, "floors", s.targetId);
               return (
-                <div key={i} className="qitem warn" onClick={() => openDrawer({ kind: s.targetType, id: s.targetId })}>
-                  <div className="qitem-main">
-                    <div className="qitem-title">{name} · {s.stage.name}</div>
-                    <div className="qitem-sub">Waiting {Math.round(s.hrs)}h · SLA {s.sla}h · owner role {s.stage.role}</div>
+                <div
+                  key={i}
+                  className="flex items-center justify-between gap-3 py-3.5 px-4 border-b border-[var(--border)] cursor-pointer transition-colors border-l-4 border-l-[var(--color-gate)] bg-[rgba(249,115,22,0.05)]"
+                  onClick={() => openDrawer({ kind: s.targetType, id: s.targetId })}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] font-bold">{name} · {s.stage.name}</div>
+                    <div className="text-[11px] text-[var(--text-muted)] mt-0.5 leading-normal">Waiting {Math.round(s.hrs)}h · SLA {s.sla}h · owner role {s.stage.role}</div>
                   </div>
-                  <span className="badge-tag gate">{Math.round(s.hrs - s.sla)}h OVER</span>
+                  <Badge color="amber">{Math.round(s.hrs - s.sla)}h OVER</Badge>
                 </div>
               );
             })}
-          </div>
+          </Card>
         </div>
       )}
 
-      <div className="section-header">
-        <div className="section-title"><span className="icon-mono"><NavIcon name="trend" size={14} /></span> FLOOR PROGRESS</div>
+      <div className="flex items-center justify-between gap-3 flex-wrap my-7">
+        <div className="text-[15px] font-semibold tracking-tight flex items-center gap-2">
+          <span className="inline-block grayscale opacity-70"><NavIcon name="trend" size={14} /></span> FLOOR PROGRESS
+        </div>
         {orderedFloors.length > FLOOR_LIST_CAP && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div className="section-sub">
+          <div className="flex items-center gap-2.5">
+            <div className="text-[11px] text-[var(--text-muted)] font-medium">
               Floors {floorPage * FLOOR_LIST_CAP + 1}–{Math.min(orderedFloors.length, (floorPage + 1) * FLOOR_LIST_CAP)} of {orderedFloors.length}
               {viewAllProjects ? " — a spread across every project, not just one" : ""}
             </div>
-            <div style={{ display: "flex", gap: 4 }}>
-              <button className="btn btn-secondary btn-sm" disabled={floorPage === 0} onClick={() => setFloorPage((p) => Math.max(0, p - 1))}>‹ Prev</button>
-              <button className="btn btn-secondary btn-sm" disabled={floorPage >= floorPageCount - 1} onClick={() => setFloorPage((p) => Math.min(floorPageCount - 1, p + 1))}>Next ›</button>
+            <div className="flex gap-1">
+              <Btn color="secondary" size="sm" label="‹ Prev" disabled={floorPage === 0} onClick={() => setFloorPage((p) => Math.max(0, p - 1))} />
+              <Btn color="secondary" size="sm" label="Next ›" disabled={floorPage >= floorPageCount - 1} onClick={() => setFloorPage((p) => Math.min(floorPageCount - 1, p + 1))} />
             </div>
           </div>
         )}
       </div>
-      <div className="card card-pad">
+      <Card>
         {floorRows.map((f) => {
           const us = floorUnits(data, f.projectId, f.id);
           const s = us.map((u) => unitSummary(data, f.projectId, u.id));
@@ -321,26 +351,28 @@ export default function Dashboard() {
           const p = Math.round((d / t) * 100);
           const released = floorReleased(data, f.projectId, f.id);
           return (
-            <div key={f.id} style={{ marginBottom: 11 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, fontWeight: 700 }}>
+            <div key={f.id} className="mb-2.5 last:mb-0">
+              <div className="flex justify-between text-[11.5px] font-bold">
                 <span>
                   {viewAllProjects ? refLabel(data, "projects", f.projectId) + " · " : ""}{f.name}{" "}
-                  <span style={{ color: "var(--text-sub)", fontWeight: 600 }}>· {us.length} units{released ? "" : " · structure in progress"}</span>
+                  <span className="text-[var(--text-sub)] font-semibold">· {us.length} units{released ? "" : " · structure in progress"}</span>
                 </span>
-                <span style={{ color: "var(--text-muted)" }}>{p}%</span>
+                <span className="text-[var(--text-muted)]">{p}%</span>
               </div>
-              <div className="workload-bar"><div className="workload-fill" style={{ width: p + "%", background: p === 100 ? "var(--color-pass)" : "var(--theme-primary)" }}></div></div>
+              <div className="h-1.5 rounded-full bg-[var(--bg-subtle)] overflow-hidden mt-1.5">
+                <div className="h-full rounded-full" style={{ width: p + "%", background: p === 100 ? "var(--color-pass)" : "var(--theme-primary)" }} />
+              </div>
             </div>
           );
         })}
-        <div className="legend-bar" style={{ marginTop: 6 }}>
+        <div className="flex flex-wrap gap-3 mt-3.5 pt-3.5 border-t border-[var(--border)] text-[11px] text-[var(--text-muted)]">
           {bySeverity.map((b) => (
-            <div key={b.sev} className="legend-item">
-              <span className={"badge-tag " + (b.sev === "Critical" ? "crit" : b.sev === "Major" ? "gate" : "mute")}>{b.n} {b.sev}</span>
+            <div key={b.sev} className="flex items-center gap-1.5">
+              <Badge color={b.sev === "Critical" ? "red" : b.sev === "Major" ? "amber" : "gray"}>{b.n} {b.sev}</Badge>
             </div>
           ))}
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

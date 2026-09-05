@@ -117,6 +117,18 @@ export default function RecordModal() {
     if (!out.code && out.id) out.code = out.id;
     if (master!.fields.some((f) => f.k === "projectId") && !out.projectId) out.projectId = currentProjectId;
 
+    // A second active Work Target for the same project+category would
+    // silently double the "planned" total the DPR report rolls up (it sums
+    // every matching target) without any visible sign why — block it here
+    // rather than let two rows quietly disagree with what DprForm's own
+    // single-target lookup shows.
+    if (recordModal!.master === "workTargets") {
+      const dup = coll(data, "workTargets").some(
+        (t: any) => t.id !== out.id && t.active !== false && t.projectId === out.projectId && t.category === out.category
+      );
+      if (dup) { toast("A Work Target for this project + category already exists"); return; }
+    }
+
     await apply([{ op: "upsert", coll: recordModal!.master, rec: out }]);
     closeRecordModal();
     toast((recordModal!.id ? "Updated " : "Created ") + (out.name || out.code || out.id));

@@ -2,13 +2,15 @@ import React, { useEffect, useRef, useState } from "react";
 import { useApp } from "../../context/AppContext";
 import { ROLES } from "../../services/config";
 import { coll } from "../../shared/rules";
-import SearchDropdown from "../../components/SearchDropdown";
+import NavIcon from "../../components/NavIcon";
 import "./Header.css";
 
 export default function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
   const { data, currentUserId, setCurrentUserId, me, logout } = useApp();
   const [dark, setDark] = useState(() => localStorage.getItem("neoteric_theme") !== "light");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuView, setMenuView] = useState<"menu" | "switch">("menu");
+  const [switchQ, setSwitchQ] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
 
@@ -24,6 +26,11 @@ export default function Header({ onToggleSidebar }: { onToggleSidebar: () => voi
     document.addEventListener("click", onDocClick);
     return () => document.removeEventListener("click", onDocClick);
   }, []);
+
+  // Always land back on the main menu (not mid-switch) the next time it opens.
+  useEffect(() => {
+    if (!menuOpen) { setMenuView("menu"); setSwitchQ(""); }
+  }, [menuOpen]);
 
   const toggleTheme = () => {
     const next = !dark;
@@ -74,24 +81,63 @@ export default function Header({ onToggleSidebar }: { onToggleSidebar: () => voi
             </button>
             {menuOpen && (
               <div className="account-menu open" ref={menuRef}>
-                <div className="account-menu-header">
-                  <div className="n">{u ? u.name : "—"}</div>
-                  <div className="r">{roleLabel}</div>
-                </div>
-                {u?.id === "U-ADMIN" && (
+                {menuView === "menu" ? (
                   <>
-                    <label className="micro-label">Switch role</label>
-                    <div style={{ marginBottom: 10 }}>
-                      <SearchDropdown
-                        value={currentUserId ?? ""}
-                        onChange={setCurrentUserId}
-                        options={users.map((usr) => ({ value: usr.id, label: `${usr.name} · ${usr.role}` }))}
-                        neutralActive
+                    <div className="account-menu-header">
+                      <div className="n">{u ? u.name : "—"}</div>
+                      <div className="r">{roleLabel}</div>
+                    </div>
+                    {u?.id === "U-ADMIN" && (
+                      <button className="account-menu-row" onClick={() => setMenuView("switch")}>
+                        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: 14 }}>⇄</span> Switch Account
+                        </span>
+                        <span style={{ color: "var(--theme-primary)", fontWeight: 800 }}>›</span>
+                      </button>
+                    )}
+                    <button className="account-menu-row danger" onClick={() => { setMenuOpen(false); logout(); }}>
+                      <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 14 }}>⏻</span> Sign out
+                      </span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button className="account-menu-back" onClick={() => setMenuView("menu")}>‹ Back</button>
+                    <div style={{ position: "relative", padding: "0 4px 8px" }}>
+                      <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", pointerEvents: "none" }}>
+                        <NavIcon name="search" size={13} />
+                      </span>
+                      <input
+                        autoFocus
+                        className="input"
+                        style={{ width: "100%", paddingLeft: 30 }}
+                        placeholder="Search…"
+                        value={switchQ}
+                        onChange={(e) => setSwitchQ(e.target.value)}
                       />
+                    </div>
+                    <div style={{ maxHeight: 260, overflowY: "auto" }}>
+                      {users
+                        .filter((usr) => !switchQ.trim() || usr.name.toLowerCase().includes(switchQ.trim().toLowerCase()))
+                        .map((usr) => {
+                          const active = usr.id === currentUserId;
+                          return (
+                            <button
+                              key={usr.id}
+                              className="account-menu-row"
+                              onClick={() => { setCurrentUserId(usr.id); setMenuView("menu"); setMenuOpen(false); }}
+                            >
+                              <span style={{ color: active ? "var(--theme-primary)" : "var(--text-main)", fontWeight: active ? 800 : 600 }}>
+                                {usr.name} <span style={{ color: "var(--text-muted)", fontWeight: 500 }}>— {ROLES[usr.role]?.name || usr.role}</span>
+                              </span>
+                              {active && <span style={{ color: "var(--theme-primary)", flexShrink: 0 }}><NavIcon name="check" size={14} /></span>}
+                            </button>
+                          );
+                        })}
                     </div>
                   </>
                 )}
-                <button className="btn btn-secondary btn-sm" onClick={() => { setMenuOpen(false); logout(); }}>Logout</button>
               </div>
             )}
           </div>

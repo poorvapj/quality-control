@@ -17,6 +17,7 @@ import Masters from "./pages/Masters";
 import DailyProgressReport from "./pages/DailyProgressReport";
 import DrawingRequests from "./pages/DrawingRequests";
 import Backups from "./pages/Backups";
+import AuditLog from "./pages/AuditLog";
 
 export default function App() {
   const { loggedIn, currentUserId, activeTab } = useApp();
@@ -34,14 +35,15 @@ export default function App() {
     masters: <Masters />,
     dpr: <DailyProgressReport />,
     drawingRequests: <DrawingRequests />,
-    backups: <Backups />
+    backups: <Backups />,
+    auditLog: <AuditLog />
   };
 
-  // Team and Backups are admin-only — a stale activeTab (e.g. from before
-  // this restriction existed) should fall back to Dashboard, not just hide
-  // the nav link while still rendering the page underneath. Masters is open
-  // to everyone now, so it's excluded from this check.
-  const restrictedTab = (activeTab === "team" || activeTab === "backups") && !isAdmin;
+  // Team, Backups, and Audit Log are admin-only — a stale activeTab (e.g.
+  // from before this restriction existed) should fall back to Dashboard,
+  // not just hide the nav link while still rendering the page underneath.
+  // Masters is open to everyone now, so it's excluded from this check.
+  const restrictedTab = (activeTab === "team" || activeTab === "backups" || activeTab === "auditLog") && !isAdmin;
 
   return (
     <MainLayout>
