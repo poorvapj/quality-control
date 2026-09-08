@@ -29,7 +29,12 @@ export default function Drawer() {
       <div className="overlay open" onClick={closeDrawer}></div>
       <div className="drawer-sheet open sharp-panel">
         {drawer.kind === "unit" || drawer.kind === "floor"
-          ? <TrackDrawer kind={drawer.kind} id={drawer.id} />
+          // key forces a fresh mount (and a fresh initial-tab decision, see
+          // TrackDrawer's useState below) every time a different unit/floor
+          // opens — without this, clicking one unit then another without
+          // the drawer fully closing in between reused the same component
+          // instance and kept whichever tab the FIRST unit had landed on.
+          ? <TrackDrawer key={drawer.kind + ":" + drawer.id} kind={drawer.kind} id={drawer.id} />
           : drawer.kind === "snag"
           ? <SnagDrawer id={drawer.id} />
           : <UserDrawer id={drawer.id} />}

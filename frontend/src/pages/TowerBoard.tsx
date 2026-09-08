@@ -103,7 +103,15 @@ export default function TowerBoard() {
                       className={"cell" + (s.locked ? " lockedcell" : "") + (s.fail ? " pulse" : "") + (hasSnag ? " has-snag" : "") + (hasResolvedOnly ? " has-resolved-snag" : "")}
                       style={{ background: bg }}
                       title={tip}
-                      onClick={() => { if (!s.locked) openDrawer({ kind: "unit", id: u.id }); }}
+                      // Always opens — a "locked" unit can still carry a
+                      // real open snag (the has-snag orange override paints
+                      // right over the locked-gray tile, see index.css), and
+                      // that was previously unclickable: the tile looked
+                      // like an urgent alert but silently did nothing.
+                      // Viewing the drawer is harmless either way — actions
+                      // on individual stages are still gated separately by
+                      // blockReason()/canAct(), not by this click.
+                      onClick={() => openDrawer({ kind: "unit", id: u.id })}
                     >
                       {u.seq != null ? u.seq : u.code}
                     </div>
