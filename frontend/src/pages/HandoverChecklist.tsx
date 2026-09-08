@@ -59,14 +59,6 @@ export default function HandoverChecklist() {
   const hoiPassed = mapped ? units.filter((u) => prog(data, u.id, "STG-HOI").status === "done").length : 0;
   const hooPassed = mapped ? units.filter((u) => prog(data, u.id, "STG-HOO").status === "done").length : 0;
 
-  // Early in a project every unit on a floor is blocked for the exact same
-  // reason ("Structure not released — Floor X is still casting"). This is
-  // shown once as an informational banner — it never disables the forms
-  // (Internal/Owner possession checklists are a paperwork record, not a
-  // construction-sequence gate).
-  const hoiBlocks = mapped ? units.map((u) => blockReason(data, projectId, "unit", u.id, hoiIdx)) : [];
-  const sharedHoiBlock = hoiBlocks.length > 0 && hoiBlocks.every((b) => b && b === hoiBlocks[0]) ? hoiBlocks[0] : null;
-
   return (
     <div>
       <PageHeader />
@@ -104,35 +96,86 @@ export default function HandoverChecklist() {
         </Card>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3.5 mb-5">
-            <PossessionSummaryCard label="Internal Possession" passed={hoiPassed} total={units.length} />
-            <PossessionSummaryCard label="Owner Possession" passed={hooPassed} total={units.length} />
-          </div>
-
-          {sharedHoiBlock && (
-            <Card className="mb-5 border-[var(--color-gate)] bg-[rgba(249,115,22,0.06)]">
-              <div className="text-[12.5px] font-bold text-[var(--color-gate)]">⚠ {sharedHoiBlock}</div>
-              <div className="text-[11.5px] text-[var(--text-muted)] mt-1">
-                Informational only — the Internal and Owner possession forms below can still be opened and filled.
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+            <Card>
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Total Units</div>
+                  <div className="text-2xl font-extrabold leading-none">{units.length}</div>
+                  <div className="text-[10.5px] text-[var(--text-sub)] font-semibold mt-1.5">
+                    {fFloor === ALL_FLOORS ? "Across all floors" : "On selected floor"}
+                  </div>
+                </div>
+                <div className="w-7 h-7 rounded-radius-sm bg-[var(--bg-subtle)] text-[var(--text-muted)] flex items-center justify-center shrink-0">
+                  <NavIcon name="handover" size={13} />
+                </div>
               </div>
             </Card>
-          )}
+            <Card>
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Internal Completed</div>
+                  <div className="text-2xl font-extrabold leading-none">{hoiPassed}/{units.length}</div>
+                  <div className="text-[10.5px] text-[var(--text-sub)] font-semibold mt-1.5">
+                    {units.length ? Math.round((hoiPassed / units.length) * 100) : 0}% completed
+                  </div>
+                </div>
+                <div className="w-7 h-7 rounded-radius-sm bg-[rgba(34,197,94,0.12)] text-[var(--color-pass)] flex items-center justify-center shrink-0">
+                  <NavIcon name="check" size={13} />
+                </div>
+              </div>
+            </Card>
+            <Card>
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Owner Completed</div>
+                  <div className="text-2xl font-extrabold leading-none">{hooPassed}/{units.length}</div>
+                  <div className="text-[10.5px] text-[var(--text-sub)] font-semibold mt-1.5">
+                    {units.length ? Math.round((hooPassed / units.length) * 100) : 0}% completed
+                  </div>
+                </div>
+                <div className="w-7 h-7 rounded-radius-sm bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                  <NavIcon name="team" size={13} />
+                </div>
+              </div>
+            </Card>
+            <Card>
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Pending</div>
+                  <div className="text-2xl font-extrabold leading-none">{units.length - hoiPassed}</div>
+                  <div className="text-[10.5px] text-[var(--text-sub)] font-semibold mt-1.5">
+                    {units.length ? Math.round(((units.length - hoiPassed) / units.length) * 100) : 0}% pending
+                  </div>
+                </div>
+                <div className="w-7 h-7 rounded-radius-sm bg-primary-light text-primary flex items-center justify-center shrink-0">
+                  <NavIcon name="clock" size={13} />
+                </div>
+              </div>
+            </Card>
+          </div>
 
           <Card padded={false} className="p-[18px]">
             <Table
               columns={["Unit", "Internal Possession", "Owner Possession"]}
               empty="No units match these filters."
+              maxHeight="560px"
             >
               {units.map((u) => {
                 const floorName = refLabel(data, "floors", u.floorId);
                 return (
                   <TableRow key={u.id}>
-                    <TableCell strong>{u.name}</TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center gap-2 font-bold">
+                        <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                        {u.name}
+                      </span>
+                    </TableCell>
                     <TableCell>
                       <StageCell
                         unitId={u.id} unitName={u.name} floorName={floorName} projectName={project?.name || ""}
                         idx={hoiIdx} joined={hoiStage!} myRole={myRole} onOpenForm={setActiveForm} data={data}
-                        currentProjectId={projectId} suppressReason={!!sharedHoiBlock}
+                        currentProjectId={projectId} solid
                         stageDesc="Civil / QC internal inspection before owner possession."
                       />
                     </TableCell>
@@ -140,7 +183,7 @@ export default function HandoverChecklist() {
                       <StageCell
                         unitId={u.id} unitName={u.name} floorName={floorName} projectName={project?.name || ""}
                         idx={hooIdx} joined={hooStage!} myRole={myRole} onOpenForm={setActiveForm} data={data}
-                        currentProjectId={projectId} suppressReason={!!sharedHoiBlock}
+                        currentProjectId={projectId} solid={false}
                         stageDesc="Final owner possession and handover inspection."
                       />
                     </TableCell>
@@ -154,21 +197,6 @@ export default function HandoverChecklist() {
 
       <PossessionForm form={activeForm} onDone={() => setActiveForm(null)} />
     </div>
-  );
-}
-
-function PossessionSummaryCard({ label, passed, total }: { label: string; passed: number; total: number }) {
-  const pct = total ? Math.round((passed / total) * 100) : 0;
-  const pending = total - passed;
-  return (
-    <Card>
-      <div className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">{label}</div>
-      <div className="text-2xl font-extrabold leading-none">{passed} / {total}</div>
-      <div className="h-1.5 rounded-full bg-[var(--bg-subtle)] overflow-hidden mt-2.5">
-        <div className="h-full rounded-full" style={{ width: pct + "%", background: pct === 0 ? "var(--bg-subtle)" : pct === 100 ? "var(--color-pass)" : "var(--theme-primary)" }} />
-      </div>
-      <div className="text-[11px] text-[var(--text-sub)] font-semibold mt-2">{pct}% completed · {pending} pending</div>
-    </Card>
   );
 }
 
@@ -191,36 +219,51 @@ function PageHeader() {
 }
 
 function StageCell({
-  unitId, unitName, floorName, projectName, idx, joined, myRole, onOpenForm, data, currentProjectId, suppressReason, stageDesc
+  unitId, unitName, floorName, projectName, idx, joined, myRole, onOpenForm, data, currentProjectId, solid, stageDesc
 }: {
   unitId: string; unitName: string; floorName: string; projectName: string; idx: number;
   joined: ReturnType<typeof trackStages>[number];
   myRole: () => any; onOpenForm: (f: ActiveForm) => void;
-  data: any; currentProjectId: string | null; suppressReason?: boolean; stageDesc: string;
+  data: any; currentProjectId: string | null; solid: boolean; stageDesc: string;
 }) {
   const p = prog(data, unitId, joined.stage.id);
   const done = p.status === "done";
   const fail = p.status === "fail";
   // Deliberately NOT gating the button on blockReason() — a Possession
   // checklist is a walkthrough/paperwork record, not a construction-sequence
-  // gate, so "structure not released yet" is informational only here
-  // (still shown as a small note) and must never stop someone opening or
-  // filling the form. blockReason() itself is untouched — it still gates
-  // every other stage in Drawer.tsx exactly as before.
+  // gate, so "structure not released yet" is informational only (shown as
+  // the row's own sub-text, e.g. "Waiting on QC GATE 4") and must never
+  // stop someone opening or filling the form. blockReason() itself is
+  // untouched — it still gates every other stage in Drawer.tsx as before.
   const block = blockReason(data, currentProjectId, "unit", unitId, idx);
+  const openSnags = coll(data, "snags").filter((s: any) => s.unitId === unitId && s.status !== "Closed");
   const mine = canAct(myRole(), joined.stage);
   const chk = joined.map.checklistId ? byId(coll(data, "checklists"), joined.map.checklistId) : null;
 
+  const subtext = fail && p.note
+    ? p.note
+    : openSnags.length > 0
+    ? `Open snag on this unit (${openSnags.length})`
+    : block || null;
+
   return (
-    <div className="flex items-center gap-2 flex-wrap">
-      {done && <StatusBadge status="Completed" label="Passed" />}
-      {fail && <StatusBadge status="Snagged" label="Failed" />}
-      {fail && p.note && <span className="text-[11px] text-[var(--text-muted)]">{p.note}</span>}
+    <div className="flex items-center gap-3 flex-wrap">
+      <div>
+        {done ? (
+          <StatusBadge status="Completed" label="Completed" />
+        ) : fail ? (
+          <StatusBadge status="Snagged" label="Failed" />
+        ) : (
+          <StatusBadge status={solid ? "Pending" : "Locked"} label={solid ? "Pending" : "Waiting"} />
+        )}
+        {!done && subtext && <div className="text-[10.5px] text-[var(--text-muted)] mt-1 max-w-[220px]">{subtext}</div>}
+      </div>
       {mine && chk ? (
         <Btn
-          label={done ? "View / Refill" : fail ? "Rework" : "Fill Form"}
+          label={(done ? "View / Refill" : fail ? "Rework" : "Fill Form") + " →"}
           size="sm"
-          color={fail ? "danger" : done ? "secondary" : "primary"}
+          color={fail ? "danger" : done || !solid ? "secondary" : "primary"}
+          className={!done && !fail && !solid ? "!bg-transparent !border-primary !text-primary" : ""}
           onClick={() => onOpenForm({
             unitId, unitName, floorName, projectName,
             stageId: joined.stage.id, stageName: joined.stage.name, stageDesc, checklistId: chk.id
@@ -229,7 +272,6 @@ function StageCell({
       ) : (
         !done && !fail && <span className="text-[11px] text-[var(--text-muted)]">Not started</span>
       )}
-      {block && !suppressReason && <span className="text-[10.5px] text-[var(--text-muted)]">⚠ {block}</span>}
     </div>
   );
 }

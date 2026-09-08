@@ -7,19 +7,32 @@ import React from "react";
    Extracted from HandoverChecklist.tsx's original hand-rolled table so
    later page conversions reuse the same markup instead of retyping it. */
 export default function Table({
-  columns, children, empty = "No records found."
+  columns, children, empty = "No records found.", maxHeight
 }: {
   columns: string[];
   children: React.ReactNode;
   empty?: string;
+  /** Caps the table body's height and makes it scroll internally (header
+   *  stays put, sticky) — e.g. "480px", for tables that can otherwise grow
+   *  to hundreds of rows (every unit on a floor/project). Omit for a
+   *  table that should just size to its content, as before. */
+  maxHeight?: string;
 }) {
   const hasRows = React.Children.count(children) > 0;
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto" style={maxHeight ? { maxHeight, overflowY: "auto" } : undefined}>
       <table className="w-full text-[13px] border-collapse">
         <thead>
           <tr className="text-left text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
-            {columns.map((c) => <th key={c} className="pb-2.5 pr-4 last:pr-0">{c}</th>)}
+            {columns.map((c) => (
+              <th
+                key={c}
+                className="pb-2.5 pr-4 last:pr-0 bg-[var(--bg-card)]"
+                style={maxHeight ? { position: "sticky", top: 0, zIndex: 1 } : undefined}
+              >
+                {c}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
