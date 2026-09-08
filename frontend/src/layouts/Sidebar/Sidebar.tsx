@@ -1,15 +1,20 @@
 import React, { useEffect, useState } from "react";
 import { useApp } from "../../context/AppContext";
 import { coll, myAssignments, myReleases } from "../../shared/rules";
+import { hasModuleGrant } from "../../shared/permissionMatrix";
 import NavIcon from "../../components/NavIcon";
 import type { TabKey } from "../../types";
 import "./Sidebar.css";
 
-interface NavItem { key: TabKey; icon: string; label: string; badge?: number }
+interface NavItem { key: TabKey; icon: string; label: string; badge?: number; children?: NavItem[] }
 
 export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: { open: boolean; collapsed: boolean; onNavigate: () => void }) {
   const { activeTab, setActiveTab, data, currentUserId, currentProjectId } = useApp();
   const isAdmin = currentUserId === "U-ADMIN";
+  const canViewTeam = isAdmin || hasModuleGrant(data, currentUserId, "team", "view");
+  const canViewMasters = isAdmin || hasModuleGrant(data, currentUserId, "masters", "view");
+  const canViewBackups = isAdmin || hasModuleGrant(data, currentUserId, "backups", "view");
+  const canViewAuditLog = isAdmin || hasModuleGrant(data, currentUserId, "auditLog", "view");
 
   // Icon-only collapse only ever makes sense on desktop. A stale
   // collapsed=true from localStorage (e.g. set on desktop, then this page
@@ -23,6 +28,7 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
     return () => mq.removeEventListener("change", onChange);
   }, []);
   const collapsed = collapsedProp && !isMobile;
+  const [handoverOpen, setHandoverOpen] = useState(activeTab === "handoverInternal" || activeTab === "handoverOwner");
 
   const workBadge =
     myAssignments(data, currentProjectId, currentUserId).length + myReleases(data, currentProjectId, currentUserId).length;
@@ -35,9 +41,15 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
       items: [
         { key: "work", icon: "work", label: "My Work", badge: workBadge },
         { key: "board", icon: "board", label: "Tower Board" },
-        { key: "handoverChecklist", icon: "handover", label: "Handover Checklist" },
+        {
+          key: "handoverInternal", icon: "handover", label: "Handover Checklist",
+          children: [
+            { key: "handoverInternal", icon: "handover", label: "Internal Possession" },
+            { key: "handoverOwner", icon: "handover", label: "Owner Possession" }
+          ]
+        },
         { key: "snags", icon: "snags", label: "Snags", badge: snagBadge },
-        ...(isAdmin ? [{ key: "team" as TabKey, icon: "team", label: "Team" }] : []),
+        ...(canViewTeam ? [{ key: "team" as TabKey, icon: "team", label: "Team" }] : []),
         { key: "dpr", icon: "dpr", label: "Daily Progress Report" },
         { key: "drawingRequests", icon: "drawing", label: "Drawing Requests" }
       ]
@@ -45,9 +57,10 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
     {
       label: "Administration",
       items: [
-        ...(isAdmin ? [{ key: "masters" as TabKey, icon: "masters", label: "Masters" }] : []),
-        ...(isAdmin ? [{ key: "backups" as TabKey, icon: "database", label: "Backups" }] : []),
-        ...(isAdmin ? [{ key: "auditLog" as TabKey, icon: "clock", label: "Audit Logs" }] : [])
+        ...(canViewMasters ? [{ key: "masters" as TabKey, icon: "masters", label: "Masters" }] : []),
+        ...(canViewBackups ? [{ key: "backups" as TabKey, icon: "database", label: "Backups" }] : []),
+        ...(canViewAuditLog ? [{ key: "auditLog" as TabKey, icon: "clock", label: "Audit Logs" }] : []),
+        ...(isAdmin ? [{ key: "permissionMatrix" as TabKey, icon: "permissions", label: "Permission Matrix" }] : [])
       ]
     }
   ];
@@ -124,53 +137,99 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
               )}
 
               {g.items.map((it) => {
-                const isActive = activeTab === it.key;
+                const hasChildren = !!it.children?.length;
+                const isActive = !hasChildren && activeTab === it.key;
+                const childActive = hasChildren && it.children!.some((c) => c.key === activeTab);
                 return (
-                  <button
-                    key={it.key}
-                    onClick={() => { setActiveTab(it.key); onNavigate(); }}
-                    className={"nx-nav-item" + (isActive ? " nx-nav-item--active" : "")}
-                    title={collapsed ? it.label : undefined}
-                    style={{
-                      width: "100%",
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      textAlign: "left",
-                      font: "inherit",
-                      justifyContent: collapsed ? "center" : "flex-start",
-                    }}
-                  >
-                    <span className="nx-nav-icon"><NavIcon name={it.icon} size={collapsed ? 20 : 17} /></span>
-                    {!collapsed && (
-                      <span style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.label}</span>
-                        {it.badge != null && it.badge > 0 && (
-                          <span
-                            style={{
-                              minWidth: 16,
-                              height: 16,
-                              padding: "0 4px",
-                              borderRadius: 8,
-                              background: "var(--nx-orange)",
-                              color: "#fff",
-                              fontSize: 10,
-                              fontWeight: 700,
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              flexShrink: 0,
-                            }}
-                          >
-                            {it.badge}
-                          </span>
-                        )}
-                        {isActive && (
-                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "currentColor", flexShrink: 0 }} />
-                        )}
-                      </span>
+                  <div key={it.key}>
+                    <button
+                      onClick={() => {
+                        if (hasChildren) {
+                          if (collapsed) { setActiveTab(it.children![0].key); onNavigate(); }
+                          else setHandoverOpen((v) => !v);
+                        } else {
+                          setActiveTab(it.key); onNavigate();
+                        }
+                      }}
+                      className={"nx-nav-item" + (isActive || childActive ? " nx-nav-item--active" : "")}
+                      title={collapsed ? it.label : undefined}
+                      style={{
+                        width: "100%",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        textAlign: "left",
+                        font: "inherit",
+                        justifyContent: collapsed ? "center" : "flex-start",
+                      }}
+                    >
+                      <span className="nx-nav-icon"><NavIcon name={it.icon} size={collapsed ? 20 : 17} /></span>
+                      {!collapsed && (
+                        <span style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.label}</span>
+                          {it.badge != null && it.badge > 0 && (
+                            <span
+                              style={{
+                                minWidth: 16,
+                                height: 16,
+                                padding: "0 4px",
+                                borderRadius: 8,
+                                background: "var(--nx-orange)",
+                                color: "#fff",
+                                fontSize: 10,
+                                fontWeight: 700,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                flexShrink: 0,
+                              }}
+                            >
+                              {it.badge}
+                            </span>
+                          )}
+                          {isActive && (
+                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "currentColor", flexShrink: 0 }} />
+                          )}
+                          {hasChildren && (
+                            <span style={{ transform: handoverOpen ? "rotate(90deg)" : "none", transition: "transform 0.15s", flexShrink: 0, fontSize: 10 }}>
+                              ▶
+                            </span>
+                          )}
+                        </span>
+                      )}
+                    </button>
+
+                    {hasChildren && !collapsed && handoverOpen && (
+                      <div>
+                        {it.children!.map((c) => {
+                          const cActive = activeTab === c.key;
+                          return (
+                            <button
+                              key={c.key}
+                              onClick={() => { setActiveTab(c.key); onNavigate(); }}
+                              className={"nx-nav-item" + (cActive ? " nx-nav-item--active" : "")}
+                              style={{
+                                width: "100%",
+                                background: "none",
+                                border: "none",
+                                cursor: "pointer",
+                                textAlign: "left",
+                                font: "inherit",
+                                paddingLeft: 44,
+                              }}
+                            >
+                              <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 13 }}>
+                                {c.label}
+                              </span>
+                              {cActive && (
+                                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "currentColor", flexShrink: 0 }} />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
                     )}
-                  </button>
+                  </div>
                 );
               })}
             </div>

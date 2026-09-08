@@ -5,6 +5,7 @@ import { coll, byId, refLabel } from "../shared/rules";
 import { exportSnagCsv } from "../shared/exportSnagCsv";
 import { downloadCsv } from "../shared/csv";
 import { buildEventOp } from "../shared/eventLog";
+import { hasModuleGrant } from "../shared/permissionMatrix";
 import NavIcon from "../components/NavIcon";
 import type { MasterKey } from "../types";
 
@@ -15,7 +16,7 @@ export default function Masters() {
   } = useApp();
   const [q, setQ] = useState("");
   const isAdmin = currentUserId === "U-ADMIN";
-  const editable = myRole() === "DRI";
+  const editable = myRole() === "ADMIN" || hasModuleGrant(data, currentUserId, "masters", "edit");
   // User Master exposes every account's contact/role data — Admin only.
   // Every other master stays fully open to any signed-in user.
   const activeMaster: MasterKey = (rawActiveMaster === "users" && !isAdmin) ? "projects" : rawActiveMaster;

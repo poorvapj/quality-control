@@ -165,7 +165,7 @@ export function blockReason(
 }
 
 export function canAct(myRole: Role, stage: Stage): boolean {
-  return myRole === "DRI" || myRole === stage.role;
+  return myRole === "ADMIN" || myRole === stage.role;
 }
 
 export interface UnitSummary { done: number; total: number; fail: boolean; started: boolean; locked: boolean; snags: number; complete: boolean; }
@@ -244,7 +244,7 @@ export function myReleases(data: BoardData | null, projectId: string | null, use
   const out: Release[] = [];
   const scan = (targetType: Track, targetId: string, list: JoinedStage[]) => {
     list.forEach((x, i) => {
-      if (x.stage.role !== u.role && u.role !== "DRI") return;
+      if (x.stage.role !== u.role && u.role !== "ADMIN") return;
       const p = prog(data, targetId, x.stage.id);
       if (p.status === "done") return;
       if (p.status === "released" || p.status === "ack" || p.status === "wip" || p.status === "fail") {

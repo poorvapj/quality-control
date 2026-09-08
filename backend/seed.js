@@ -22,7 +22,8 @@ const COLLECTIONS = [
   "dpr",              // Daily Progress Report — end-of-day site logs
   "drawingRequests",  // Drawing Requests — 4-stage review/approval tickets
   "permissions",       // Per-user fine-grained permission grants (Drawing Requests review stages)
-  "workTargets"        // Per project+category planned quantity DPR qty entries roll up against
+  "workTargets",       // Per project+category planned quantity DPR qty entries roll up against
+  "moduleGrants"       // Admin-managed per-user, per-module View/Create/Edit/Delete grants (additive on top of Role)
 ];
 
 /* Roles are a fixed vocabulary — users and stages both point at these. */
@@ -56,40 +57,40 @@ function makeRng(seed) {
 
 function seedStages() {
   const unit = [
-    ["mas", "Brick Masonry",              "EXE",  "Civil",     false, false, "DWG-ARCH-01"],
-    ["ac",  "AC Conduit",                 "MEP",  "MEP",       false, true,  "DWG-MEP-02"],
-    ["plb", "Plumbing + Pressure Test",   "MEP",  "MEP",       false, true,  ""],
-    ["ele", "Electrical Wiring",          "MEP",  "MEP",       false, true,  ""],
-    ["g1",  "QC GATE 1 · Pre-Plaster",    "QC",   "Gate",      true,  false, ""],
-    ["pls", "Plaster",                    "EXE",  "Wet Trade", false, false, ""],
-    ["g2",  "QC GATE 2 · Plaster Check",  "QC",   "Gate",      true,  false, ""],
-    ["put", "Putty",                      "FIN",  "Finishes",  false, false, ""],
-    ["wpf", "Waterproofing + Pond Test",  "EXE",  "Wet Trade", false, true,  ""],
-    ["g3",  "QC GATE 3 · Pre-Tiling",     "QC",   "Gate",      true,  false, ""],
-    ["til", "Tiling",                     "FIN",  "Finishes",  false, false, "DWG-ARCH-01"],
-    ["win", "Windows Installation",       "FIN",  "Finishes",  false, false, ""],
-    ["g4",  "QC GATE 4 · Final Handover", "QC",   "Gate",      true,  false, ""],
+    ["mas", "Brick Masonry",              "CIVIL",  "Civil",     false, false, "DWG-ARCH-01"],
+    ["ac",  "AC Conduit",                 "CIVIL",  "MEP",       false, true,  "DWG-MEP-02"],
+    ["plb", "Plumbing + Pressure Test",   "CIVIL",  "MEP",       false, true,  ""],
+    ["ele", "Electrical Wiring",          "CIVIL",  "MEP",       false, true,  ""],
+    ["g1",  "QC GATE 1 · Pre-Plaster",    "CIVIL",  "Gate",      true,  false, ""],
+    ["pls", "Plaster",                    "CIVIL",  "Wet Trade", false, false, ""],
+    ["g2",  "QC GATE 2 · Plaster Check",  "CIVIL",  "Gate",      true,  false, ""],
+    ["put", "Putty",                      "CIVIL",  "Finishes",  false, false, ""],
+    ["wpf", "Waterproofing + Pond Test",  "CIVIL",  "Wet Trade", false, true,  ""],
+    ["g3",  "QC GATE 3 · Pre-Tiling",     "CIVIL",  "Gate",      true,  false, ""],
+    ["til", "Tiling",                     "CIVIL",  "Finishes",  false, false, "DWG-ARCH-01"],
+    ["win", "Windows Installation",       "CIVIL",  "Finishes",  false, false, ""],
+    ["g4",  "QC GATE 4 · Final Handover", "CIVIL",  "Gate",      true,  false, ""],
     // Two separate handover sign-offs, run one after the other: the
     // technical Civil-staff walkthrough first (isGate — can't be skipped),
     // then the customer-facing sign-off. The owner checklist's answers
-    // today come in verbally and get typed in by the DRI, but it's
+    // today come in verbally and get typed in by the Owner/Admin, but it's
     // structurally identical to any other checklist stage — a future CRM
     // integration can fill it the same way the drawing-request automation
     // endpoint already lets an external caller submit on a real user's
     // behalf, without needing a new concept here.
-    ["hoi", "Internal Handover Checklist", "QC",  "Gate",      true,  false, ""],
-    ["hoo", "Owner Handover Sign-off",     "DRI", "Handover",  true,  false, ""]
+    ["hoi", "Internal Handover Checklist", "CIVIL", "Gate",      true,  false, ""],
+    ["hoo", "Owner Handover Sign-off",     "ADMIN", "Handover",  true,  false, ""]
   ];
   const floor = [
-    ["crA",  "Columns Zone A — Rebar & Shuttering", "EXE", "Structure", false, true,  "DWG-STR-01"],
-    ["cpA",  "QC PERMIT · Zone A Column Pour",      "QC",  "Permit",    true,  false, ""],
-    ["ccA",  "Columns Zone A — Casting",            "EXE", "Structure", false, false, ""],
-    ["ssA",  "Slab Pour 1 — Shuttering",            "EXE", "Structure", false, false, "DWG-STR-02"],
-    ["srA",  "Slab Pour 1 — Reinforcement",         "EXE", "Structure", false, true,  ""],
-    ["svA",  "Slab Pour 1 — MEP Sleeves",           "MEP", "MEP",       false, true,  "DWG-MEP-01"],
-    ["spA",  "QC PERMIT · Slab Pour 1",             "QC",  "Permit",    true,  false, ""],
-    ["scA",  "Slab Pour 1 — Casting",               "EXE", "Structure", false, false, ""],
-    ["cure", "Deshuttering & Curing — Released",    "EXE", "Structure", false, false, ""]
+    ["crA",  "Columns Zone A — Rebar & Shuttering", "CIVIL", "Structure", false, true,  "DWG-STR-01"],
+    ["cpA",  "QC PERMIT · Zone A Column Pour",      "CIVIL", "Permit",    true,  false, ""],
+    ["ccA",  "Columns Zone A — Casting",            "CIVIL", "Structure", false, false, ""],
+    ["ssA",  "Slab Pour 1 — Shuttering",            "CIVIL", "Structure", false, false, "DWG-STR-02"],
+    ["srA",  "Slab Pour 1 — Reinforcement",         "CIVIL", "Structure", false, true,  ""],
+    ["svA",  "Slab Pour 1 — MEP Sleeves",           "CIVIL", "MEP",       false, true,  "DWG-MEP-01"],
+    ["spA",  "QC PERMIT · Slab Pour 1",             "CIVIL", "Permit",    true,  false, ""],
+    ["scA",  "Slab Pour 1 — Casting",               "CIVIL", "Structure", false, false, ""],
+    ["cure", "Deshuttering & Curing — Released",    "CIVIL", "Structure", false, false, ""]
   ];
   const colorFor = (cat) =>
     cat === "Gate" || cat === "Permit" ? "#f97316"
@@ -240,23 +241,23 @@ function seedStageMap(projectId, stages, checklists) {
 
 function seedUsers() {
   const rows = [
-    ["USR-01", "Rahul Gupta",      "DRI",  "Neoteric Group",       "+91 98200 10001"],
-    ["USR-02", "Amit Kulkarni",    "EXE",  "Neoteric Group",       "+91 98200 10002"],
-    ["USR-03", "Sandeep Rane",     "EXE",  "Neoteric Group",       "+91 98200 10003"],
-    ["USR-04", "Priya Nair",       "MEP",  "Neoteric Group",       "+91 98200 10004"],
-    ["USR-05", "Imran Shaikh",     "MEP",  "Sunrise MEP Contracts","+91 98200 10005"],
-    ["USR-06", "Kavita Deshmukh",  "FIN",  "Neoteric Group",       "+91 98200 10006"],
-    ["USR-07", "Ganesh Patil",     "QC",   "Neoteric Group",       "+91 98200 10007"],
-    ["USR-08", "Sneha Joshi",      "QC",   "Neoteric Group",       "+91 98200 10008"],
-    ["USR-09", "Ravi Yadav",       "MEAS", "Neoteric Group",       "+91 98200 10009"],
-    ["USR-10", "Mahesh Bhosale",   "EXE",  "Shreeji Civil Works",  "+91 98200 10010"],
-    ["USR-11", "Nitin Chavan",     "EXE",  "Shreeji Civil Works",  "+91 98200 10011"],
-    ["USR-12", "Farhan Qureshi",   "MEP",  "Sunrise MEP Contracts","+91 98200 10012"],
-    ["USR-13", "Deepa Menon",      "FIN",  "Elegance Interiors",   "+91 98200 10013"],
-    ["USR-14", "Suresh Kamble",    "FIN",  "Elegance Interiors",   "+91 98200 10014"],
-    ["USR-15", "Anjali Rao",       "QC",   "Neoteric Group",       "+91 98200 10015"],
-    ["USR-16", "Vikram Sethi",     "MEAS", "Neoteric Group",       "+91 98200 10016"],
-    ["USR-17", "Pooja Salunkhe",   "DRI",  "Neoteric Group",       "+91 98200 10017"]
+    ["USR-01", "Rahul Gupta",      "ADMIN", "Neoteric Group",       "+91 98200 10001"],
+    ["USR-02", "Amit Kulkarni",    "CIVIL", "Neoteric Group",       "+91 98200 10002"],
+    ["USR-03", "Sandeep Rane",     "CIVIL", "Neoteric Group",       "+91 98200 10003"],
+    ["USR-04", "Priya Nair",       "CIVIL", "Neoteric Group",       "+91 98200 10004"],
+    ["USR-05", "Imran Shaikh",     "CIVIL", "Sunrise MEP Contracts","+91 98200 10005"],
+    ["USR-06", "Kavita Deshmukh",  "CIVIL", "Neoteric Group",       "+91 98200 10006"],
+    ["USR-07", "Ganesh Patil",     "CIVIL", "Neoteric Group",       "+91 98200 10007"],
+    ["USR-08", "Sneha Joshi",      "CIVIL", "Neoteric Group",       "+91 98200 10008"],
+    ["USR-09", "Ravi Yadav",       "CIVIL", "Neoteric Group",       "+91 98200 10009"],
+    ["USR-10", "Mahesh Bhosale",   "CIVIL", "Shreeji Civil Works",  "+91 98200 10010"],
+    ["USR-11", "Nitin Chavan",     "CIVIL", "Shreeji Civil Works",  "+91 98200 10011"],
+    ["USR-12", "Farhan Qureshi",   "CIVIL", "Sunrise MEP Contracts","+91 98200 10012"],
+    ["USR-13", "Deepa Menon",      "CIVIL", "Elegance Interiors",   "+91 98200 10013"],
+    ["USR-14", "Suresh Kamble",    "CIVIL", "Elegance Interiors",   "+91 98200 10014"],
+    ["USR-15", "Anjali Rao",       "CIVIL", "Neoteric Group",       "+91 98200 10015"],
+    ["USR-16", "Vikram Sethi",     "CIVIL", "Neoteric Group",       "+91 98200 10016"],
+    ["USR-17", "Pooja Salunkhe",   "ADMIN", "Neoteric Group",       "+91 98200 10017"]
   ];
   return rows.map(([id, name, role, company, phone]) => ({
     id, code: id, name, role, company, phone,
@@ -347,7 +348,7 @@ function seedData() {
     const list = byRole[role] || byRole.EXE;
     return list[Math.abs(salt) % list.length].id;
   };
-  const qcUser = (salt) => someone("QC", salt);
+  const qcUser = (salt) => someone("CIVIL", salt);
 
   const mark = (key, rec) => { d.progress[key] = rec; };
   const ev = (ts, userId, action, targetId, stageId, detail) =>
@@ -365,10 +366,10 @@ function seedData() {
         rel: base - 6 * HR, ack: base - 4 * HR, start: base - 3 * HR, at: base,
         by: someone(s.role, f * 7 + i),
         meas: s.isHidden ? base - 2 * HR : undefined,
-        measBy: s.isHidden ? someone("MEAS", f + i) : undefined
+        measBy: s.isHidden ? someone("CIVIL", f + i) : undefined
       });
     });
-    ev(now - (30 - f * 3) * DAY + 9 * 5 * HR, someone("EXE", f), "COMPLETE", fId(f), "STG-CURE",
+    ev(now - (30 - f * 3) * DAY + 9 * 5 * HR, someone("CIVIL", f), "COMPLETE", fId(f), "STG-CURE",
        "Floor " + f + " deshuttered and released to trades");
   }
 
@@ -380,14 +381,14 @@ function seedData() {
       rel: base - 6 * HR, ack: base - 5 * HR, start: base - 4 * HR, at: base,
       by: someone(s.role, 90 + i),
       meas: s.isHidden ? base - 2 * HR : undefined,
-      measBy: s.isHidden ? someone("MEAS", i) : undefined
+      measBy: s.isHidden ? someone("CIVIL", i) : undefined
     });
   });
   mark(fId(9) + "::" + floorStages[5].id, {
     status: "wip", rel: now - 2 * DAY, ack: now - 40 * HR, start: now - 30 * HR,
     by: someone(floorStages[5].role, 3)
   });
-  ev(now - 30 * HR, someone("MEP", 3), "START", fId(9), floorStages[5].id, "MEP sleeves started on floor 9 slab");
+  ev(now - 30 * HR, someone("CIVIL", 3), "START", fId(9), floorStages[5].id, "MEP sleeves started on floor 9 slab");
 
   /* -------------------------------------------------------- unit track
    * 72 unlocked units (floors 1–8) spread across all 13 stages, in every
@@ -421,7 +422,7 @@ function seedData() {
           rel: base - 8 * HR, ack: base - 6 * HR, start: base - 5 * HR, at: base,
           by: someone(s.role, f * 11 + u + i),
           meas: s.isHidden && i !== skipMeasIdx ? base - 3 * HR : undefined,
-          measBy: s.isHidden && i !== skipMeasIdx ? someone("MEAS", f + u) : undefined
+          measBy: s.isHidden && i !== skipMeasIdx ? someone("CIVIL", f + u) : undefined
         });
       }
 
@@ -478,7 +479,7 @@ function seedData() {
     "QP-18": "STG-SPA", "QP-19": "STG-SPA", "QP-20": "STG-CPA"
   };
   const ownerRoleForParam = {
-    Civil: "EXE", MEP: "MEP", "Wet Trade": "EXE", Finishes: "FIN", Structure: "EXE"
+    Civil: "CIVIL", MEP: "CIVIL", "Wet Trade": "CIVIL", Finishes: "CIVIL", Structure: "CIVIL"
   };
 
   const gateParamIds = Object.keys(gateForParam);
@@ -512,7 +513,7 @@ function seedData() {
       status,
       raisedBy: qcUser(i),
       raisedAt,
-      assignedTo: someone(ownerRoleForParam[p.category] || "EXE", i * 3),
+      assignedTo: someone(ownerRoleForParam[p.category] || "CIVIL", i * 3),
       dueAt: raisedAt + slaH * HR,
       photos: [],
       comments: []
@@ -530,7 +531,7 @@ function seedData() {
    * Every user carries some load; a deliberate few are overdue.
    */
   const ASSIGN_COUNT = 42;
-  const workers = d.users.filter((u) => u.role !== "DRI");
+  const workers = d.users.filter((u) => u.role !== "ADMIN");
   const notes = [
     "Start as soon as the slab below is released.",
     "Material is at the site store — collect against the indent.",

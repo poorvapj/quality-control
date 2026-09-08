@@ -11,6 +11,9 @@ import Card from "../ui/tw/Card";
 import Btn from "../ui/tw/Btn";
 import Table, { TableRow, TableCell } from "../ui/tw/Table";
 import StatusBadge from "../ui/tw/StatusBadge";
+import { hasModuleGrant } from "../shared/permissionMatrix";
+import { downloadExcel } from "../shared/exportExcel";
+import { fmtDT } from "../shared/helpers";
 
 const ALL_FLOORS = "__all__";
 type ActiveForm = PossessionActiveForm;
@@ -24,8 +27,8 @@ type ActiveForm = PossessionActiveForm;
    drawer individually. The fill-out form itself opens as a SidePanel
    drawer, the same visual pattern as AssignModal.tsx's "Assign Work"
    form — not a popup, not a plain card. */
-export default function HandoverChecklist() {
-  const { data, currentProjectId, setCurrentProjectId, myRole } = useApp();
+export default function HandoverChecklist({ initialTab }: { initialTab?: "internal" | "owner" }) {
+  const { data, currentProjectId, setCurrentProjectId, myRole, currentUserId } = useApp();
   // Same pattern as TowerBoard.tsx: this page owns its own Project filter
   // instead of only trusting whatever the global currentProjectId happens
   // to be (set from Dashboard/TowerBoard) — a DRI landing here directly
@@ -39,6 +42,7 @@ export default function HandoverChecklist() {
   const [fFloor, setFFloor] = useState(floors[0]?.id || ALL_FLOORS);
   const [q, setQ] = useState("");
   const [activeForm, setActiveForm] = useState<ActiveForm | null>(null);
+  const tab = initialTab || "internal";
 
   const unitStages = trackStages(data, projectId, "unit");
   const hoiIdx = unitStages.findIndex((x) => x.stage.id === "STG-HOI");
@@ -59,11 +63,36 @@ export default function HandoverChecklist() {
   const hoiPassed = mapped ? units.filter((u) => prog(data, u.id, "STG-HOI").status === "done").length : 0;
   const hooPassed = mapped ? units.filter((u) => prog(data, u.id, "STG-HOO").status === "done").length : 0;
 
+  // Every KPI card + the report below reads off whichever stage the
+  // currently-open page (Internal or Owner) actually is — a page titled
+  // "Internal Possession" showing "Owner Completed"/aggregate-Internal
+  // "Pending" numbers was the reported bug (mixing both stages' counts on
+  // one single-stage page).
+  const activeStageId = tab === "internal" ? "STG-HOI" : "STG-HOO";
+  const activePassed = tab === "internal" ? hoiPassed : hooPassed;
+  const activeFailed = mapped ? units.filter((u) => prog(data, u.id, activeStageId).status === "fail").length : 0;
+  const activePending = units.length - activePassed - activeFailed;
+
+  function generateReport() {
+    const headers = ["Project", "Floor", "Unit", "Flat No.", "Status", "Completed At", "Notes"];
+    const rows: (string | number | null)[][] = [];
+    for (const u of units) {
+      const p = prog(data, u.id, activeStageId);
+      const status = p.status === "done" ? "Completed" : p.status === "fail" ? "Failed" : "Pending";
+      const notes = p.status === "fail" && p.note ? p.note : p.remarks || "";
+      rows.push([
+        project?.name || "", refLabel(data, "floors", u.floorId), u.name, u.code || "",
+        status, p.at ? fmtDT(p.at) : "", notes
+      ]);
+    }
+    downloadExcel(`${tab === "internal" ? "internal" : "owner"}-possession-${project?.code || "report"}`, headers, rows);
+  }
+
   return (
     <div>
-      <PageHeader />
+      <PageHeader tab={tab} />
 
-      <Card className="flex gap-3 flex-wrap mb-5">
+      <Card className="flex gap-3 flex-wrap items-end mb-5">
         <div className="w-[130px] shrink-0">
           <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Project</div>
           <SearchDropdown
@@ -87,6 +116,16 @@ export default function HandoverChecklist() {
           <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Search Unit</div>
           <input className="input w-full" placeholder="Unit name or code…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
+        {/* Report is generated off whatever Project/Floor/Search Unit currently
+            filter `units` to — same list the table below renders, so the
+            report always matches what's on screen. */}
+        <Btn
+          label="⬇ Generate Report"
+          color="secondary"
+          size="sm"
+          onClick={generateReport}
+          disabled={!mapped || units.length === 0}
+        />
       </Card>
 
       {!mapped ? (
@@ -114,10 +153,12 @@ export default function HandoverChecklist() {
             <Card>
               <div className="flex items-start justify-between">
                 <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Internal Completed</div>
-                  <div className="text-2xl font-extrabold leading-none">{hoiPassed}/{units.length}</div>
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">
+                    {tab === "internal" ? "Internal Completed" : "Owner Completed"}
+                  </div>
+                  <div className="text-2xl font-extrabold leading-none">{activePassed}/{units.length}</div>
                   <div className="text-[10.5px] text-[var(--text-sub)] font-semibold mt-1.5">
-                    {units.length ? Math.round((hoiPassed / units.length) * 100) : 0}% completed
+                    {units.length ? Math.round((activePassed / units.length) * 100) : 0}% completed
                   </div>
                 </div>
                 <div className="w-7 h-7 rounded-radius-sm bg-[rgba(34,197,94,0.12)] text-[var(--color-pass)] flex items-center justify-center shrink-0">
@@ -128,14 +169,14 @@ export default function HandoverChecklist() {
             <Card>
               <div className="flex items-start justify-between">
                 <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Owner Completed</div>
-                  <div className="text-2xl font-extrabold leading-none">{hooPassed}/{units.length}</div>
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Failed</div>
+                  <div className="text-2xl font-extrabold leading-none">{activeFailed}/{units.length}</div>
                   <div className="text-[10.5px] text-[var(--text-sub)] font-semibold mt-1.5">
-                    {units.length ? Math.round((hooPassed / units.length) * 100) : 0}% completed
+                    {units.length ? Math.round((activeFailed / units.length) * 100) : 0}% failed
                   </div>
                 </div>
-                <div className="w-7 h-7 rounded-radius-sm bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                  <NavIcon name="team" size={13} />
+                <div className="w-7 h-7 rounded-radius-sm bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+                  <NavIcon name="snags" size={13} />
                 </div>
               </div>
             </Card>
@@ -143,9 +184,9 @@ export default function HandoverChecklist() {
               <div className="flex items-start justify-between">
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Pending</div>
-                  <div className="text-2xl font-extrabold leading-none">{units.length - hoiPassed}</div>
+                  <div className="text-2xl font-extrabold leading-none">{activePending}</div>
                   <div className="text-[10.5px] text-[var(--text-sub)] font-semibold mt-1.5">
-                    {units.length ? Math.round(((units.length - hoiPassed) / units.length) * 100) : 0}% pending
+                    {units.length ? Math.round((activePending / units.length) * 100) : 0}% pending
                   </div>
                 </div>
                 <div className="w-7 h-7 rounded-radius-sm bg-primary-light text-primary flex items-center justify-center shrink-0">
@@ -157,9 +198,9 @@ export default function HandoverChecklist() {
 
           <Card padded={false} className="p-[18px]">
             <Table
-              columns={["Unit", "Internal Possession", "Owner Possession"]}
+              columns={tab === "internal" ? ["Unit", "Internal Possession"] : ["Unit", "Owner Possession"]}
+              colWidths={["25%", "75%"]}
               empty="No units match these filters."
-              maxHeight="560px"
             >
               {units.map((u) => {
                 const floorName = refLabel(data, "floors", u.floorId);
@@ -172,20 +213,21 @@ export default function HandoverChecklist() {
                       </span>
                     </TableCell>
                     <TableCell>
-                      <StageCell
-                        unitId={u.id} unitName={u.name} floorName={floorName} projectName={project?.name || ""}
-                        idx={hoiIdx} joined={hoiStage!} myRole={myRole} onOpenForm={setActiveForm} data={data}
-                        currentProjectId={projectId} solid
-                        stageDesc="Civil / QC internal inspection before owner possession."
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <StageCell
-                        unitId={u.id} unitName={u.name} floorName={floorName} projectName={project?.name || ""}
-                        idx={hooIdx} joined={hooStage!} myRole={myRole} onOpenForm={setActiveForm} data={data}
-                        currentProjectId={projectId} solid={false}
-                        stageDesc="Final owner possession and handover inspection."
-                      />
+                      {tab === "internal" ? (
+                        <StageCell
+                          unitId={u.id} unitName={u.name} floorName={floorName} projectName={project?.name || ""}
+                          idx={hoiIdx} joined={hoiStage!} myRole={myRole} onOpenForm={setActiveForm} data={data}
+                          currentProjectId={projectId} currentUserId={currentUserId} solid
+                          stageDesc="Civil / QC internal inspection before owner possession."
+                        />
+                      ) : (
+                        <StageCell
+                          unitId={u.id} unitName={u.name} floorName={floorName} projectName={project?.name || ""}
+                          idx={hooIdx} joined={hooStage!} myRole={myRole} onOpenForm={setActiveForm} data={data}
+                          currentProjectId={projectId} currentUserId={currentUserId} solid={false}
+                          stageDesc="Final owner possession and handover inspection."
+                        />
+                      )}
                     </TableCell>
                   </TableRow>
                 );
@@ -200,7 +242,7 @@ export default function HandoverChecklist() {
   );
 }
 
-function PageHeader() {
+function PageHeader({ tab }: { tab: "internal" | "owner" }) {
   return (
     <div className="flex items-start justify-between gap-4 flex-wrap mt-0.5 mb-6">
       <div className="flex gap-3.5 items-start min-w-0">
@@ -208,9 +250,13 @@ function PageHeader() {
           <NavIcon name="handover" size={20} />
         </div>
         <div>
-          <div className="text-xl font-semibold tracking-tight leading-tight">Handover Checklist</div>
+          <div className="text-xl font-semibold tracking-tight leading-tight">
+            {tab === "internal" ? "Internal Possession" : "Owner Possession"}
+          </div>
           <div className="text-[12.5px] text-[var(--text-muted)] mt-1 leading-normal">
-            Internal (Civil/QC) and Owner possession checklists, unit by unit.
+            {tab === "internal"
+              ? "Civil / QC internal inspection checklist, unit by unit."
+              : "Final owner possession and handover inspection, unit by unit."}
           </div>
         </div>
       </div>
@@ -219,12 +265,12 @@ function PageHeader() {
 }
 
 function StageCell({
-  unitId, unitName, floorName, projectName, idx, joined, myRole, onOpenForm, data, currentProjectId, solid, stageDesc
+  unitId, unitName, floorName, projectName, idx, joined, myRole, onOpenForm, data, currentProjectId, currentUserId, solid, stageDesc
 }: {
   unitId: string; unitName: string; floorName: string; projectName: string; idx: number;
   joined: ReturnType<typeof trackStages>[number];
   myRole: () => any; onOpenForm: (f: ActiveForm) => void;
-  data: any; currentProjectId: string | null; solid: boolean; stageDesc: string;
+  data: any; currentProjectId: string | null; currentUserId: string | null; solid: boolean; stageDesc: string;
 }) {
   const p = prog(data, unitId, joined.stage.id);
   const done = p.status === "done";
@@ -237,7 +283,7 @@ function StageCell({
   // untouched — it still gates every other stage in Drawer.tsx as before.
   const block = blockReason(data, currentProjectId, "unit", unitId, idx);
   const openSnags = coll(data, "snags").filter((s: any) => s.unitId === unitId && s.status !== "Closed");
-  const mine = canAct(myRole(), joined.stage);
+  const mine = canAct(myRole(), joined.stage) || hasModuleGrant(data, currentUserId, "handoverChecklist", "edit");
   const chk = joined.map.checklistId ? byId(coll(data, "checklists"), joined.map.checklistId) : null;
 
   const subtext = fail && p.note

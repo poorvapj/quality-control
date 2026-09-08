@@ -6,12 +6,9 @@
 import type { Role, Severity, MasterDef, MasterKey } from "../types";
 
 export const ROLES: Record<Role, { name: string; note: string }> = {
-  DRI: { name: "Site In-charge (DRI)", note: "Owns the board. Runs the morning quality huddle, clears slow handoffs." },
-  EXE: { name: "Engineer — Structure & Wet Trades", note: "Columns, slab, masonry, plaster, waterproofing. Needs QC pour permits." },
-  MEP: { name: "Engineer — MEP", note: "AC conduits, plumbing and electrical before pour permits close." },
-  FIN: { name: "Engineer — Finishes", note: "Putty, tiling, windows. Locked until the pre-tiling gate passes." },
-  QC: { name: "QC Engineer", note: "Passes/fails gates, issues pour permits. Fails need a written reason." },
-  MEAS: { name: "Measurement DET (eMB)", note: "Measures and photographs hidden work before QC gates." }
+  CRM: { name: "CRM", note: "Customer/coordination-facing — Drawing Requests, DPR, and anything granted via the Permission Matrix." },
+  CIVIL: { name: "Civil Engineer", note: "Runs and inspects every construction stage — structure, MEP, finishes, QC gates, and hidden-work measurement." },
+  ADMIN: { name: "Owner / Admin", note: "Full rights everywhere — the blanket bypass role." }
 };
 
 /* Backend base URL.

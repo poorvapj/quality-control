@@ -4,7 +4,7 @@
    changes the wire format, it just names it.
    =========================================================================== */
 
-export type Role = "DRI" | "EXE" | "MEP" | "FIN" | "QC" | "MEAS";
+export type Role = "CRM" | "CIVIL" | "ADMIN";
 export type Track = "unit" | "floor";
 export type Severity = "Critical" | "Major" | "Minor";
 export type SnagStatus = "Open" | "In Progress" | "Closed";
@@ -182,7 +182,12 @@ export interface ProgressPatch {
   measBy?: string;
   photo?: Photo;
   checklistId?: string;
-  checklist?: { paramId: string; result: string; remark: string }[];
+  checklist?: {
+    paramId: string; result: string; remark: string;
+    /** Present only for room-wise (possession) checklists — per-room
+     *  breakdown behind the single rolled-up `result` above. */
+    cells?: { room: string; result: "pass" | "fail" | "na" }[];
+  }[];
   /** Free-text note attached to a possession-checklist submission
    *  (HandoverChecklist.tsx) — separate from `note`, which holds the
    *  auto-generated "N parameter(s) failed" summary. */
@@ -306,6 +311,18 @@ export interface UserPermission extends BaseRecord {
   canFinalApproveStage4?: boolean;
 }
 
+export type ModuleAction = "view" | "create" | "edit" | "delete";
+
+/* One doc per user, admin-managed via pages/PermissionMatrix.tsx — grants
+   are ADDITIVE on top of the Role enum (see shared/permissionMatrix.ts):
+   they only ever unlock extra access beyond what myRole()==="ADMIN"/canAct()
+   already give, never take anything away. */
+export interface ModuleGrant extends BaseRecord {
+  userId: string; // ref -> users
+  roleLabel?: string; // cosmetic display label only, not a real Role
+  grants: Record<string, Partial<Record<ModuleAction, boolean>>>; // keyed by MATRIX_MODULES[].key
+}
+
 export interface BoardData {
   projects: Project[];
   floors: Floor[];
@@ -321,6 +338,7 @@ export interface BoardData {
   drawingRequests: DrawingRequest[];
   permissions: UserPermission[];
   workTargets: WorkTarget[];
+  moduleGrants: ModuleGrant[];
   progress: Record<string, ProgressPatch>;
   events: EventLog[];
   [key: string]: unknown;
@@ -334,7 +352,7 @@ export type Op =
   | { op: "progress"; key: string; patch: Partial<ProgressPatch> }
   | { op: "event"; ev: EventLog };
 
-export type TabKey = "dash" | "work" | "board" | "handoverChecklist" | "snags" | "team" | "masters" | "dpr" | "drawingRequests" | "backups" | "auditLog";
+export type TabKey = "dash" | "work" | "board" | "handoverChecklist" | "handoverInternal" | "handoverOwner" | "snags" | "team" | "masters" | "dpr" | "drawingRequests" | "backups" | "auditLog" | "permissionMatrix";
 export type MasterKey = "projects" | "floors" | "units" | "stages" | "qparams" | "checklists" | "stagemap" | "users" | "permissions" | "workTargets";
 
 export type FieldType = "text" | "number" | "date" | "color" | "select" | "ref" | "bool" | "textarea" | "items";

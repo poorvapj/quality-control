@@ -39,6 +39,18 @@ function completionAt(data: BoardData | null, projectId: string | null, track: "
    index.css classes and is unaffected by this. */
 export default function Dashboard() {
   const { data, currentProjectId, setCurrentProjectId, currentUserId, me, openDrawer, setActiveTab } = useApp();
+  // Tower Board/Snags have no "All Projects" mode of their own — they only
+  // ever read the single shared `currentProjectId`. So a KPI card drilling
+  // down from Dashboard's own "All Projects" aggregate has to first pick
+  // ONE real project to switch to, or the destination page would show 0
+  // records even though the KPI said otherwise (misleadingly "broken"
+  // drill-down). Each card below picks the first project that actually
+  // contributed to its own count — not necessarily the biggest, just a
+  // real, non-empty one.
+  function drillTo(tab: TabKey, relevantProjectId: string | null | undefined) {
+    if (viewAllProjects && relevantProjectId) setCurrentProjectId(relevantProjectId);
+    setActiveTab(tab);
+  }
   const slowSectionRef = useRef<HTMLDivElement>(null);
   const allProjects = coll(data, "projects").filter((p) => p.active !== false);
   // Dashboard-only "All Projects" view, owned entirely by this page.
@@ -95,7 +107,8 @@ export default function Dashboard() {
 
   const units = projectIds.flatMap((pid) => projectUnits(data, pid));
   const unitEntries = projectIds.flatMap((pid) => projectUnits(data, pid).map((u) => ({ pid, u, s: unitSummary(data, pid, u.id) })));
-  const handed = unitEntries.filter((e) => e.s.complete && tsInBounds(completionAt(data, e.pid, "unit", e.u.id), bounds)).length;
+  const handedEntries = unitEntries.filter((e) => e.s.complete && tsInBounds(completionAt(data, e.pid, "unit", e.u.id), bounds));
+  const handed = handedEntries.length;
   const stagesTotal = unitEntries.reduce((a, e) => a + e.s.total, 0) || 1;
   const stagesDone = unitEntries.reduce((a, e) => a + e.s.done, 0);
   const pct = Math.round((stagesDone / stagesTotal) * 100);
@@ -114,7 +127,8 @@ export default function Dashboard() {
     .filter((s) => tsInBounds(prog(data, s.targetId, s.stage.id).rel, bounds))
     .sort((a, b) => b.hrs - a.hrs);
   const floors: Floor[] = projectIds.flatMap((pid) => projectFloors(data, pid));
-  const castFloors = floors.filter((f) => floorReleased(data, f.projectId, f.id) && tsInBounds(completionAt(data, f.projectId, "floor", f.id), bounds)).length;
+  const curedFloors = floors.filter((f) => floorReleased(data, f.projectId, f.id) && tsInBounds(completionAt(data, f.projectId, "floor", f.id), bounds));
+  const castFloors = curedFloors.length;
 
   // Each card navigates somewhere useful — Tower Board for unit/floor
   // status, Snags for the open-snag register, and Slow Handoffs smooth-
@@ -124,14 +138,20 @@ export default function Dashboard() {
     {
       label: "UNITS HANDED OVER", val: `${handed}/${units.length}`, tone: "ok" as const, icon: "award",
       foot: pct + "% of all stages complete" + (snagBlockedUnits > 0 ? ` · ${snagBlockedUnits} unit${snagBlockedUnits === 1 ? "" : "s"} blocked by open snags` : ""),
-      onClick: () => setActiveTab("board" as TabKey)
+      onClick: () => drillTo("board" as TabKey, handedEntries[0]?.pid)
     },
-    { label: "OPEN SNAGS", val: openSnags.length, tone: openSnags.length > 0 ? "bad" as const : undefined, icon: "bug", foot: critical + " critical", onClick: () => setActiveTab("snags" as TabKey) },
+    {
+      label: "OPEN SNAGS", val: openSnags.length, tone: openSnags.length > 0 ? "bad" as const : undefined, icon: "bug", foot: critical + " critical",
+      onClick: () => drillTo("snags" as TabKey, openSnags[0]?.projectId)
+    },
     {
       label: "SLOW HANDOFFS", val: slow.length, tone: slow.length > 0 ? "warn" as const : undefined, icon: "clock", foot: "Released past SLA, not acknowledged",
       onClick: slow.length > 0 ? () => slowSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }) : undefined
     },
-    { label: "FLOORS CURED", val: `${castFloors}/${floors.length}`, tone: undefined, icon: "board", foot: "Bottom-up casting enforced", onClick: () => setActiveTab("board" as TabKey) }
+    {
+      label: "FLOORS CURED", val: `${castFloors}/${floors.length}`, tone: undefined, icon: "board", foot: "Bottom-up casting enforced",
+      onClick: () => drillTo("board" as TabKey, curedFloors[0]?.projectId)
+    }
   ];
   const STAT_VAL_CLS: Record<string, string> = {
     ok: "text-[var(--text-main)]", bad: "text-[var(--color-fail)]", warn: "text-[var(--color-gate)]"

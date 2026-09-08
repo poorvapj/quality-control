@@ -10,7 +10,7 @@ export default function PhotoGroupUploader({ label, photos, onChange }: { label:
     if (!files || !files.length) return;
     setBusy(true);
     const uploaded: Photo[] = [];
-    for (const f of Array.from(files)) uploaded.push(await uploadPhoto(f, "dpr"));
+    for (const f of Array.from(files)) uploaded.push(await uploadPhoto(f, "dpr", label));
     onChange([...photos, ...uploaded]);
     setBusy(false);
   }
@@ -23,7 +23,7 @@ export default function PhotoGroupUploader({ label, photos, onChange }: { label:
           {busy ? "Uploading…" : "📷 Add"}
         </button>
       </div>
-      <input ref={inputRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={(e) => { handleFiles(e.target.files); e.target.value = ""; }} />
+      <input ref={inputRef} type="file" accept="image/*" capture="environment" multiple style={{ display: "none" }} onChange={(e) => { handleFiles(e.target.files); e.target.value = ""; }} />
       {photos.length > 0 && (
         <div className="photo-strip">
           {photos.map((p, i) => (

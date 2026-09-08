@@ -248,7 +248,7 @@ const PROJECT_SCOPED_COLLECTIONS = ["floors", "units", "snags", "assignments", "
 
 // Every Masters collection except "users" (already admin-gated above) —
 // frontend/src/pages/Masters.tsx only shows its "+ New"/edit/delete
-// controls when `myRole() === "DRI"`, but that was UI-only: any other
+// controls when `myRole() === "ADMIN"`, but that was UI-only: any other
 // signed-in session could still upsert/delete these directly via
 // /api/ops. Mirrored here server-side (see assertOpAllowed).
 const MASTER_ROLE_GATED_COLLECTIONS = ["projects", "floors", "units", "stages", "qparams", "checklists", "stagemap", "permissions", "workTargets"];
@@ -262,6 +262,25 @@ async function getUserRole(userId) {
   roleCache.set(userId, role);
   setTimeout(() => roleCache.delete(userId), 10000); // short TTL — a role change (rare) is visible within 10s, not stuck forever
   return role;
+}
+
+// Mirrors frontend/src/shared/permissionMatrix.ts's MATRIX_MODULES — an
+// admin-managed, per-user, per-module grant that only ever ADDS access on
+// top of what a user's Role already allows (never narrows). Only the
+// "masters" module is enforced server-side for now (the one Masters-CRUD
+// gate below); other modules are UI-visibility toggles only, same as
+// every other read-only tab gate in this app.
+const moduleGrantCache = new Map(); // userId -> grants object
+async function getModuleGrant(userId, moduleKey) {
+  if (!userId) return null;
+  let grants = moduleGrantCache.get(userId);
+  if (grants === undefined) {
+    const rec = await mongoDb.collection("moduleGrants").findOne({ userId });
+    grants = rec ? rec.grants || {} : null;
+    moduleGrantCache.set(userId, grants);
+    setTimeout(() => moduleGrantCache.delete(userId), 10000);
+  }
+  return grants ? grants[moduleKey] || null : null;
 }
 
 /* Same constant-time comparison already used for password hashes
@@ -567,7 +586,7 @@ function splitSetUnset(fields) {
    admin account to log in and authorize anything else. Throws a tagged
    error so the route handler can turn it into a clean 401/403. */
 async function assertOpAllowed(op, session) {
-  const needsAdmin = op.op === "delete" || (op.op === "upsert" && op.coll === "users");
+  const needsAdmin = op.op === "delete" || (op.op === "upsert" && (op.coll === "users" || op.coll === "moduleGrants"));
   if (needsAdmin) {
     if (op.op === "upsert" && op.coll === "users") {
       const userCount = await mongoDb.collection("users").countDocuments();
@@ -670,7 +689,15 @@ async function assertOpAllowed(op, session) {
     if (!session) { const e = new Error("Sign-in required"); e.status = 401; throw e; }
     if (!session.isAdmin) {
       const role = await getUserRole(session.userId);
-      if (role !== "DRI") { const e = new Error("Only Site In-charge (DRI) or Admin can edit Masters"); e.status = 403; throw e; }
+      if (role !== "ADMIN") {
+        // Additive grant on top of the role check above — a user without
+        // the Owner/Admin role can still be individually authorized via the
+        // Permission Matrix (moduleGrants.masters.edit) without changing
+        // their Role and therefore without changing anything else they can
+        // or can't do elsewhere in the app.
+        const grant = await getModuleGrant(session.userId, "masters");
+        if (!grant || !grant.edit) { const e = new Error("Only Owner/Admin can edit Masters"); e.status = 403; throw e; }
+      }
     }
     return;
   }
@@ -682,10 +709,9 @@ async function assertOpAllowed(op, session) {
 
   if (op.op === "progress" || op.op === "event") {
     if (!session) { const e = new Error("Sign-in required"); e.status = 401; throw e; }
-    // Mirrors frontend/src/shared/rules.ts's canAct() (DRI, or the stage's
-    // own owning role) plus the Measurement DET allowance Drawer.tsx grants
-    // for hidden-work photo/measurement writes regardless of the stage's
-    // trade — that combined rule was frontend-only until now, so any other
+    // Mirrors frontend/src/shared/rules.ts's canAct() (ADMIN bypasses
+    // everything, or the acting user's role must match the stage's own
+    // owning role) — that check was frontend-only until now, so any other
     // signed-in session could patch any stage's progress via /api/ops.
     if (op.op === "progress" && !session.isAdmin && op.key) {
       const stageId = String(op.key).split("::")[1];
@@ -694,7 +720,7 @@ async function assertOpAllowed(op, session) {
         stageId ? mongoDb.collection("stages").findOne({ id: stageId }, { projection: { role: 1 } }) : null
       ]);
       const stageRole = stage ? stage.role : null;
-      if (role !== "DRI" && role !== "MEAS" && (!stageRole || role !== stageRole)) {
+      if (role !== "ADMIN" && (!stageRole || role !== stageRole)) {
         const e = new Error("Not authorized to act on this stage");
         e.status = 403;
         throw e;

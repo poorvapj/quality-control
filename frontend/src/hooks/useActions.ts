@@ -4,6 +4,7 @@ import type { Op, Track, ProgressPatch } from "../types";
 import { pkey, prog, trackStages, byId, coll, refLabel } from "../shared/rules";
 import { nextId } from "../shared/helpers";
 import { buildEventOp } from "../shared/eventLog";
+import { watermarkPhoto } from "../shared/watermark";
 
 export function useActions() {
   const { data, apply, toast, currentUserId, currentProjectId, closeDrawer, drawer, openDrawer, openSnagModal } = useApp();
@@ -222,7 +223,7 @@ export function useActions() {
   async function capturePhoto(kind: "snag" | "unit" | "floor", id: string, stageId: string, file: File) {
     toast("Processing photo…");
     const label = kind === "snag" ? refLabel(data, "snags", id) : refLabel(data, kind === "unit" ? "units" : "floors", id);
-    const dataUrl = await watermark(file, label, data ? byId(coll(data, "users"), currentUserId)?.name : undefined);
+    const dataUrl = await watermarkPhoto(file, label, data ? byId(coll(data, "users"), currentUserId)?.name : undefined);
     const photoType = kind === "snag" ? "snags" : "progress";
     let photo: { url: string; publicId: string | null } = { url: dataUrl, publicId: null };
     try {
@@ -252,31 +253,4 @@ export function useActions() {
     saveAssignment, setAssignStatus, saveSnag, setSnagStatus, saveSnagAssignee, capturePhoto,
     releaseNextOps, logEvent
   };
-}
-
-function watermark(file: File, label: string, byName?: string): Promise<string> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const maxW = 1280;
-      const scale = Math.min(1, maxW / img.width);
-      const c = document.createElement("canvas");
-      c.width = Math.round(img.width * scale);
-      c.height = Math.round(img.height * scale);
-      const ctx = c.getContext("2d")!;
-      ctx.drawImage(img, 0, 0, c.width, c.height);
-      const pad = Math.round(c.width * 0.02);
-      const fs = Math.max(12, Math.round(c.width * 0.028));
-      const text = `${label} · ${new Date().toLocaleString("en-IN")} · ${byName || ""}`;
-      ctx.font = `600 ${fs}px Inter, sans-serif`;
-      const w = ctx.measureText(text).width;
-      ctx.fillStyle = "rgba(0,0,0,0.65)";
-      ctx.fillRect(pad, c.height - pad - fs * 1.8, w + fs, fs * 1.8);
-      ctx.fillStyle = "#00ff66";
-      ctx.fillText(text, pad + fs / 2, c.height - pad - fs * 0.5);
-      resolve(c.toDataURL("image/jpeg", 0.72));
-    };
-    img.onerror = () => resolve("");
-    img.src = URL.createObjectURL(file);
-  });
 }

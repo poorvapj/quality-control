@@ -39,6 +39,7 @@ export const ACTION_LABEL: Record<string, string> = {
   DR_TRACKING_UPDATE: "Tracking updated",
   MASTER_SAVE: "Master record saved",
   MASTER_DELETE: "Master record deleted",
+  PERMISSION_UPDATE: "Permission matrix updated",
   BACKUP_CREATE: "Backup created",
   BACKUP_RESTORE: "Backup restored",
   BACKUP_DELETE: "Backup deleted"
@@ -68,6 +69,7 @@ const MODULES: ModuleDef[] = [
   { key: "dpr", label: "Daily Progress Reports", desc: "Site DPR submissions", icon: "dpr", actions: ["DPR_SUBMIT"] },
   { key: "masters", label: "Masters", desc: "Project/Floor/Unit/Stage configuration", icon: "masters", actions: ["MASTER_SAVE", "MASTER_DELETE"] },
   { key: "users", label: "Users", desc: "User accounts and roles", icon: "team", actions: [] },
+  { key: "permissionMatrix", label: "Permission Matrix", desc: "Admin-managed per-user, per-module access grants", icon: "permissions", actions: ["PERMISSION_UPDATE"] },
   { key: "backups", label: "Backups", desc: "Board backups and restores", icon: "database", actions: ["BACKUP_CREATE", "BACKUP_RESTORE", "BACKUP_DELETE"] }
 ];
 

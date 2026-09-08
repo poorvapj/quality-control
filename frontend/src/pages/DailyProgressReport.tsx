@@ -33,7 +33,7 @@ function fmtDate(ts: number): string {
 export default function DailyProgressReportPage() {
   const { data, currentUserId, myRole } = useApp();
   const isAdmin = currentUserId === "U-ADMIN";
-  const isDri = !isAdmin && myRole() === "DRI";
+  const isDri = !isAdmin && myRole() === "ADMIN";
   const [open, setOpen] = useState(false);
   const [drOpen, setDrOpen] = useState(false);
   const [tab, setTab] = useState<DprTab>("work");

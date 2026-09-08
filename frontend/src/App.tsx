@@ -19,9 +19,11 @@ import DailyProgressReport from "./pages/DailyProgressReport";
 import DrawingRequests from "./pages/DrawingRequests";
 import Backups from "./pages/Backups";
 import AuditLog from "./pages/AuditLog";
+import PermissionMatrix from "./pages/PermissionMatrix";
+import { hasModuleGrant } from "./shared/permissionMatrix";
 
 export default function App() {
-  const { loggedIn, currentUserId, activeTab } = useApp();
+  const { loggedIn, currentUserId, activeTab, data } = useApp();
 
   if (!loggedIn) return <><LoginScreen /><Toast /></>;
 
@@ -32,20 +34,33 @@ export default function App() {
     work: <MyWork />,
     board: <TowerBoard />,
     handoverChecklist: <HandoverChecklist />,
+    handoverInternal: <HandoverChecklist initialTab="internal" />,
+    handoverOwner: <HandoverChecklist initialTab="owner" />,
     snags: <Snags />,
     team: <Team />,
     masters: <Masters />,
     dpr: <DailyProgressReport />,
     drawingRequests: <DrawingRequests />,
     backups: <Backups />,
-    auditLog: <AuditLog />
+    auditLog: <AuditLog />,
+    permissionMatrix: <PermissionMatrix />
   };
 
-  // Team, Masters, Backups, and Audit Log are admin-only — a stale
-  // activeTab (e.g. from before this restriction existed, or a DRI who had
-  // Masters open when it got locked down) should fall back to Dashboard,
-  // not just hide the nav link while still rendering the page underneath.
-  const restrictedTab = (activeTab === "team" || activeTab === "masters" || activeTab === "backups" || activeTab === "auditLog") && !isAdmin;
+  // Team, Masters, Backups, and Audit Log are admin-only by default — a
+  // stale activeTab (e.g. from before this restriction existed, or a DRI
+  // who had Masters open when it got locked down) should fall back to
+  // Dashboard, not just hide the nav link while still rendering the page
+  // underneath. Permission Matrix additively grants "view" on these same
+  // 4 tabs (Sidebar.tsx hides/shows the link the same way) — Permission
+  // Matrix itself stays admin-only, since granting it would let a
+  // non-admin grant themselves further access.
+  const restrictedTab =
+    ((activeTab === "team" && !hasModuleGrant(data, currentUserId, "team", "view")) ||
+      (activeTab === "masters" && !hasModuleGrant(data, currentUserId, "masters", "view")) ||
+      (activeTab === "backups" && !hasModuleGrant(data, currentUserId, "backups", "view")) ||
+      (activeTab === "auditLog" && !hasModuleGrant(data, currentUserId, "auditLog", "view")) ||
+      activeTab === "permissionMatrix") &&
+    !isAdmin;
 
   return (
     <MainLayout>

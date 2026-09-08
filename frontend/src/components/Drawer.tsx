@@ -106,7 +106,7 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
                 <div className="stage-actions">
                   {(!block || done) && (
                     <>
-                      {s.isHidden && !p.meas && (myRole() === "MEAS" || myRole() === "DRI") && (
+                      {s.isHidden && !p.meas && (myRole() === "CIVIL" || myRole() === "ADMIN") && (
                         <button className="btn btn-meas btn-sm" onClick={() => { pendingPhoto.current = { kind, id, stageId: s.id }; fileRef.current?.click(); }}>
                           📸 Measure &amp; photograph
                         </button>

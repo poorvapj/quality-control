@@ -42,7 +42,7 @@ export default function ChecklistModal() {
     e.target.value = "";
     if (!file || i == null) return;
     setUploadingIdx(i);
-    const photo = await uploadPhoto(file, "qc");
+    const photo = await uploadPhoto(file, "qc", targetLabel);
     setRow(i, { photo });
     setUploadingIdx(null);
   }

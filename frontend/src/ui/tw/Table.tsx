@@ -7,7 +7,7 @@ import React from "react";
    Extracted from HandoverChecklist.tsx's original hand-rolled table so
    later page conversions reuse the same markup instead of retyping it. */
 export default function Table({
-  columns, children, empty = "No records found.", maxHeight
+  columns, children, empty = "No records found.", maxHeight, colWidths
 }: {
   columns: string[];
   children: React.ReactNode;
@@ -15,13 +15,22 @@ export default function Table({
   /** Caps the table body's height and makes it scroll internally (header
    *  stays put, sticky) — e.g. "480px", for tables that can otherwise grow
    *  to hundreds of rows (every unit on a floor/project). Omit for a
-   *  table that should just size to its content, as before. */
+   *  table that should just size to its content, as before — the page
+   *  itself scrolls naturally instead of nesting a second scrollbar. */
   maxHeight?: string;
+  /** Optional per-column width (e.g. ["20%","80%"]) — same length as
+   *  `columns`. Omit to let columns size to content, as before. */
+  colWidths?: string[];
 }) {
   const hasRows = React.Children.count(children) > 0;
   return (
     <div className="overflow-x-auto" style={maxHeight ? { maxHeight, overflowY: "auto" } : undefined}>
-      <table className="w-full text-[13px] border-collapse">
+      <table className={"w-full text-[13px] border-collapse" + (colWidths ? " table-fixed" : "")}>
+        {colWidths && (
+          <colgroup>
+            {colWidths.map((w, i) => <col key={i} style={{ width: w }} />)}
+          </colgroup>
+        )}
         <thead>
           <tr className="text-left text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
             {columns.map((c) => (

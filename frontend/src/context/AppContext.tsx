@@ -294,7 +294,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const closeRecordModal = useCallback(() => setRecordModal(null), []);
 
   const me = useCallback((): User | null => byId(coll(dataRef.current, "users"), currentUserId), [currentUserId]);
-  const myRole = useCallback((): Role => me()?.role ?? "DRI", [me]);
+  const myRole = useCallback((): Role => me()?.role ?? "ADMIN", [me]);
 
   const value: AppContextValue = {
     data, rev, mode, loggedIn, currentUserId, currentProjectId, activeTab, activeMaster, drawer, toastMsg,

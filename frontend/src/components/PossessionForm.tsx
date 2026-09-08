@@ -13,9 +13,48 @@ export interface PossessionActiveForm {
   stageId: string; stageName: string; stageDesc: string; checklistId: string;
 }
 
-interface RowState { paramId: string; result: "pass" | "fail" | "na"; remark: string; photo?: Photo }
+type CellResult = "pass" | "fail" | "na";
+interface RowState { paramId: string; cells: Partial<Record<string, CellResult>>; remark: string; photo?: Photo }
 
 const draftKey = (unitId: string, stageId: string) => `handoverDraft:${unitId}:${stageId}`;
+
+/* Matches the printed possession-checklist sheet's room columns (A–M) —
+   each checklist item gets assessed per room, not once for the whole
+   unit, since a room can individually pass/fail (e.g. Doors OK in the
+   Living Room but cracked in Bedroom 2). Fixed list rather than derived
+   from unit.type — an "if applicable" column is simply left blank for a
+   unit that doesn't have it (e.g. a 1BHK's Bedroom 2/3 columns), same as
+   the paper form itself. */
+const ROOMS = [
+  "Living Room", "Dining Area", "Kitchen",
+  "Bedroom 1", "Toilet 1", "Bedroom 2", "Toilet 2", "Bedroom 3", "Toilet 3",
+  "Balcony 1", "Balcony 2", "Balcony 3", "Terrace"
+];
+const ROOM_SHORT: Record<string, string> = {
+  "Living Room": "Living", "Dining Area": "Dining", "Kitchen": "Kitchen",
+  "Bedroom 1": "Bed 1", "Toilet 1": "Toil 1", "Bedroom 2": "Bed 2", "Toilet 2": "Toil 2",
+  "Bedroom 3": "Bed 3", "Toilet 3": "Toil 3",
+  "Balcony 1": "Bal 1", "Balcony 2": "Bal 2", "Balcony 3": "Bal 3", "Terrace": "Terrace"
+};
+
+function nextCellResult(cur: CellResult | undefined, allowNA: boolean): CellResult | undefined {
+  if (cur === undefined) return "pass";
+  if (cur === "pass") return "fail";
+  if (cur === "fail") return allowNA ? "na" : undefined;
+  return undefined;
+}
+
+/* One item's overall result, rolled up from whichever room cells were
+   actually filled in — Fail anywhere wins (a single bad room still blocks
+   the item), N/A only when every filled cell was N/A, otherwise Pass
+   (including when nothing was filled — matches the old single-value
+   form's "defaults to pass until touched" behavior). */
+function aggregateResult(row: RowState): CellResult {
+  const vals = Object.values(row.cells).filter((v): v is CellResult => !!v);
+  if (vals.includes("fail")) return "fail";
+  if (vals.length > 0 && vals.every((v) => v === "na")) return "na";
+  return "pass";
+}
 
 /* Fill-out form for one possession checklist (Internal or Owner) — opens
    as a right-side SidePanel drawer, the same visual language as
@@ -31,7 +70,6 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
   const { data, toast, apply } = useApp();
   const { submitChecklist } = useActions();
   const [rows, setRows] = useState<RowState[]>([]);
-  const [touched, setTouched] = useState<Record<number, boolean>>({});
   const [remarks, setRemarks] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
@@ -49,18 +87,16 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
   // same unit+stage form is reopened before submitting.
   useEffect(() => {
     if (!form) return;
-    let restored: { rows: RowState[]; touched: Record<number, boolean>; remarks?: string } | null = null;
+    let restored: { rows: RowState[]; remarks?: string } | null = null;
     try {
       const raw = localStorage.getItem(draftKey(form.unitId, form.stageId));
       if (raw) restored = JSON.parse(raw);
     } catch { /* corrupt/blocked storage — fall back to a fresh form */ }
     if (restored && restored.rows.length === items.length) {
       setRows(restored.rows);
-      setTouched(restored.touched || {});
       setRemarks(restored.remarks || "");
     } else {
-      setRows(items.map((it) => ({ paramId: it.paramId, result: "pass", remark: "" })));
-      setTouched({});
+      setRows(items.map((it) => ({ paramId: it.paramId, cells: {}, remark: "" })));
       setRemarks("");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -68,16 +104,31 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
 
   const setRow = (i: number, patch: Partial<RowState>) => {
     setRows((rs) => rs.map((r, ri) => (ri === i ? { ...r, ...patch } : r)));
-    setTouched((t) => ({ ...t, [i]: true }));
   };
-  const answeredCount = Object.values(touched).filter(Boolean).length;
+  function cycleCell(i: number, room: string, allowNA: boolean) {
+    setRows((rs) => rs.map((r, ri) => {
+      if (ri !== i) return r;
+      const next = nextCellResult(r.cells[room], allowNA);
+      const cells = { ...r.cells };
+      if (next === undefined) delete cells[room]; else cells[room] = next;
+      return { ...r, cells };
+    }));
+  }
+  // Quick "mark the whole item" action, alongside the per-room grid — sets
+  // every room to the same result in one tap, for the common case where an
+  // item is uniformly fine (or uniformly bad) across the unit. Individual
+  // rooms can still be corrected afterward by tapping that cell.
+  function setAllCells(i: number, result: CellResult) {
+    setRows((rs) => rs.map((r, ri) => (ri !== i ? r : { ...r, cells: Object.fromEntries(ROOMS.map((room) => [room, result])) })));
+  }
+  const answeredCount = rows.filter((r) => Object.values(r.cells).some(Boolean)).length;
   const pct = items.length ? Math.round((answeredCount / items.length) * 100) : 0;
 
   function saveDraft() {
     if (!form) return;
     setSavingDraft(true);
     try {
-      localStorage.setItem(draftKey(form.unitId, form.stageId), JSON.stringify({ rows, touched, remarks }));
+      localStorage.setItem(draftKey(form.unitId, form.stageId), JSON.stringify({ rows, remarks }));
       toast("Draft saved");
     } catch {
       toast("Couldn't save draft — browser storage unavailable");
@@ -106,7 +157,7 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
     e.target.value = "";
     if (!file || i == null) return;
     setUploadingIdx(i);
-    const photo = await uploadPhoto(file, "qc");
+    const photo = await uploadPhoto(file, "qc", form?.unitName);
     setRow(i, { photo });
     setUploadingIdx(null);
   }
@@ -116,7 +167,7 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
   // set-and-forget (RecordModal.tsx wrote it, nothing ever read it back).
   const missingEvidence = items
     .map((it, i) => ({ it, row: rows[i] }))
-    .find(({ it, row }) => it.evidence && row && row.result !== "na" && !row.photo);
+    .find(({ it, row }) => it.evidence && row && aggregateResult(row) !== "na" && !row.photo);
 
   async function submit() {
     if (!form) return;
@@ -126,7 +177,24 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
       return;
     }
     setSubmitting(true);
-    await submitChecklist("unit", form.unitId, form.stageId, form.checklistId, rows);
+    // Roll each item's per-room cells into the single pass/fail/na value
+    // submitChecklist()/the rest of the app expects — the full room-level
+    // breakdown still rides along as `cells` on the same object (stored
+    // verbatim on the progress record) so it isn't lost, just not the
+    // value that drives snag-raising/gate pass-fail.
+    const results = rows.map((r) => {
+      const agg = aggregateResult(r);
+      const failedRooms = Object.entries(r.cells).filter(([, v]) => v === "fail").map(([room]) => room);
+      const remark = agg === "fail" && failedRooms.length
+        ? [r.remark.trim(), `Failed in: ${failedRooms.join(", ")}`].filter(Boolean).join(" — ")
+        : r.remark.trim();
+      return {
+        paramId: r.paramId, result: agg, remark,
+        photo: r.photo,
+        cells: Object.entries(r.cells).filter(([, v]) => v).map(([room, result]) => ({ room, result }))
+      };
+    });
+    await submitChecklist("unit", form.unitId, form.stageId, form.checklistId, results);
     // Additive only — a free-text note alongside the pass/fail results,
     // stored on the same progress record. submitChecklist()'s own `note`
     // field is reserved for the auto-generated fail summary, so this is a
@@ -190,6 +258,7 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
                 {g.entries.map(({ item, param, i }, gi) => {
                   const row = rows[i];
                   if (!row) return null;
+                  const agg = aggregateResult(row);
                   return (
                     <div
                       key={item.id}
@@ -198,17 +267,47 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
                         borderBottom: gi < g.entries.length - 1 ? "1px solid var(--border)" : "none"
                       }}
                     >
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap", marginBottom: 8 }}>
                         <div style={{ fontSize: 13, fontWeight: 700, flex: 1, minWidth: 160 }}>{param.name}</div>
                         <div style={{ display: "flex", gap: 6 }}>
-                          <button className={"btn btn-sm " + (row.result === "pass" ? "btn-primary" : "btn-secondary")} onClick={() => setRow(i, { result: "pass" })}>Pass</button>
-                          <button className={"btn btn-sm " + (row.result === "fail" ? "btn-danger" : "btn-secondary")} onClick={() => setRow(i, { result: "fail" })}>Fail</button>
+                          <button type="button" className={"btn btn-sm " + (agg === "pass" ? "btn-primary" : "btn-secondary")} onClick={() => setAllCells(i, "pass")}>Pass</button>
+                          <button type="button" className={"btn btn-sm " + (agg === "fail" ? "btn-danger" : "btn-secondary")} onClick={() => setAllCells(i, "fail")}>Fail</button>
                           {item.mandatory === false && (
-                            <button className={"btn btn-sm " + (row.result === "na" ? "btn-primary" : "btn-secondary")} onClick={() => setRow(i, { result: "na" })}>N/A</button>
+                            <button type="button" className={"btn btn-sm " + (agg === "na" ? "btn-primary" : "btn-secondary")} onClick={() => setAllCells(i, "na")}>N/A</button>
                           )}
                         </div>
                       </div>
-                      {item.evidence && row.result !== "na" && (
+
+                      {/* One cell per room — tap cycles blank → Pass → Fail →
+                          N/A → blank. Matches the printed form's per-room
+                          grid; a room that doesn't apply to this unit is
+                          simply left blank, same as on paper. */}
+                      <div style={{ display: "flex", gap: 4, overflowX: "auto", paddingBottom: 4 }}>
+                        {ROOMS.map((room) => {
+                          const v = row.cells[room];
+                          const bg = v === "pass" ? "var(--color-pass, #22c55e)" : v === "fail" ? "var(--color-fail, #ef4444)" : v === "na" ? "var(--bg-subtle)" : "transparent";
+                          const fg = v ? "#fff" : "var(--text-muted)";
+                          return (
+                            <button
+                              key={room}
+                              type="button"
+                              onClick={() => cycleCell(i, room, item.mandatory === false)}
+                              title={room}
+                              style={{
+                                flex: "0 0 auto", width: 46, height: 32, borderRadius: 6,
+                                border: v ? "none" : "1px dashed var(--border)",
+                                background: bg, color: fg,
+                                fontSize: 9.5, fontWeight: 700, lineHeight: 1.15,
+                                cursor: "pointer", padding: "2px 3px"
+                              }}
+                            >
+                              {v === "pass" ? "✓" : v === "fail" ? "✕" : v === "na" ? "N/A" : ROOM_SHORT[room]}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {item.evidence && agg !== "na" && (
                         <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
                           <button
                             type="button"
@@ -221,7 +320,7 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
                           {row.photo && <img src={row.photo.url} style={{ width: 36, height: 36, borderRadius: 6, objectFit: "cover" }} />}
                         </div>
                       )}
-                      {row.result === "fail" && (
+                      {agg === "fail" && (
                         <div style={{ marginTop: 8 }}>
                           <label style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase" }}>Remarks</label>
                           <input

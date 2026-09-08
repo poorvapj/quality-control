@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Zap, Grid3x3, AlertTriangle, Users, ClipboardList, PenTool, Settings,
   Award, Bug, Clock, TrendingUp, MapPin, Pencil, Trash2, Eye, EyeOff,
   ChevronsLeft, ChevronsRight, Check, ChevronDown, Search, Calendar, Download, Database,
-  MoreHorizontal, Circle, ClipboardCheck, type LucideIcon
+  MoreHorizontal, Circle, ClipboardCheck, Lock, type LucideIcon
 } from "lucide-react";
 
 /* Same {name, size} public API as the old hand-drawn SVG set — every one
@@ -36,7 +36,8 @@ const ICONS: Record<string, LucideIcon> = {
   download: Download,
   database: Database,
   moreHorizontal: MoreHorizontal,
-  handover: ClipboardCheck
+  handover: ClipboardCheck,
+  permissions: Lock
 };
 
 export default function NavIcon({ name, size = 17 }: { name: string; size?: number }) {
