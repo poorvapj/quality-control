@@ -43,7 +43,23 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
   const { ackStage, startStage, completeStage, failStage, capturePhoto } = useActions();
   const fileRef = useRef<HTMLInputElement>(null);
   const pendingPhoto = useRef<{ kind: "unit" | "floor"; id: string; stageId: string } | null>(null);
-  const [tab, setTab] = useState<UnitTab>("overview");
+  // Before the Unit 360° tabs existed, opening a unit that Tower Board
+  // flags as an "issue" (red tile) showed the full detail immediately —
+  // inline "Failed: <note>" text per stage, plus an open-snags banner.
+  // The Overview tab now only shows a % and a bare snag COUNT, hiding
+  // that detail behind an extra tap. A unit can be flagged red for two
+  // different reasons — an open snag record, OR a stage simply marked
+  // "fail" with no snag ever raised (failStage() lets you skip creating
+  // one) — so check both, same two signals Tower Board's tile color
+  // itself is computed from (unitSummary().fail / .snags, rules.ts).
+  // Land on "gates" (renderStageList) either way — that's the one tab
+  // that shows both the fail note and the open-snag banner, i.e. exactly
+  // the old pre-tab default view.
+  const [tab, setTab] = useState<UnitTab>(() => {
+    if (kind !== "unit") return "overview";
+    const hasIssue = openSnagsFor(data, id).length > 0 || unitSummary(data, currentProjectId, id).fail;
+    return hasIssue ? "gates" : "overview";
+  });
   const [possessionForm, setPossessionForm] = useState<PossessionActiveForm | null>(null);
 
   const track = kind;
