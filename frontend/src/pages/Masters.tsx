@@ -4,6 +4,7 @@ import { MASTERS } from "../services/config";
 import { coll, byId, refLabel } from "../shared/rules";
 import { exportSnagCsv } from "../shared/exportSnagCsv";
 import { downloadCsv } from "../shared/csv";
+import { buildEventOp } from "../shared/eventLog";
 import NavIcon from "../components/NavIcon";
 import type { MasterKey } from "../types";
 
@@ -55,7 +56,10 @@ export default function Masters() {
       ? `${refLabel(data, "projects", rec.projectId)} · ${rec.category}`
       : (rec.name || rec.code || id);
     if (!confirm(`Delete ${master.label.toLowerCase()} "${identity}"?\n\nThis removes it for everyone on the board.`)) return;
-    await apply([{ op: "delete", coll: activeMaster, id }]);
+    await apply([
+      { op: "delete", coll: activeMaster, id },
+      buildEventOp(currentUserId, "MASTER_DELETE", id, "", `${master.label} · deleted · ${identity}`)
+    ]);
     toast("Deleted " + id);
   }
 

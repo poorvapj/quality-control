@@ -183,6 +183,10 @@ export interface ProgressPatch {
   photo?: Photo;
   checklistId?: string;
   checklist?: { paramId: string; result: string; remark: string }[];
+  /** Free-text note attached to a possession-checklist submission
+   *  (HandoverChecklist.tsx) — separate from `note`, which holds the
+   *  auto-generated "N parameter(s) failed" summary. */
+  remarks?: string;
   /** Every status transition this stage instance has ever gone through, oldest
    *  first — never trimmed on rework. `rel`/`ack`/`start`/`at` above only ever
    *  hold the LATEST cycle's timestamps (each write shallow-merges over the
@@ -330,7 +334,7 @@ export type Op =
   | { op: "progress"; key: string; patch: Partial<ProgressPatch> }
   | { op: "event"; ev: EventLog };
 
-export type TabKey = "dash" | "work" | "board" | "snags" | "team" | "masters" | "dpr" | "drawingRequests" | "backups" | "auditLog";
+export type TabKey = "dash" | "work" | "board" | "handoverChecklist" | "snags" | "team" | "masters" | "dpr" | "drawingRequests" | "backups" | "auditLog";
 export type MasterKey = "projects" | "floors" | "units" | "stages" | "qparams" | "checklists" | "stagemap" | "users" | "permissions" | "workTargets";
 
 export type FieldType = "text" | "number" | "date" | "color" | "select" | "ref" | "bool" | "textarea" | "items";

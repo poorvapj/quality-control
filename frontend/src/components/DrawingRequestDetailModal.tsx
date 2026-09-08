@@ -4,13 +4,14 @@ import { coll, refLabel } from "../shared/rules";
 import { fmtDT } from "../shared/helpers";
 import { canActOnStage } from "../shared/permissions";
 import { useDrawingRequestActions } from "../hooks/useDrawingRequestActions";
+import SearchDropdown from "./SearchDropdown";
 import { uploadPhoto } from "../shared/uploadPhoto";
 import SidePanel from "./SidePanel";
 import NavIcon from "./NavIcon";
 import Card from "../ui/Card";
 import Btn from "../ui/Btn";
 import SField from "../ui/SField";
-import type { DrawingRequest, DrawingPriority } from "../types";
+import type { DrawingRequest, DrawingPriority, TrackingStatus } from "../types";
 
 const STAGE_LABEL: Record<string, string> = {
   "stage-1-screen": "Stage 1 · Screening",
@@ -48,7 +49,7 @@ const WAITING_LABEL: Record<string, string> = {
 
 export default function DrawingRequestDetailModal({ dr, onClose }: { dr: DrawingRequest | null; onClose: () => void }) {
   const { data, currentUserId, myRole, toast } = useApp();
-  const { forwardToStage2, returnAtStage1, submitStage2, decideStage3, decideStage4, resubmit } = useDrawingRequestActions();
+  const { forwardToStage2, returnAtStage1, submitStage2, decideStage3, decideStage4, resubmit, updateTracking } = useDrawingRequestActions();
   const [remarks, setRemarks] = useState("");
   const [assignedTo, setAssignedTo] = useState("");
   const [committedDate, setCommittedDate] = useState("");
@@ -56,6 +57,23 @@ export default function DrawingRequestDetailModal({ dr, onClose }: { dr: Drawing
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+
+  // Post-approval delivery tracking (trackingStatus/actualCompletionDate/
+  // planningVerified/projectAcknowledged) used to be read-only display
+  // fields with no writer anywhere — updateTracking() existed but nothing
+  // called it. This section is that writer.
+  const [trackDraft, setTrackDraft] = useState<{ trackingStatus: string; actualCompletionDate: string; planningVerified: boolean; projectAcknowledged: boolean }>({
+    trackingStatus: "", actualCompletionDate: "", planningVerified: false, projectAcknowledged: false
+  });
+  const [savingTrack, setSavingTrack] = useState(false);
+  React.useEffect(() => {
+    setTrackDraft({
+      trackingStatus: dr?.trackingStatus || "pending",
+      actualCompletionDate: dr?.actualCompletionDate || "",
+      planningVerified: !!dr?.planningVerified,
+      projectAcknowledged: !!dr?.projectAcknowledged
+    });
+  }, [dr?.id]);
 
   // A picked-but-not-yet-uploaded selection, and an in-progress upload, both
   // represent work that a stray back/close would silently throw away — warn
@@ -370,6 +388,64 @@ export default function DrawingRequestDetailModal({ dr, onClose }: { dr: Drawing
           </div>
         );
       })()}
+
+      {dr.reviewStatus === "approved" && (myRole() === "DRI" || currentUserId === "U-ADMIN") && (
+        <Card style={{ marginBottom: 16 }}>
+          <div className="micro-label" style={{ marginBottom: 10 }}>UPDATE TRACKING</div>
+          <div className="form-grid">
+            <div className="field">
+              <label>Tracking Status</label>
+              <SearchDropdown
+                searchable={false}
+                value={trackDraft.trackingStatus}
+                onChange={(v) => setTrackDraft((t) => ({ ...t, trackingStatus: v }))}
+                options={[
+                  { value: "pending", label: "Pending" },
+                  { value: "committed", label: "Committed" },
+                  { value: "completed", label: "Completed" },
+                  { value: "delayed", label: "Delayed" }
+                ]}
+                neutralActive
+              />
+            </div>
+            <div className="field">
+              <label>Actual Completion</label>
+              <input
+                className="input" type="date"
+                value={trackDraft.actualCompletionDate}
+                onChange={(e) => setTrackDraft((t) => ({ ...t, actualCompletionDate: e.target.value }))}
+              />
+            </div>
+            <div className="field full" style={{ flexDirection: "row", alignItems: "center", gap: 20 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, margin: 0 }}>
+                <input type="checkbox" checked={trackDraft.planningVerified} onChange={(e) => setTrackDraft((t) => ({ ...t, planningVerified: e.target.checked }))} />
+                Planning Verified
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, margin: 0 }}>
+                <input type="checkbox" checked={trackDraft.projectAcknowledged} onChange={(e) => setTrackDraft((t) => ({ ...t, projectAcknowledged: e.target.checked }))} />
+                Project Acknowledged
+              </label>
+            </div>
+          </div>
+          <button
+            className="btn btn-primary btn-sm" style={{ marginTop: 12 }}
+            disabled={savingTrack}
+            onClick={async () => {
+              setSavingTrack(true);
+              await updateTracking(req.id, {
+                trackingStatus: trackDraft.trackingStatus as TrackingStatus,
+                actualCompletionDate: trackDraft.actualCompletionDate || null,
+                planningVerified: trackDraft.planningVerified,
+                projectAcknowledged: trackDraft.projectAcknowledged
+              });
+              setSavingTrack(false);
+              toast("Tracking updated");
+            }}
+          >
+            {savingTrack ? "Saving…" : "Save Tracking"}
+          </button>
+        </Card>
+      )}
 
       <div className="micro-label" style={{ marginBottom: 8 }}>REVIEW HISTORY</div>
       <Card padded={false}>

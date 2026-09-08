@@ -2,8 +2,9 @@ import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll } from "../shared/rules";
 import { nextId } from "../shared/helpers";
+import { buildEventOp } from "../shared/eventLog";
 import { WORK_CATEGORIES } from "../services/config";
-import type { DailyProgressReport, DprWorkEntry, ShiftType, Photo, WorkTarget } from "../types";
+import type { DailyProgressReport, DprWorkEntry, ShiftType, Photo, WorkTarget, Op } from "../types";
 import PhotoGroupUploader from "./PhotoGroupUploader";
 
 function slugCode(name: string): string {
@@ -75,7 +76,14 @@ export default function DprForm({ isPublic, onDone }: { isPublic: boolean; onDon
       workEntries,
       isPublic
     };
-    await apply([{ op: "upsert", coll: "dpr", rec }]);
+    // The anonymous public submission form has no session, and the backend
+    // requires one for "event" ops (assertOpAllowed) — only log an audit
+    // entry for a real signed-in submission, matching how every other
+    // logEvent() call in the app is implicitly gated by already requiring a
+    // session for its own op.
+    const ops: Op[] = [{ op: "upsert", coll: "dpr", rec }];
+    if (!isPublic) ops.push(buildEventOp(currentUserId, "DPR_SUBMIT", rec.id, "", `${rec.vendorName} · ${workEntries.length} work item(s) · ${rec.projectName}`));
+    await apply(ops);
     setSaving(false);
     toast("Daily progress report submitted");
     onDone(rec.id);

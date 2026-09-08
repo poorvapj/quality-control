@@ -11,6 +11,7 @@ import RecordModal from "./components/RecordModal";
 import Dashboard from "./pages/Dashboard";
 import MyWork from "./pages/MyWork";
 import TowerBoard from "./pages/TowerBoard";
+import HandoverChecklist from "./pages/HandoverChecklist";
 import Snags from "./pages/Snags";
 import Team from "./pages/Team";
 import Masters from "./pages/Masters";
@@ -30,6 +31,7 @@ export default function App() {
     dash: <Dashboard />,
     work: <MyWork />,
     board: <TowerBoard />,
+    handoverChecklist: <HandoverChecklist />,
     snags: <Snags />,
     team: <Team />,
     masters: <Masters />,
@@ -39,11 +41,11 @@ export default function App() {
     auditLog: <AuditLog />
   };
 
-  // Team, Backups, and Audit Log are admin-only — a stale activeTab (e.g.
-  // from before this restriction existed) should fall back to Dashboard,
+  // Team, Masters, Backups, and Audit Log are admin-only — a stale
+  // activeTab (e.g. from before this restriction existed, or a DRI who had
+  // Masters open when it got locked down) should fall back to Dashboard,
   // not just hide the nav link while still rendering the page underneath.
-  // Masters is open to everyone now, so it's excluded from this check.
-  const restrictedTab = (activeTab === "team" || activeTab === "backups" || activeTab === "auditLog") && !isAdmin;
+  const restrictedTab = (activeTab === "team" || activeTab === "masters" || activeTab === "backups" || activeTab === "auditLog") && !isAdmin;
 
   return (
     <MainLayout>

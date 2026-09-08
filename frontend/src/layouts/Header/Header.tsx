@@ -7,7 +7,7 @@ import "./Header.css";
 
 export default function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
   const { data, currentUserId, setCurrentUserId, me, logout } = useApp();
-  const [dark, setDark] = useState(() => localStorage.getItem("neoteric_theme") !== "light");
+  const [dark, setDark] = useState(() => localStorage.getItem("neoteric_theme") === "dark");
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuView, setMenuView] = useState<"menu" | "switch">("menu");
   const [switchQ, setSwitchQ] = useState("");
@@ -47,7 +47,7 @@ export default function Header({ onToggleSidebar }: { onToggleSidebar: () => voi
     <header>
       <div className="header-inner">
         <div className="header-left">
-          <button className="btn-icon menu-btn" onClick={onToggleSidebar} title="Menu">☰</button>
+          <button type="button" className="btn-icon menu-btn" onClick={onToggleSidebar} title="Menu">☰</button>
           <div
             style={{
               width: 36,
@@ -70,9 +70,9 @@ export default function Header({ onToggleSidebar }: { onToggleSidebar: () => voi
           </div>
         </div>
         <div className="header-actions">
-          <button className="btn-icon" onClick={toggleTheme} title="Toggle theme">{dark ? "☾" : "☀"}</button>
+          <button type="button" className="btn-icon" onClick={toggleTheme} title="Toggle theme">{dark ? "☾" : "☀"}</button>
           <div className="account-wrap">
-            <button className="account-btn" ref={btnRef} onClick={() => setMenuOpen((o) => !o)}>
+            <button type="button" className="account-btn" ref={btnRef} onClick={() => setMenuOpen((o) => !o)}>
               <div className="account-name">
                 <div className="n">{u ? u.name : "—"}</div>
                 <div className="r">{roleLabel}</div>
@@ -88,14 +88,18 @@ export default function Header({ onToggleSidebar }: { onToggleSidebar: () => voi
                       <div className="r">{roleLabel}</div>
                     </div>
                     {u?.id === "U-ADMIN" && (
-                      <button className="account-menu-row" onClick={() => setMenuView("switch")}>
+                      <button
+                        type="button"
+                        className="account-menu-row"
+                        onClick={(e) => { e.stopPropagation(); setMenuView("switch"); }}
+                      >
                         <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                           <span style={{ fontSize: 14 }}>⇄</span> Switch Account
                         </span>
                         <span style={{ color: "var(--theme-primary)", fontWeight: 800 }}>›</span>
                       </button>
                     )}
-                    <button className="account-menu-row danger" onClick={() => { setMenuOpen(false); logout(); }}>
+                    <button type="button" className="account-menu-row danger" onClick={() => { setMenuOpen(false); logout(); }}>
                       <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <span style={{ fontSize: 14 }}>⏻</span> Sign out
                       </span>
@@ -103,7 +107,7 @@ export default function Header({ onToggleSidebar }: { onToggleSidebar: () => voi
                   </>
                 ) : (
                   <>
-                    <button className="account-menu-back" onClick={() => setMenuView("menu")}>‹ Back</button>
+                    <button type="button" className="account-menu-back" onClick={() => setMenuView("menu")}>‹ Back</button>
                     <div style={{ position: "relative", padding: "0 4px 8px" }}>
                       <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", pointerEvents: "none" }}>
                         <NavIcon name="search" size={13} />
@@ -124,6 +128,7 @@ export default function Header({ onToggleSidebar }: { onToggleSidebar: () => voi
                           const active = usr.id === currentUserId;
                           return (
                             <button
+                              type="button"
                               key={usr.id}
                               className="account-menu-row"
                               onClick={() => { setCurrentUserId(usr.id); setMenuView("menu"); setMenuOpen(false); }}

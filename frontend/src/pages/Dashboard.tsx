@@ -18,7 +18,7 @@ import Badge from "../ui/tw/Badge";
 import Field from "../ui/tw/Field";
 import type { BoardData, Floor, TabKey } from "../types";
 
-const FLOOR_LIST_CAP = 40;
+const FLOOR_LIST_CAP = 15;
 const ALL_PROJECTS_VALUE = "__all__";
 
 /** The timestamp a unit/floor's final stage was marked done — its real
@@ -186,14 +186,14 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div className="flex items-start justify-between gap-4 flex-wrap mt-0.5 mb-6">
-        <div className="flex gap-3.5 items-start min-w-0">
-          <div className="w-11 h-11 shrink-0 rounded-radius-md bg-primary-light text-primary flex items-center justify-center">
-            <NavIcon name="dashboard" size={20} />
+      <div className="flex items-start justify-between gap-4 flex-wrap mt-0.5 mb-5">
+        <div className="flex gap-3 items-center min-w-0">
+          <div className="w-9 h-9 shrink-0 rounded-radius-md bg-primary-light text-primary flex items-center justify-center">
+            <NavIcon name="dashboard" size={17} />
           </div>
           <div>
-            <div className="text-xl font-semibold tracking-tight leading-tight">Dashboard</div>
-            <div className="text-[12.5px] text-[var(--text-muted)] mt-1 leading-normal">
+            <div className="text-[17px] font-semibold tracking-tight leading-tight">Dashboard</div>
+            <div className="text-[12px] text-[var(--text-muted)] mt-0.5 leading-normal">
               {viewAllProjects
                 ? "Combined KPIs, what needs you, and floor-by-floor progress across all projects."
                 : "Site-wide KPIs, what needs you, and floor-by-floor progress."}
@@ -202,7 +202,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <Card className="flex gap-3.5 flex-wrap mb-6">
+      <Card className="flex gap-3.5 flex-wrap mb-5">
         <div className="max-w-[220px]">
           <Field label="Active Project">
             <SearchDropdown
@@ -266,41 +266,41 @@ export default function Dashboard() {
         )}
       </Card>
 
-      <div className="text-[9px] font-semibold uppercase tracking-[0.1em] text-[var(--text-sub)] mb-1">KPI OVERVIEW</div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 mb-7">
+      <div className="text-[9px] font-semibold uppercase tracking-[0.1em] text-[var(--text-sub)] mb-2">KPI OVERVIEW</div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         {stats.map((s) => (
           <Card
             key={s.label}
             className={"relative transition-shadow" + (s.onClick ? " cursor-pointer" : "")}
             onClick={s.onClick}
           >
-            <div className="text-[9px] font-semibold uppercase tracking-[0.1em] text-[var(--text-sub)] mb-1">{s.label}</div>
-            <div className={`text-[32px] font-extrabold mt-1.5 tracking-tight ${s.tone ? STAT_VAL_CLS[s.tone] : "text-[var(--text-main)]"}`}>{s.val}</div>
-            <div className="text-[10px] text-[var(--text-sub)] mt-1 font-semibold">{s.foot}</div>
-            <div className="absolute top-3.5 right-3.5 w-8 h-8 rounded-radius-sm bg-[var(--bg-subtle)] text-[var(--text-muted)] flex items-center justify-center">
-              <NavIcon name={s.icon} size={15} />
+            <div className="text-[9px] font-semibold uppercase tracking-[0.1em] text-[var(--text-sub)] mb-1 pr-8">{s.label}</div>
+            <div className={`text-[28px] font-extrabold mt-1 tracking-tight leading-none ${s.tone ? STAT_VAL_CLS[s.tone] : "text-[var(--text-main)]"}`}>{s.val}</div>
+            <div className="text-[10px] text-[var(--text-sub)] mt-1.5 font-semibold leading-snug">{s.foot}</div>
+            <div className="absolute top-3 right-3 w-7 h-7 rounded-radius-sm bg-[var(--bg-subtle)] text-[var(--text-muted)] flex items-center justify-center">
+              <NavIcon name={s.icon} size={13} />
             </div>
           </Card>
         ))}
       </div>
 
-      <div className="flex items-center justify-between gap-3 flex-wrap my-7">
-        <div className="text-[15px] font-semibold tracking-tight flex items-center gap-2">
-          <span className="inline-block grayscale opacity-70"><NavIcon name="pin" size={14} /></span> WHAT NEEDS ME
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-2.5">
+        <div className="text-[13px] font-bold tracking-tight text-[var(--text-sub)] uppercase flex items-center gap-2">
+          <NavIcon name="pin" size={13} /> What Needs Me
         </div>
         <div className="text-[11px] text-[var(--text-muted)] font-medium">{myOpen} open item{myOpen === 1 ? "" : "s"} for {me()?.name || ""}</div>
       </div>
-      <Card padded={false}>
+      <Card padded={false} className="mb-6">
         {myOpen === 0
-          ? <div className="py-7.5 px-5 text-center text-[var(--text-muted)] text-[13px]">🎉 Nothing assigned to you right now.</div>
+          ? <div className="py-6 px-5 text-center text-[var(--text-muted)] text-[13px]">🎉 Nothing assigned to you right now.</div>
           : <>{asg.slice(0, 4).map((a) => <AssignRow key={a.id} a={a} />)}{sng.slice(0, 4).map((s) => <SnagRow key={s.id} s={s} />)}</>}
       </Card>
 
       {slow.length > 0 && (
-        <div ref={slowSectionRef}>
-          <div className="flex items-center justify-between gap-3 flex-wrap my-7">
-            <div className="text-[15px] font-semibold tracking-tight flex items-center gap-2">
-              <span className="inline-block grayscale opacity-70"><NavIcon name="clock" size={14} /></span> SLOW HANDOFFS
+        <div ref={slowSectionRef} className="mb-6">
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-2.5">
+            <div className="text-[13px] font-bold tracking-tight text-[var(--text-sub)] uppercase flex items-center gap-2">
+              <NavIcon name="clock" size={13} /> Slow Handoffs
             </div>
             <div className="text-[11px] text-[var(--text-muted)] font-medium">Released to a trade but never acknowledged — these are the huddle agenda</div>
           </div>
@@ -325,9 +325,9 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3 flex-wrap my-7">
-        <div className="text-[15px] font-semibold tracking-tight flex items-center gap-2">
-          <span className="inline-block grayscale opacity-70"><NavIcon name="trend" size={14} /></span> FLOOR PROGRESS
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-2.5">
+        <div className="text-[13px] font-bold tracking-tight text-[var(--text-sub)] uppercase flex items-center gap-2">
+          <NavIcon name="trend" size={13} /> Floor Progress
         </div>
         {orderedFloors.length > FLOOR_LIST_CAP && (
           <div className="flex items-center gap-2.5">
@@ -342,7 +342,7 @@ export default function Dashboard() {
           </div>
         )}
       </div>
-      <Card>
+      <Card padded={false} className="px-4 py-1">
         {floorRows.map((f) => {
           const us = floorUnits(data, f.projectId, f.id);
           const s = us.map((u) => unitSummary(data, f.projectId, u.id));
@@ -351,21 +351,23 @@ export default function Dashboard() {
           const p = Math.round((d / t) * 100);
           const released = floorReleased(data, f.projectId, f.id);
           return (
-            <div key={f.id} className="mb-2.5 last:mb-0">
-              <div className="flex justify-between text-[11.5px] font-bold">
-                <span>
-                  {viewAllProjects ? refLabel(data, "projects", f.projectId) + " · " : ""}{f.name}{" "}
-                  <span className="text-[var(--text-sub)] font-semibold">· {us.length} units{released ? "" : " · structure in progress"}</span>
+            <div key={f.id} className="py-2.5 border-b border-[var(--border)] last:border-b-0">
+              <div className="flex justify-between items-baseline gap-3">
+                <span className="text-[12.5px] font-bold truncate">
+                  {viewAllProjects ? refLabel(data, "projects", f.projectId) + " · " : ""}{f.name}
                 </span>
-                <span className="text-[var(--text-muted)]">{p}%</span>
+                <span className="text-[11px] text-[var(--text-muted)] font-bold shrink-0">{p}%</span>
+              </div>
+              <div className="text-[10.5px] text-[var(--text-sub)] font-semibold mt-0.5">
+                {us.length} units{released ? "" : " · Structure in progress"}
               </div>
               <div className="h-1.5 rounded-full bg-[var(--bg-subtle)] overflow-hidden mt-1.5">
-                <div className="h-full rounded-full" style={{ width: p + "%", background: p === 100 ? "var(--color-pass)" : "var(--theme-primary)" }} />
+                <div className="h-full rounded-full" style={{ width: p + "%", background: p === 0 ? "var(--bg-subtle)" : p === 100 ? "var(--color-pass)" : "var(--theme-primary)" }} />
               </div>
             </div>
           );
         })}
-        <div className="flex flex-wrap gap-3 mt-3.5 pt-3.5 border-t border-[var(--border)] text-[11px] text-[var(--text-muted)]">
+        <div className="flex flex-wrap gap-3 py-3 border-t border-[var(--border)] text-[11px] text-[var(--text-muted)]">
           {bySeverity.map((b) => (
             <div key={b.sev} className="flex items-center gap-1.5">
               <Badge color={b.sev === "Critical" ? "red" : b.sev === "Major" ? "amber" : "gray"}>{b.n} {b.sev}</Badge>

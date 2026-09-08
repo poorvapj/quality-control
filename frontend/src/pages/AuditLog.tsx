@@ -4,9 +4,12 @@ import { coll, refLabel } from "../shared/rules";
 import { fmtDT, ago } from "../shared/helpers";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
+import Card from "../ui/tw/Card";
+import Btn from "../ui/tw/Btn";
+import Table, { TableRow, TableCell } from "../ui/tw/Table";
 import type { EventLog } from "../types";
 
-const ACTION_LABEL: Record<string, string> = {
+export const ACTION_LABEL: Record<string, string> = {
   ACK: "Release acknowledged",
   START: "Work started",
   COMPLETE: "Stage completed",
@@ -22,7 +25,23 @@ const ACTION_LABEL: Record<string, string> = {
   SNAG_REASSIGN: "Snag reassigned",
   SNAG_OPEN: "Snag reopened as Open",
   SNAG_IN_PROGRESS: "Snag marked In Progress",
-  SNAG_CLOSED: "Snag closed"
+  SNAG_CLOSED: "Snag closed",
+  DPR_SUBMIT: "Daily Progress Report submitted",
+  DR_CREATE: "Drawing request created",
+  DR_FORWARD_STAGE2: "Forwarded to production (Stage 2)",
+  DR_RETURN_STAGE1: "Returned at Stage 1",
+  DR_SUBMIT_STAGE2: "Submitted for cross-check (Stage 3)",
+  DR_STAGE3_APPROVE: "Cross-check passed (Stage 4)",
+  DR_STAGE3_REJECT: "Sent back to Stage 2 (Stage 3)",
+  DR_STAGE4_APPROVE: "Final approval granted",
+  DR_STAGE4_REJECT: "Sent back to Stage 2 (Stage 4)",
+  DR_RESUBMIT: "Ticket resubmitted",
+  DR_TRACKING_UPDATE: "Tracking updated",
+  MASTER_SAVE: "Master record saved",
+  MASTER_DELETE: "Master record deleted",
+  BACKUP_CREATE: "Backup created",
+  BACKUP_RESTORE: "Backup restored",
+  BACKUP_DELETE: "Backup deleted"
 };
 
 /* Modules with an empty `actions` list have no corresponding entry in the
@@ -42,11 +61,14 @@ const MODULES: ModuleDef[] = [
   { key: "workProgress", label: "Work Progress", desc: "Stage acknowledgements, starts, completions, QC gates, and hidden-work measurements", icon: "board", actions: ["ACK", "START", "COMPLETE", "QC_FAIL", "QC_PASS", "MEASURE"] },
   { key: "assignments", label: "Assignments", desc: "Work handed off, accepted, reassigned, and marked done", icon: "work", actions: ["ASSIGN", "ASSIGN_ASSIGNED", "ASSIGN_ACCEPTED", "ASSIGN_DONE"] },
   { key: "snags", label: "Snags", desc: "Quality defects raised, reassigned, reopened, and status changes", icon: "snags", actions: ["SNAG_RAISE", "SNAG_REOPEN", "SNAG_REASSIGN", "SNAG_OPEN", "SNAG_IN_PROGRESS", "SNAG_CLOSED"] },
-  { key: "drawingRequests", label: "Drawing Requests", desc: "Drawing request review chain", icon: "drawing", actions: [] },
-  { key: "dpr", label: "Daily Progress Reports", desc: "Site DPR submissions", icon: "dpr", actions: [] },
-  { key: "masters", label: "Masters", desc: "Project/Floor/Unit/Stage configuration", icon: "masters", actions: [] },
+  {
+    key: "drawingRequests", label: "Drawing Requests", desc: "Drawing request review chain", icon: "drawing",
+    actions: ["DR_CREATE", "DR_FORWARD_STAGE2", "DR_RETURN_STAGE1", "DR_SUBMIT_STAGE2", "DR_STAGE3_APPROVE", "DR_STAGE3_REJECT", "DR_STAGE4_APPROVE", "DR_STAGE4_REJECT", "DR_RESUBMIT", "DR_TRACKING_UPDATE"]
+  },
+  { key: "dpr", label: "Daily Progress Reports", desc: "Site DPR submissions", icon: "dpr", actions: ["DPR_SUBMIT"] },
+  { key: "masters", label: "Masters", desc: "Project/Floor/Unit/Stage configuration", icon: "masters", actions: ["MASTER_SAVE", "MASTER_DELETE"] },
   { key: "users", label: "Users", desc: "User accounts and roles", icon: "team", actions: [] },
-  { key: "backups", label: "Backups", desc: "Board backups and restores", icon: "database", actions: [] }
+  { key: "backups", label: "Backups", desc: "Board backups and restores", icon: "database", actions: ["BACKUP_CREATE", "BACKUP_RESTORE", "BACKUP_DELETE"] }
 ];
 
 function moduleEvents(events: EventLog[], mod: ModuleDef): EventLog[] {
@@ -66,34 +88,28 @@ export default function AuditLog() {
   if (!moduleKey) {
     return (
       <div>
-        <div className="page-header">
-          <div className="page-header-left">
-            <div className="page-icon"><NavIcon name="clock" size={20} /></div>
-            <div>
-              <div className="page-title">Audit Logs</div>
-              <div className="page-desc">Complete record of who did what, and when — pick a module to see its activity.</div>
-            </div>
-          </div>
-        </div>
+        <PageHeader icon="clock" title="Audit Logs" desc="Complete record of who did what, and when — pick a module to see its activity." />
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {MODULES.map((mod) => {
             const evs = moduleEvents(allEvents, mod);
             const last = evs[0]?.ts;
             return (
-              <div key={mod.key} className="card card-pad" style={{ cursor: "pointer" }} onClick={() => setModuleKey(mod.key)}>
-                <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 10 }}>
-                  <div className="page-icon" style={{ width: 34, height: 34, fontSize: 15 }}><NavIcon name={mod.icon} size={16} /></div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 800, fontSize: 14 }}>{mod.label}</div>
-                    <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>{mod.desc}</div>
-                  </div>
+              <Card
+                key={mod.key}
+                className="cursor-pointer transition-shadow hover:shadow-[var(--shadow-drawer)] hover:border-[var(--border-strong)] flex flex-col h-[158px]"
+                onClick={() => setModuleKey(mod.key)}
+              >
+                <div className="w-8 h-8 shrink-0 rounded-radius-sm bg-primary-light text-primary flex items-center justify-center mb-2.5">
+                  <NavIcon name={mod.icon} size={15} />
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 12 }}>
-                  <span style={{ fontWeight: 800, color: "var(--text-main)" }}>{evs.length} log{evs.length === 1 ? "" : "s"}</span>
-                  <span style={{ color: "var(--text-muted)" }}>{last ? fmtDT(last) : "—"}</span>
+                <div className="text-[13.5px] font-bold">{mod.label}</div>
+                <div className="text-[11px] text-[var(--text-muted)] mt-1 leading-snug line-clamp-3 flex-1">{mod.desc}</div>
+                <div className="flex items-center justify-between text-[11.5px] pt-2.5 mt-2.5 border-t border-[var(--border)]">
+                  <span className="font-bold text-[var(--text-main)]">{evs.length} log{evs.length === 1 ? "" : "s"}</span>
+                  <span className="text-[var(--text-muted)]">{last ? fmtDT(last) : "—"}</span>
                 </div>
-              </div>
+              </Card>
             );
           })}
         </div>
@@ -120,28 +136,18 @@ export default function AuditLog() {
 
   return (
     <div>
-      <div className="page-header">
-        <div className="page-header-left">
-          <div className="page-icon"><NavIcon name={mod.icon} size={20} /></div>
-          <div>
-            <div className="page-title">{mod.label}</div>
-            <div className="page-desc">{mod.desc}</div>
-          </div>
-        </div>
-        <div className="page-header-actions">
-          <button className="btn btn-secondary btn-sm" onClick={() => { setModuleKey(null); setQ(""); setFAction(""); setFUser(""); }}>‹ All modules</button>
-        </div>
+      <div className="flex items-start justify-between gap-4 flex-wrap mt-0.5 mb-5">
+        <PageHeader icon={mod.icon} title={mod.label} desc={mod.desc} bare />
+        <Btn label="‹ All modules" color="secondary" size="sm" onClick={() => { setModuleKey(null); setQ(""); setFAction(""); setFUser(""); }} />
       </div>
 
       {scoped.length === 0 ? (
-        <div className="panel-card">
-          <div className="empty">No activity logged for this module yet.</div>
-        </div>
+        <Card className="text-center text-[13px] text-[var(--text-muted)]">No activity logged for this module yet.</Card>
       ) : (
         <>
-          <div className="toolbar" style={{ marginBottom: 16 }}>
-            <input className="input grow" placeholder="Search by detail, action, or user…" value={q} onChange={(e) => setQ(e.target.value)} />
-            <div style={{ width: 200 }}>
+          <Card className="flex gap-3 flex-wrap mb-5">
+            <input className="input flex-1 min-w-[180px]" placeholder="Search by detail, action, or user…" value={q} onChange={(e) => setQ(e.target.value)} />
+            <div className="w-[190px]">
               <SearchDropdown
                 value={fAction}
                 onChange={setFAction}
@@ -149,7 +155,7 @@ export default function AuditLog() {
                 neutralActive
               />
             </div>
-            <div style={{ width: 200 }}>
+            <div className="w-[190px]">
               <SearchDropdown
                 value={fUser}
                 onChange={setFUser}
@@ -157,38 +163,51 @@ export default function AuditLog() {
                 neutralActive
               />
             </div>
-          </div>
+          </Card>
 
-          <div className="panel-card" style={{ minHeight: "60vh" }}>
+          <Card padded={false} className="p-[18px]">
             {shown.length === 0 ? (
-              <div className="empty">No events match these filters.</div>
+              <div className="py-6 text-center text-[var(--text-muted)] text-[13px]">No events match these filters.</div>
             ) : (
-              <div className="table-scroll">
-                <table className="data">
-                  <thead>
-                    <tr><th>When</th><th>User</th><th>Action</th><th>Detail</th></tr>
-                  </thead>
-                  <tbody>
-                    {shown.map((e, i) => (
-                      <tr key={i} title={fmtDT(e.ts)}>
-                        <td className="num">{ago(e.ts)}</td>
-                        <td>{e.userId === currentUserId ? "You" : refLabel(data, "users", e.userId)}</td>
-                        <td><span className="badge-tag mute">{ACTION_LABEL[e.action] || e.action}</span></td>
-                        <td>{e.detail}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <Table columns={["Date & Time", "User", "Action", "Details"]}>
+                {shown.map((e, i) => (
+                  <TableRow key={i}>
+                    <TableCell muted className="whitespace-nowrap" >
+                      <span title={fmtDT(e.ts)}>{ago(e.ts)}</span>
+                    </TableCell>
+                    <TableCell strong>{e.userId === currentUserId ? "You" : refLabel(data, "users", e.userId)}</TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide bg-[var(--bg-subtle)] text-[var(--text-muted)]">
+                        {ACTION_LABEL[e.action] || e.action}
+                      </span>
+                    </TableCell>
+                    <TableCell muted>{e.detail}</TableCell>
+                  </TableRow>
+                ))}
+              </Table>
             )}
             {rows.length > ROW_CAP && (
-              <div className="section-sub" style={{ padding: "10px 4px 0" }}>
+              <div className="text-[11px] text-[var(--text-muted)] pt-3 mt-1">
                 Showing the {ROW_CAP} most recent of {rows.length} matching events — narrow the filters above to see older ones.
               </div>
             )}
-          </div>
+          </Card>
         </>
       )}
+    </div>
+  );
+}
+
+function PageHeader({ icon, title, desc, bare }: { icon: string; title: string; desc: string; bare?: boolean }) {
+  return (
+    <div className={"flex gap-3.5 items-start min-w-0" + (bare ? "" : " mt-0.5 mb-6")}>
+      <div className="w-11 h-11 shrink-0 rounded-radius-md bg-primary-light text-primary flex items-center justify-center">
+        <NavIcon name={icon} size={20} />
+      </div>
+      <div>
+        <div className="text-xl font-semibold tracking-tight leading-tight">{title}</div>
+        <div className="text-[12.5px] text-[var(--text-muted)] mt-1 leading-normal">{desc}</div>
+      </div>
     </div>
   );
 }

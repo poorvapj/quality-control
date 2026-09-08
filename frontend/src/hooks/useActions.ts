@@ -1,15 +1,15 @@
 import { useApp } from "../context/AppContext";
 import { API_BASE, HOUR } from "../services/config";
-import type { Op, Track, EventLog, ProgressPatch } from "../types";
+import type { Op, Track, ProgressPatch } from "../types";
 import { pkey, prog, trackStages, byId, coll, refLabel } from "../shared/rules";
 import { nextId } from "../shared/helpers";
+import { buildEventOp } from "../shared/eventLog";
 
 export function useActions() {
   const { data, apply, toast, currentUserId, currentProjectId, closeDrawer, drawer, openDrawer, openSnagModal } = useApp();
 
   function logEvent(action: string, targetId: string, stageId: string, detail: string): Op {
-    const ev: EventLog = { ts: Date.now(), userId: currentUserId || "", action, targetId, stageId, detail };
-    return { op: "event", ev };
+    return buildEventOp(currentUserId, action, targetId, stageId, detail);
   }
 
   // Every status-changing progress write goes through here so `history` keeps

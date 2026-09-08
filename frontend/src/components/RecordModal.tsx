@@ -3,6 +3,7 @@ import { useApp } from "../context/AppContext";
 import { MASTERS } from "../services/config";
 import { byId, coll, refLabel } from "../shared/rules";
 import { nextId } from "../shared/helpers";
+import { buildEventOp } from "../shared/eventLog";
 import Modal from "./Modal";
 import type { ChecklistItem, MasterField } from "../types";
 
@@ -129,7 +130,10 @@ export default function RecordModal() {
       if (dup) { toast("A Work Target for this project + category already exists"); return; }
     }
 
-    await apply([{ op: "upsert", coll: recordModal!.master, rec: out }]);
+    await apply([
+      { op: "upsert", coll: recordModal!.master, rec: out },
+      buildEventOp(currentUserId, "MASTER_SAVE", out.id, "", `${master!.label} · ${recordModal!.id ? "updated" : "created"} · ${out.name || out.code || out.id}`)
+    ]);
     closeRecordModal();
     toast((recordModal!.id ? "Updated " : "Created ") + (out.name || out.code || out.id));
   }

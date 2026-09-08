@@ -35,6 +35,7 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
       items: [
         { key: "work", icon: "work", label: "My Work", badge: workBadge },
         { key: "board", icon: "board", label: "Tower Board" },
+        { key: "handoverChecklist", icon: "handover", label: "Handover Checklist" },
         { key: "snags", icon: "snags", label: "Snags", badge: snagBadge },
         ...(isAdmin ? [{ key: "team" as TabKey, icon: "team", label: "Team" }] : []),
         { key: "dpr", icon: "dpr", label: "Daily Progress Report" },
@@ -44,7 +45,7 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
     {
       label: "Administration",
       items: [
-        { key: "masters", icon: "masters", label: "Masters" },
+        ...(isAdmin ? [{ key: "masters" as TabKey, icon: "masters", label: "Masters" }] : []),
         ...(isAdmin ? [{ key: "backups" as TabKey, icon: "database", label: "Backups" }] : []),
         ...(isAdmin ? [{ key: "auditLog" as TabKey, icon: "clock", label: "Audit Logs" }] : [])
       ]
@@ -105,7 +106,7 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
         {/* ── Nav Groups — scrolls on its own so the collapse toggle below
             always stays visible, even with a long nav list. ── */}
         <nav className="sidebar-nav-scroll" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "6px 0 10px" }}>
-          {groups.map((g, gi) => (
+          {groups.filter((g) => g.items.length > 0).map((g, gi) => (
             <div key={g.label} style={{ marginTop: gi === 0 ? 4 : 0 }}>
               {!collapsed && (
                 <div

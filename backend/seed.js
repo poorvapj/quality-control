@@ -68,7 +68,17 @@ function seedStages() {
     ["g3",  "QC GATE 3 · Pre-Tiling",     "QC",   "Gate",      true,  false, ""],
     ["til", "Tiling",                     "FIN",  "Finishes",  false, false, "DWG-ARCH-01"],
     ["win", "Windows Installation",       "FIN",  "Finishes",  false, false, ""],
-    ["g4",  "QC GATE 4 · Final Handover", "QC",   "Gate",      true,  false, ""]
+    ["g4",  "QC GATE 4 · Final Handover", "QC",   "Gate",      true,  false, ""],
+    // Two separate handover sign-offs, run one after the other: the
+    // technical Civil-staff walkthrough first (isGate — can't be skipped),
+    // then the customer-facing sign-off. The owner checklist's answers
+    // today come in verbally and get typed in by the DRI, but it's
+    // structurally identical to any other checklist stage — a future CRM
+    // integration can fill it the same way the drawing-request automation
+    // endpoint already lets an external caller submit on a real user's
+    // behalf, without needing a new concept here.
+    ["hoi", "Internal Handover Checklist", "QC",  "Gate",      true,  false, ""],
+    ["hoo", "Owner Handover Sign-off",     "DRI", "Handover",  true,  false, ""]
   ];
   const floor = [
     ["crA",  "Columns Zone A — Rebar & Shuttering", "EXE", "Structure", false, true,  "DWG-STR-01"],
@@ -86,6 +96,7 @@ function seedStages() {
       : cat === "MEP" ? "#3b82f6"
       : cat === "Wet Trade" ? "#eab308"
       : cat === "Finishes" ? "#a855f7"
+      : cat === "Handover" ? "#0ea5e9"
       : "#64748b";
 
   const mk = (rows, track) =>
@@ -123,7 +134,57 @@ function seedQParams() {
     ["QP-17", "Window Sealant Continuity",  "Finishes",  "Visual",                   "Continuous, no gaps",     "Major"],
     ["QP-18", "Rebar Cover Block",          "Structure", "Cover meter / visual",     "As per GFC ± 5 mm",       "Critical"],
     ["QP-19", "Rebar Spacing & Lap Length", "Structure", "Tape",                     "As per GFC",              "Critical"],
-    ["QP-20", "Shuttering Alignment",       "Structure", "Plumb / line",             "± 5 mm",                  "Major"]
+    ["QP-20", "Shuttering Alignment",       "Structure", "Plumb / line",             "± 5 mm",                  "Major"],
+
+    // Internal Handover Checklist — Civil-staff walkthrough, technical
+    // wording, matches the printed handover sheet's blue (internal) column.
+    ["QP-H01", "Hardwares installed & working properly",             "Doors",       "Visual", "-", "Minor"],
+    ["QP-H02", "Alignment of Doors",                                 "Doors",       "Visual", "-", "Minor"],
+    ["QP-H03", "Cracks on Door Frames",                               "Doors",       "Visual", "-", "Minor"],
+    ["QP-H04", "Proper Silicon in aluminium section",                 "Windows",     "Visual", "-", "Minor"],
+    ["QP-H05", "Functioning of Shutter and Lock of aluminium tracks", "Windows",     "Visual", "-", "Minor"],
+    ["QP-H06", "Dampness in the wall (if any)",                       "Painting",    "Visual", "-", "Major"],
+    ["QP-H07", "Cracks on the wall",                                  "Painting",    "Visual", "-", "Major"],
+    ["QP-H08", "Paint and Polish of Railing",                         "Painting",    "Visual", "-", "Minor"],
+    ["QP-H09", "Door Paint Polish/Paint",                             "Painting",    "Visual", "-", "Minor"],
+    ["QP-H10", "Paints all over the walls",                           "Painting",    "Visual", "-", "Minor"],
+    ["QP-H11", "Outer Texture and Paint",                             "Painting",    "Visual", "-", "Minor"],
+    ["QP-H12", "Damages or scratches on tiles",                       "Flooring",    "Visual", "-", "Minor"],
+    ["QP-H13", "Temporary electrical supply in the unit",             "Electricals", "Visual", "-", "Major"],
+    ["QP-H14", "All Switches installed / Working Properly",           "Electricals", "Visual", "-", "Major"],
+    ["QP-H15", "Proper Grouting of Walls and Floors",                 "Sanitaryware/Plumbing", "Visual", "-", "Minor"],
+    ["QP-H16", "Kitchen Sink grouted properly (top & bottom)",        "Sanitaryware/Plumbing", "Visual", "-", "Minor"],
+    ["QP-H17", "Chrome fittings (if provided)",                       "Sanitaryware/Plumbing", "Visual", "-", "Minor"],
+    ["QP-H18", "All Taps working Properly",                           "Sanitaryware/Plumbing", "Visual", "-", "Major"],
+    ["QP-H19", "Pipes & fittings for any leakages",                   "Sanitaryware/Plumbing", "Visual", "-", "Major"],
+    ["QP-H20", "No blockage in any of the drains",                    "Sanitaryware/Plumbing", "Visual", "-", "Major"],
+    ["QP-H21", "Flush works properly",                                "Sanitaryware/Plumbing", "Visual", "-", "Major"],
+    ["QP-H22", "Bathroom Slopes",                                     "Washroom",    "Visual", "-", "Minor"],
+    ["QP-H23", "Bathroom Exhaust (if Provided)",                      "Washroom",    "Visual", "-", "Minor"],
+    ["QP-H24", "Proper Balcony Slopes",                               "Balcony",     "Visual", "-", "Minor"],
+    ["QP-H25", "Pipes ACP or Plaster",                                "Balcony",     "Visual", "-", "Minor"],
+    ["QP-H26", "AC Pipelines with drains (if Provided)",              "AC Pipelines","Visual", "-", "Minor"],
+    ["QP-H27", "Proper slope or tiles Damage",                        "Terrace",     "Visual", "-", "Minor"],
+    ["QP-H28", "Proper Grouting",                                     "Terrace",     "Visual", "-", "Minor"],
+
+    // Owner Handover Sign-off — customer-facing wording, matches the
+    // printed handover sheet's orange (owner) column. Filled by the DRI
+    // from what the customer says verbally today; same field shape as
+    // every other checklist so a future CRM push can fill it the same way.
+    ["QP-O01", "Hardwares installed & working propely",              "Doors",       "Verbal", "-", "Minor"],
+    ["QP-O02", "Functioning of Shutter and Lock of aluminium tracks", "Windows",     "Verbal", "-", "Minor"],
+    ["QP-O03", "Cracks on the walls",                                 "Painting",    "Verbal", "-", "Major"],
+    ["QP-O04", "Dampness in the wall (if any)",                       "Painting",    "Verbal", "-", "Major"],
+    ["QP-O05", "Paint and Polish",                                    "Painting",    "Verbal", "-", "Minor"],
+    ["QP-O06", "All Switches installed / Working Properly",           "Electricals", "Verbal", "-", "Major"],
+    ["QP-O07", "Proper Grouting of Walls and Floors",                 "Sanitaryware/Plumbing", "Verbal", "-", "Minor"],
+    ["QP-O08", "All taps working Properly",                           "Sanitaryware/Plumbing", "Verbal", "-", "Major"],
+    ["QP-O09", "Pipes & fittings for any leakages",                   "Sanitaryware/Plumbing", "Verbal", "-", "Major"],
+    ["QP-O10", "Flush works properly",                                "Washroom",    "Verbal", "-", "Major"],
+    ["QP-O11", "Bathroom Slopes",                                     "Washroom",    "Verbal", "-", "Minor"],
+    ["QP-O12", "Bathroom Exhaust (if Provided)",                      "Washroom",    "Verbal", "-", "Minor"],
+    ["QP-O13", "Proper Balcony Slopes",                               "Balcony",     "Verbal", "-", "Minor"],
+    ["QP-O14", "AC Pipelines with drains (if Provided)",              "AC Pipelines","Verbal", "-", "Minor"]
   ];
   return rows.map(([id, name, category, method, acceptance, severity]) => ({
     id, code: id, name, category, method, acceptance, severity, active: true
@@ -138,7 +199,14 @@ function seedChecklists() {
     ["CHK-G3",  "Pre-Tiling Gate Checklist",    "STG-G3",  ["QP-09","QP-10","QP-02"]],
     ["CHK-G4",  "Final Handover Checklist",     "STG-G4",  ["QP-13","QP-14","QP-15","QP-16","QP-17"]],
     ["CHK-CPA", "Column Pour Permit Checklist", "STG-CPA", ["QP-18","QP-19","QP-20"]],
-    ["CHK-SPA", "Slab Pour Permit Checklist",   "STG-SPA", ["QP-18","QP-19","QP-20","QP-05"]]
+    ["CHK-SPA", "Slab Pour Permit Checklist",   "STG-SPA", ["QP-18","QP-19","QP-20","QP-05"]],
+    ["CHK-HOI", "Internal Handover Checklist",  "STG-HOI",
+      ["QP-H01","QP-H02","QP-H03","QP-H04","QP-H05","QP-H06","QP-H07","QP-H08","QP-H09","QP-H10",
+       "QP-H11","QP-H12","QP-H13","QP-H14","QP-H15","QP-H16","QP-H17","QP-H18","QP-H19","QP-H20",
+       "QP-H21","QP-H22","QP-H23","QP-H24","QP-H25","QP-H26","QP-H27","QP-H28"]],
+    ["CHK-HOO", "Owner Handover Checklist",     "STG-HOO",
+      ["QP-O01","QP-O02","QP-O03","QP-O04","QP-O05","QP-O06","QP-O07","QP-O08",
+       "QP-O09","QP-O10","QP-O11","QP-O12","QP-O13","QP-O14"]]
   ];
   return defs.map(([id, name, stageId, params]) => ({
     id, code: id, name, stageId, active: true,
@@ -398,7 +466,9 @@ function seedData() {
    * Spread across parameters, severities, statuses, owners and ages, and
    * anchored to units that have actually reached the relevant stage.
    */
-  const paramIds = d.qparams.map((p) => p.id);
+  // Demo snags are only generated against the original 20 QC-gate
+  // parameters — the handover-checklist params (QP-H*/QP-O*) added later
+  // have no SNAG_TEXT entries and aren't part of any QC gate's snag flow.
   const gateForParam = {
     "QP-01": "STG-G1", "QP-02": "STG-G1", "QP-03": "STG-G1", "QP-04": "STG-G1",
     "QP-05": "STG-G1", "QP-06": "STG-G1", "QP-07": "STG-G1", "QP-08": "STG-G1",
@@ -411,9 +481,10 @@ function seedData() {
     Civil: "EXE", MEP: "MEP", "Wet Trade": "EXE", Finishes: "FIN", Structure: "EXE"
   };
 
+  const gateParamIds = Object.keys(gateForParam);
   const SNAG_COUNT = 46;
   for (let i = 0; i < SNAG_COUNT; i++) {
-    const p = d.qparams[i % paramIds.length];
+    const p = d.qparams.find((q) => q.id === gateParamIds[i % gateParamIds.length]);
     const f = 1 + (i * 3) % 8;
     const u = 1 + (i * 5) % UNITS;
     const stageId = gateForParam[p.id] || "STG-G1";

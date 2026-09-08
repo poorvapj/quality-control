@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useApp, authHeaders } from "../context/AppContext";
 import { API_BASE } from "../services/config";
 import NavIcon from "../components/NavIcon";
+import { buildEventOp } from "../shared/eventLog";
 
 interface BackupSummary {
   id: string;
@@ -15,7 +16,7 @@ function fmtDateTime(ts: number): string {
 }
 
 export default function Backups() {
-  const { toast } = useApp();
+  const { toast, apply, currentUserId } = useApp();
   const [backups, setBackups] = useState<BackupSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -44,6 +45,7 @@ export default function Backups() {
       const r = await fetch(API_BASE + "/api/backups", { method: "POST", headers: authHeaders() });
       const j = await r.json();
       if (!r.ok) { toast(j.error || "Backup failed"); return; }
+      await apply([buildEventOp(currentUserId, "BACKUP_CREATE", j.id || "", "", "Backup created")]);
       toast("Backup created");
       await load();
     } catch {
@@ -78,6 +80,7 @@ export default function Backups() {
       const r = await fetch(API_BASE + "/api/backups/" + b.id + "/restore", { method: "POST", headers: authHeaders() });
       const j = await r.json();
       if (!r.ok) { toast(j.error || "Restore failed"); return; }
+      await apply([buildEventOp(currentUserId, "BACKUP_RESTORE", b.id, "", `Restored backup from ${fmtDateTime(b.createdAt)}`)]);
       toast("Restored — reloading...");
       setTimeout(() => window.location.reload(), 900);
     } catch {
@@ -95,6 +98,7 @@ export default function Backups() {
       const r = await fetch(API_BASE + "/api/backups/" + b.id, { method: "DELETE", headers: authHeaders() });
       const j = await r.json();
       if (!r.ok) { toast(j.error || "Delete failed"); return; }
+      await apply([buildEventOp(currentUserId, "BACKUP_DELETE", b.id, "", `Deleted backup from ${fmtDateTime(b.createdAt)}`)]);
       toast("Backup deleted");
       setBackups((prev) => prev.filter((x) => x.id !== b.id));
     } catch {

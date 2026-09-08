@@ -14,7 +14,8 @@
 import { useApp } from "../context/AppContext";
 import { byId, coll } from "../shared/rules";
 import { nextId } from "../shared/helpers";
-import type { DrawingRequest, ReviewHistoryEntry, DrawingPriority, DrawingFile } from "../types";
+import { buildEventOp } from "../shared/eventLog";
+import type { DrawingRequest, ReviewHistoryEntry, DrawingPriority, DrawingFile, Op } from "../types";
 
 export function useDrawingRequestActions() {
   const { data, apply, toast, currentUserId, me } = useApp();
@@ -24,8 +25,14 @@ export function useDrawingRequestActions() {
     return { ...entry, by: currentUserId, byName: u?.name, at: Date.now() };
   }
 
-  async function saveDrawingRequest(rec: DrawingRequest) {
-    await apply([{ op: "upsert", coll: "drawingRequests", rec }]);
+  async function saveDrawingRequest(rec: DrawingRequest, action?: string, detail?: string) {
+    const ops: Op[] = [{ op: "upsert", coll: "drawingRequests", rec }];
+    // currentUserId is only ever null for the anonymous public submission
+    // form (createDrawingRequest's isPublic path, handled separately below)
+    // — every other action here is an in-app, signed-in flow, so logging is
+    // always safe (the backend requires a session for "event" ops).
+    if (action && currentUserId) ops.push(buildEventOp(currentUserId, action, rec.id, "", detail || ""));
+    await apply(ops);
   }
 
   /** Stage 1: forward to production, optionally assigning someone + a committed date. */
@@ -39,7 +46,7 @@ export function useDrawingRequestActions() {
       committedDate,
       reviewHistory: [...dr.reviewHistory, historyEntry({ stage: "stage-1-screen", action: "forwarded", remarks })]
     };
-    await saveDrawingRequest(rec);
+    await saveDrawingRequest(rec, "DR_FORWARD_STAGE2", `${rec.ticketNo} forwarded to production`);
     toast("Forwarded to production (Stage 2)");
   }
 
@@ -52,7 +59,7 @@ export function useDrawingRequestActions() {
       reviewStatus: "returned",
       reviewHistory: [...dr.reviewHistory, historyEntry({ stage: "stage-1-screen", action: "returned", remarks })]
     };
-    await saveDrawingRequest(rec);
+    await saveDrawingRequest(rec, "DR_RETURN_STAGE1", `${rec.ticketNo} returned to requester`);
     toast("Returned — the requester can resubmit");
   }
 
@@ -66,7 +73,7 @@ export function useDrawingRequestActions() {
       reviewStatus: "stage-3-crosscheck",
       reviewHistory: [...dr.reviewHistory, historyEntry({ stage: "stage-2-produce", action: "submitted", remarks })]
     };
-    await saveDrawingRequest(rec);
+    await saveDrawingRequest(rec, "DR_SUBMIT_STAGE2", `${rec.ticketNo} submitted for cross-check`);
     toast("Submitted for cross-check (Stage 3)");
   }
 
@@ -79,7 +86,7 @@ export function useDrawingRequestActions() {
       reviewStatus: approved ? "stage-4-final-approve" : "stage-2-produce",
       reviewHistory: [...dr.reviewHistory, historyEntry({ stage: "stage-3-crosscheck", action: approved ? "approved" : "returned", remarks })]
     };
-    await saveDrawingRequest(rec);
+    await saveDrawingRequest(rec, approved ? "DR_STAGE3_APPROVE" : "DR_STAGE3_REJECT", `${rec.ticketNo} ${approved ? "passed cross-check" : "sent back for rework"}`);
     toast(approved ? "Cross-check passed · Stage 4" : "Sent back to Stage 2 for rework");
   }
 
@@ -94,7 +101,7 @@ export function useDrawingRequestActions() {
       trackingStatus: approved ? (dr.trackingStatus || "pending") : dr.trackingStatus,
       reviewHistory: [...dr.reviewHistory, historyEntry({ stage: "stage-4-final-approve", action: approved ? "approved" : "returned", remarks })]
     };
-    await saveDrawingRequest(rec);
+    await saveDrawingRequest(rec, approved ? "DR_STAGE4_APPROVE" : "DR_STAGE4_REJECT", `${rec.ticketNo} ${approved ? "finally approved" : "sent back for rework"}`);
     toast(approved ? "Final approval granted" : "Sent back to Stage 2 for rework");
   }
 
@@ -107,14 +114,14 @@ export function useDrawingRequestActions() {
       reviewStatus: "stage-1-screen",
       reviewHistory: [...dr.reviewHistory, historyEntry({ stage: "stage-1-screen", action: "resubmitted", remarks })]
     };
-    await saveDrawingRequest(rec);
+    await saveDrawingRequest(rec, "DR_RESUBMIT", `${rec.ticketNo} resubmitted`);
     toast("Resubmitted — back to Stage 1");
   }
 
   async function updateTracking(id: string, patch: Partial<Pick<DrawingRequest, "trackingStatus" | "actualCompletionDate" | "planningVerified" | "projectAcknowledged" | "remarks">>) {
     const dr = byId(coll(data, "drawingRequests"), id);
     if (!dr) return;
-    await saveDrawingRequest({ ...dr, ...patch });
+    await saveDrawingRequest({ ...dr, ...patch }, "DR_TRACKING_UPDATE", `${dr.ticketNo} tracking updated`);
   }
 
   async function createDrawingRequest(input: {
@@ -148,7 +155,9 @@ export function useDrawingRequestActions() {
       submittedByUserId: input.isPublic ? null : currentUserId,
       isPublic: input.isPublic
     };
-    await apply([{ op: "upsert", coll: "drawingRequests", rec }]);
+    const ops: Op[] = [{ op: "upsert", coll: "drawingRequests", rec }];
+    if (!input.isPublic) ops.push(buildEventOp(currentUserId, "DR_CREATE", rec.id, "", `${rec.ticketNo} created`));
+    await apply(ops);
     toast("Ticket " + rec.ticketNo + " created");
     return rec.ticketNo;
   }

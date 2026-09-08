@@ -3,6 +3,7 @@ import { useApp } from "../context/AppContext";
 import { coll, projectFloors, floorUnits, trackStages, prog, floorReleased, floorBelow, unitSummary } from "../shared/rules";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
+import Card from "../ui/tw/Card";
 
 export default function TowerBoard() {
   const { data, currentProjectId, setCurrentProjectId, openDrawer } = useApp();
@@ -26,18 +27,23 @@ export default function TowerBoard() {
 
   return (
     <div>
-      <div className="page-header">
-        <div className="page-header-left">
-          <div className="page-icon"><NavIcon name="board" size={20} /></div>
+      <div className="flex items-start justify-between gap-4 flex-wrap mt-0.5 mb-5">
+        <div className="flex gap-3 items-center min-w-0">
+          <div className="w-9 h-9 shrink-0 rounded-radius-md bg-primary-light text-primary flex items-center justify-center">
+            <NavIcon name="board" size={17} />
+          </div>
           <div>
-            <div className="page-title">Tower Quality Matrix</div>
-            <div className="page-desc">Tap a unit for its trade timeline · tap the floor label for the RCC structure track.</div>
+            <div className="text-[17px] font-semibold tracking-tight leading-tight">Tower Quality Matrix</div>
+            <div className="text-[12px] text-[var(--text-muted)] mt-0.5 leading-normal">
+              Tap a unit for its trade timeline · tap the floor label for the RCC structure track.
+            </div>
           </div>
         </div>
       </div>
-      <div className="filter-bar" style={{ marginBottom: 16 }}>
-        <div className="field" style={{ maxWidth: 220 }}>
-          <label>Project</label>
+
+      <Card className="mb-5">
+        <div className="max-w-[220px]">
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Project</div>
           <SearchDropdown
             value={viewProjectId}
             onChange={(v) => { setViewProjectId(v); setCurrentProjectId(v); }}
@@ -45,8 +51,9 @@ export default function TowerBoard() {
             neutralActive
           />
         </div>
-      </div>
-      <div className="card card-pad">
+      </Card>
+
+      <Card>
         {floors.length === 0 && <div className="empty">No floors yet — add them in Masters ▸ Floor.</div>}
         {floors.slice().reverse().map((f) => {
           let fdone = 0, ffail = false;
@@ -115,7 +122,7 @@ export default function TowerBoard() {
           <div className="legend-item"><div className="legend-box" style={{ background: "var(--theme-primary)" }}></div> Open snag</div>
           <div className="legend-item"><div className="legend-box" style={{ background: "var(--color-pass)" }}></div> Resolved snag</div>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

@@ -122,6 +122,17 @@ const DRAWING_TRANSITIONS = {
   approved: []
 };
 
+/* Which per-user `permissions` grant (frontend/src/shared/permissions.ts)
+   authorizes moving a ticket FORWARD off a given stage. Mirrors that
+   file's canActOnStage() exactly — this is now checked server-side too
+   (see assertOpAllowed), not just used to decide what the UI shows. */
+const STAGE_TO_PERMISSION_KEY = {
+  "stage-1-screen": "canScreenStage1",
+  "stage-2-produce": "canProduceStage2",
+  "stage-3-crosscheck": "canCrosscheckStage3",
+  "stage-4-final-approve": "canFinalApproveStage4"
+};
+
 const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || "";
 const AUTOMATION_SECRET = process.env.AUTOMATION_SECRET || "";
 
@@ -234,6 +245,24 @@ const PUBLIC_CREATE_ONLY = ["dpr", "drawingRequests"];
 // floors/units/snags/etc. as orphaned records with a projectId that no
 // longer resolves to anything.
 const PROJECT_SCOPED_COLLECTIONS = ["floors", "units", "snags", "assignments", "dpr", "drawingRequests", "stagemap", "workTargets"];
+
+// Every Masters collection except "users" (already admin-gated above) —
+// frontend/src/pages/Masters.tsx only shows its "+ New"/edit/delete
+// controls when `myRole() === "DRI"`, but that was UI-only: any other
+// signed-in session could still upsert/delete these directly via
+// /api/ops. Mirrored here server-side (see assertOpAllowed).
+const MASTER_ROLE_GATED_COLLECTIONS = ["projects", "floors", "units", "stages", "qparams", "checklists", "stagemap", "permissions", "workTargets"];
+
+const roleCache = new Map(); // userId -> role, cleared per request is overkill; a stale role for a few seconds is an acceptable tradeoff for not hitting Mongo on every single op in a batch
+async function getUserRole(userId) {
+  if (!userId) return null;
+  if (roleCache.has(userId)) return roleCache.get(userId);
+  const user = await mongoDb.collection("users").findOne({ id: userId }, { projection: { role: 1 } });
+  const role = user ? user.role : null;
+  roleCache.set(userId, role);
+  setTimeout(() => roleCache.delete(userId), 10000); // short TTL — a role change (rare) is visible within 10s, not stuck forever
+  return role;
+}
 
 /* Same constant-time comparison already used for password hashes
    (verifyPassword, below) — the cron/automation secret checks used to do a
@@ -595,6 +624,31 @@ async function assertOpAllowed(op, session) {
           e.status = 400;
           throw e;
         }
+        // Mirrors frontend/src/shared/permissions.ts's canActOnStage() —
+        // that check used to only decide what the review-actions UI showed,
+        // so any other signed-in session could still push a ticket through
+        // a stage via /api/ops directly. Admin always bypasses (same as the
+        // frontend). "returned" -> "stage-1-screen" (resubmit) is a special
+        // case per useDrawingRequestActions.ts's own doc comment — only the
+        // original requester revives a returned ticket, not whoever holds
+        // the stage-1 screening grant.
+        if (!session.isAdmin) {
+          if (from === "returned") {
+            if (!existing || existing.submittedByUserId !== session.userId) {
+              const e = new Error("Only the original requester can resubmit a returned ticket");
+              e.status = 403;
+              throw e;
+            }
+          } else {
+            const permKey = STAGE_TO_PERMISSION_KEY[from];
+            const perm = permKey ? await mongoDb.collection("permissions").findOne({ userId: session.userId }) : null;
+            if (!permKey || !perm || !perm[permKey]) {
+              const e = new Error("Not authorized to act on this review stage");
+              e.status = 403;
+              throw e;
+            }
+          }
+        }
       }
     }
     return;
@@ -612,6 +666,15 @@ async function assertOpAllowed(op, session) {
     return;
   }
 
+  if (op.op === "upsert" && MASTER_ROLE_GATED_COLLECTIONS.includes(op.coll)) {
+    if (!session) { const e = new Error("Sign-in required"); e.status = 401; throw e; }
+    if (!session.isAdmin) {
+      const role = await getUserRole(session.userId);
+      if (role !== "DRI") { const e = new Error("Only Site In-charge (DRI) or Admin can edit Masters"); e.status = 403; throw e; }
+    }
+    return;
+  }
+
   if (op.op === "upsert" && !PUBLIC_CREATE_ONLY.includes(op.coll)) {
     if (!session) { const e = new Error("Sign-in required"); e.status = 401; throw e; }
     return;
@@ -619,6 +682,24 @@ async function assertOpAllowed(op, session) {
 
   if (op.op === "progress" || op.op === "event") {
     if (!session) { const e = new Error("Sign-in required"); e.status = 401; throw e; }
+    // Mirrors frontend/src/shared/rules.ts's canAct() (DRI, or the stage's
+    // own owning role) plus the Measurement DET allowance Drawer.tsx grants
+    // for hidden-work photo/measurement writes regardless of the stage's
+    // trade — that combined rule was frontend-only until now, so any other
+    // signed-in session could patch any stage's progress via /api/ops.
+    if (op.op === "progress" && !session.isAdmin && op.key) {
+      const stageId = String(op.key).split("::")[1];
+      const [role, stage] = await Promise.all([
+        getUserRole(session.userId),
+        stageId ? mongoDb.collection("stages").findOne({ id: stageId }, { projection: { role: 1 } }) : null
+      ]);
+      const stageRole = stage ? stage.role : null;
+      if (role !== "DRI" && role !== "MEAS" && (!stageRole || role !== stageRole)) {
+        const e = new Error("Not authorized to act on this stage");
+        e.status = 403;
+        throw e;
+      }
+    }
   }
 }
 
