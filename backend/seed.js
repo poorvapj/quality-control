@@ -23,7 +23,8 @@ const COLLECTIONS = [
   "drawingRequests",  // Drawing Requests — 4-stage review/approval tickets
   "permissions",       // Per-user fine-grained permission grants (Drawing Requests review stages)
   "workTargets",       // Per project+category planned quantity DPR qty entries roll up against
-  "moduleGrants"       // Admin-managed per-user, per-module View/Create/Edit/Delete grants (additive on top of Role)
+  "moduleGrants",      // Admin-managed per-user, per-module View/Create/Edit/Delete grants (additive on top of Role)
+  "teams"              // Groups of users under one Team Leader — starts empty, Admin creates via Masters ▸ Teams
 ];
 
 /* Roles are a fixed vocabulary — users and stages both point at these. */

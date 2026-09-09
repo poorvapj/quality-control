@@ -5,6 +5,9 @@ import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
 import Card from "../ui/tw/Card";
 
+const ALL_FLOORS = "__all__";
+type StatusFilter = "" | "open-snag" | "qc-fail" | "locked" | "handed-over" | "not-started";
+
 export default function TowerBoard() {
   const { data, currentProjectId, setCurrentProjectId, openDrawer } = useApp();
   const allProjects = coll(data, "projects").filter((p) => p.active !== false);
@@ -14,9 +17,14 @@ export default function TowerBoard() {
   // before; only the dropdown's own label defaults to "Choose" until
   // someone actively picks from it.
   const [viewProjectId, setViewProjectId] = useState("");
+  const [fFloor, setFFloor] = useState(ALL_FLOORS);
+  const [fStatus, setFStatus] = useState<StatusFilter>("");
+  const [q, setQ] = useState("");
   const boardProjectId = viewProjectId || currentProjectId;
-  const floors = projectFloors(data, boardProjectId);
+  let floors = projectFloors(data, boardProjectId);
+  if (fFloor !== ALL_FLOORS) floors = floors.filter((f) => f.id === fFloor);
   const fstages = trackStages(data, boardProjectId, "floor");
+  const hasFilter = fStatus !== "" || q.trim() !== "";
   // Resolved (closed) snags per unit — a lighter, corner-dot indicator since
   // unlike an open snag it isn't an active alert, just history worth seeing.
   const closedSnagsByUnit = new Map<string, number>();
@@ -41,15 +49,46 @@ export default function TowerBoard() {
         </div>
       </div>
 
-      <Card className="mb-5">
-        <div className="max-w-[220px]">
+      <Card className="flex gap-3 flex-wrap mb-5">
+        <div className="w-[200px] shrink-0">
           <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Project</div>
           <SearchDropdown
             value={viewProjectId}
-            onChange={(v) => { setViewProjectId(v); setCurrentProjectId(v); }}
-            options={[{ value: "", label: "Choose" }, ...allProjects.map((p) => ({ value: p.id, label: p.name }))]}
+            onChange={(v) => { setViewProjectId(v); setCurrentProjectId(v); setFFloor(ALL_FLOORS); }}
+            options={[{ value: "", label: "All Projects" }, ...allProjects.map((p) => ({ value: p.id, label: p.name }))]}
             neutralActive
           />
+        </div>
+        <div className="w-[160px] shrink-0">
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Floor</div>
+          <SearchDropdown
+            searchable={false}
+            value={fFloor}
+            onChange={setFFloor}
+            options={[{ value: ALL_FLOORS, label: "All Floors" }, ...projectFloors(data, boardProjectId).map((f) => ({ value: f.id, label: f.name }))]}
+            neutralActive
+          />
+        </div>
+        <div className="w-[180px] shrink-0">
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Status</div>
+          <SearchDropdown
+            searchable={false}
+            value={fStatus}
+            onChange={(v) => setFStatus(v as StatusFilter)}
+            options={[
+              { value: "", label: "All Statuses" },
+              { value: "open-snag", label: "Open snag" },
+              { value: "qc-fail", label: "QC fail / rework" },
+              { value: "locked", label: "Structure not released" },
+              { value: "handed-over", label: "Handed over" },
+              { value: "not-started", label: "Not started" }
+            ]}
+            neutralActive
+          />
+        </div>
+        <div className="flex-1 min-w-[160px]">
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Search Unit</div>
+          <input className="input w-full" placeholder="Unit name or code…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
       </Card>
 
@@ -67,6 +106,29 @@ export default function TowerBoard() {
           const canCast = !below || floorReleased(data, boardProjectId, below.id);
           const label = cured ? "CURED ✓" : !canCast ? "LOCKED" : fdone > 0 ? `RCC ${fdone}/${fstages.length}` : "NOT STARTED";
 
+          // Precompute match state for every unit on this floor first, so a
+          // floor with zero matching units can be skipped entirely once a
+          // Status/Search filter is active — otherwise every floor still
+          // renders (just with its non-matching units dimmed), same as
+          // before filters existed.
+          const unitRows = floorUnits(data, boardProjectId, f.id).map((u) => {
+            const s = unitSummary(data, boardProjectId, u.id);
+            const hasSnag = s.snags > 0;
+            const handedOver = s.complete;
+            const notStarted = s.done === 0 && !s.fail;
+            const matchesStatus =
+              fStatus === "" ? true
+              : fStatus === "open-snag" ? hasSnag
+              : fStatus === "qc-fail" ? s.fail
+              : fStatus === "locked" ? s.locked
+              : fStatus === "handed-over" ? handedOver
+              : notStarted;
+            const ql = q.trim().toLowerCase();
+            const matchesSearch = !ql || (u.name + " " + u.code).toLowerCase().includes(ql);
+            return { u, s, hasSnag, matches: matchesStatus && matchesSearch };
+          });
+          if (hasFilter && !unitRows.some((r) => r.matches)) return null;
+
           return (
             <div className="floor-row" key={f.id}>
               <div
@@ -81,8 +143,7 @@ export default function TowerBoard() {
                 {f.code}<br /><span style={{ fontSize: 8, opacity: 0.75 }}>{label}</span>
               </div>
               <div className="cells-grid">
-                {floorUnits(data, boardProjectId, f.id).map((u) => {
-                  const s = unitSummary(data, boardProjectId, u.id);
+                {unitRows.map(({ u, s, hasSnag, matches }) => {
                   let bg = "var(--bg-subtle)";
                   if (s.locked) bg = "var(--color-locked)";
                   else if (s.fail) bg = "var(--color-fail)";
@@ -91,7 +152,6 @@ export default function TowerBoard() {
                   // An open snag is a real alert — flag the whole tile, not
                   // just a small dot in the corner, so it's obvious at a
                   // glance even on a locked/not-started (gray) unit.
-                  const hasSnag = s.snags > 0;
                   const closedSnags = closedSnagsByUnit.get(u.id) || 0;
                   const tip = `${u.name} · ${u.type || ""} · ${s.done}/${s.total} stages`
                     + (hasSnag ? " · " + s.snags + " open snag(s)" : "")
@@ -101,7 +161,7 @@ export default function TowerBoard() {
                     <div
                       key={u.id}
                       className={"cell" + (s.locked ? " lockedcell" : "") + (s.fail ? " pulse" : "") + (hasSnag ? " has-snag" : "") + (hasResolvedOnly ? " has-resolved-snag" : "")}
-                      style={{ background: bg }}
+                      style={{ background: bg, opacity: hasFilter && !matches ? 0.25 : 1 }}
                       title={tip}
                       // Always opens — a "locked" unit can still carry a
                       // real open snag (the has-snag orange override paints

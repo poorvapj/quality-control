@@ -13,13 +13,21 @@ const DUE_BADGE_COLOR: Record<"mute" | "fail" | "gate", BadgeColor> = { mute: "g
 const SEVERITY_BADGE_COLOR: Record<string, BadgeColor> = { Critical: "red", Major: "amber" };
 const STATUS_BADGE_COLOR: Record<string, BadgeColor> = { "In Progress": "blue" };
 
+const ALL_PROJECTS = "__all__";
+
 export default function Snags() {
-  const { data, currentProjectId, currentUserId, openSnagModal, openDrawer, apply, toast } = useApp();
+  const { data, currentUserId, openSnagModal, openDrawer, apply, toast } = useApp();
   const isAdmin = currentUserId === "U-ADMIN";
   const [q, setQ] = useState("");
   const [fs, setFs] = useState("");
   const [fv, setFv] = useState("");
   const [fm, setFm] = useState("");
+  // Snags are easy to lose track of across projects — the register defaults
+  // to showing every project's snags at once (unlike Tower Board/Handover
+  // Checklist, which are inherently single-project pages), with this filter
+  // to narrow down to one when needed.
+  const [fp, setFp] = useState(ALL_PROJECTS);
+  const allProjects = coll(data, "projects").filter((p) => p.active !== false);
 
   async function deleteSnag(e: React.MouseEvent, s: { id: string; title: string }) {
     e.stopPropagation();
@@ -28,7 +36,8 @@ export default function Snags() {
     toast("Deleted " + s.id);
   }
 
-  let list = coll(data, "snags").filter((s) => s.projectId === currentProjectId);
+  let list = coll(data, "snags");
+  if (fp !== ALL_PROJECTS) list = list.filter((s) => s.projectId === fp);
   if (fs) list = list.filter((s) => s.status === fs);
   if (fv) list = list.filter((s) => s.severity === fv);
   if (fm === "mine") list = list.filter((s) => s.assignedTo === currentUserId);
@@ -41,7 +50,7 @@ export default function Snags() {
     (a, b) => (b.status === "Closed" ? -1 : 1) - (a.status === "Closed" ? -1 : 1) || (b.raisedAt || 0) - (a.raisedAt || 0)
   );
 
-  const all = coll(data, "snags").filter((s) => s.projectId === currentProjectId);
+  const all = fp === ALL_PROJECTS ? coll(data, "snags") : coll(data, "snags").filter((s) => s.projectId === fp);
   const open = all.filter((s) => s.status !== "Closed");
   const overdue = open.filter((s) => s.dueAt && s.dueAt < Date.now());
   // Escalation is deliberately computed on read, not a cron job or persisted
@@ -92,6 +101,14 @@ export default function Snags() {
       <Card padded={false} className="min-h-[70vh] p-4.5">
         <div className="flex gap-2.5 items-center flex-wrap mb-4 pb-1">
           <input className="input grow" placeholder="Search snags by title, unit or description…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <div className="w-[180px]">
+            <SearchDropdown
+              value={fp}
+              onChange={setFp}
+              options={[{ value: ALL_PROJECTS, label: "All Projects" }, ...allProjects.map((p) => ({ value: p.id, label: p.name }))]}
+              neutralActive
+            />
+          </div>
           <div className="w-40">
             <SearchDropdown
               searchable={false}
@@ -152,6 +169,7 @@ export default function Snags() {
                 <div className="min-w-0 flex-1">
                   <div className="text-[13px] font-bold">{s.id} · {s.title}</div>
                   <div className="text-[11px] text-[var(--text-muted)] mt-0.5 leading-normal">
+                    {fp === ALL_PROJECTS ? refLabel(data, "projects", s.projectId) + " · " : ""}
                     {snagTarget(data, s)} · {refLabel(data, "stages", s.stageId)} ·{" "}
                     {s.paramId ? refLabel(data, "qparams", s.paramId) + " · " : ""}
                     raised by {refLabel(data, "users", s.raisedBy)} {ago(s.raisedAt)} · on {refLabel(data, "users", s.assignedTo)}

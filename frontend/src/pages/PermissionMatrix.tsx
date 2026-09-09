@@ -2,42 +2,13 @@ import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, byId } from "../shared/rules";
 import { buildEventOp } from "../shared/eventLog";
-import { MATRIX_MODULES, countGrantedActions } from "../shared/permissionMatrix";
+import { countGrantedActions } from "../shared/permissionMatrix";
 import type { ModuleAction, ModuleGrant } from "../types";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
+import PermissionGrid from "../components/PermissionGrid";
 import Card from "../ui/tw/Card";
 import Btn from "../ui/tw/Btn";
-
-const ACTION_LABEL: Record<ModuleAction, string> = {
-  view: "View", create: "Create", edit: "Edit", delete: "Delete"
-};
-
-/* Small pill switch — no shared <Toggle> component exists yet in ui/tw,
-   every other bool field in the app uses a plain checkbox (RecordModal.tsx)
-   which doesn't match the reference screenshot's switch look, so this is a
-   local, self-contained control rather than a new shared primitive. */
-function Switch({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      onClick={() => onChange(!on)}
-      className={
-        "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors " +
-        (on ? "bg-primary" : "bg-[var(--bg-subtle)] border border-[var(--border)]")
-      }
-    >
-      <span
-        className={
-          "inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform " +
-          (on ? "translate-x-[18px]" : "translate-x-1")
-        }
-      />
-    </button>
-  );
-}
 
 export default function PermissionMatrix() {
   const { data, apply, currentUserId, toast } = useApp();
@@ -114,29 +85,8 @@ export default function PermissionMatrix() {
       {!userId ? (
         <Card className="text-center text-[13px] text-[var(--text-muted)]">No users to grant permissions to.</Card>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
-          {MATRIX_MODULES.map((m) => {
-            const g = grants[m.key] || {};
-            return (
-              <Card key={m.key}>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="text-[13.5px] font-bold">{m.label}</div>
-                  <div className="text-[10.5px] text-[var(--text-muted)]">{m.actions.length} node{m.actions.length === 1 ? "" : "s"}</div>
-                </div>
-                <div className="flex flex-col gap-2.5">
-                  {m.actions.map((a) => (
-                    <div key={a} className="flex items-center justify-between">
-                      <div>
-                        <div className="text-[12.5px] font-semibold">{ACTION_LABEL[a]}</div>
-                        <div className="text-[10.5px] text-[var(--text-muted)]">{m.key}.{a}</div>
-                      </div>
-                      <Switch on={!!g[a]} onChange={(v) => toggle(m.key, a, v)} />
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            );
-          })}
+        <div className="mb-5">
+          <PermissionGrid grants={grants} onToggle={toggle} />
         </div>
       )}
 

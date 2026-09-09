@@ -12,7 +12,9 @@ import Btn from "../ui/tw/Btn";
 import Table, { TableRow, TableCell } from "../ui/tw/Table";
 import StatusBadge from "../ui/tw/StatusBadge";
 import { hasModuleGrant } from "../shared/permissionMatrix";
-import { downloadExcel } from "../shared/exportExcel";
+import { downloadExcelReport } from "../shared/exportExcel";
+import { printSectionedReport } from "../shared/exportPdf";
+import type { ReportSection } from "../shared/reportSections";
 import { fmtDT } from "../shared/helpers";
 
 const ALL_FLOORS = "__all__";
@@ -73,19 +75,70 @@ export default function HandoverChecklist({ initialTab }: { initialTab?: "intern
   const activeFailed = mapped ? units.filter((u) => prog(data, u.id, activeStageId).status === "fail").length : 0;
   const activePending = units.length - activePassed - activeFailed;
 
-  function generateReport() {
-    const headers = ["Project", "Floor", "Unit", "Flat No.", "Status", "Completed At", "Notes"];
+  // Structured like the reference design: header block + Executive Summary
+  // (KPI list) + a unit-wise table + an Action Required bullet list + a
+  // blank Remarks box. Built once as a list of sections so the PDF (print)
+  // and Excel exports render identical content.
+  function reportSections(): ReportSection[] {
     const rows: (string | number | null)[][] = [];
+    const failedUnitNames: string[] = [];
     for (const u of units) {
       const p = prog(data, u.id, activeStageId);
       const status = p.status === "done" ? "Completed" : p.status === "fail" ? "Failed" : "Pending";
       const notes = p.status === "fail" && p.note ? p.note : p.remarks || "";
+      if (p.status === "fail") failedUnitNames.push(u.name);
       rows.push([
-        project?.name || "", refLabel(data, "floors", u.floorId), u.name, u.code || "",
+        refLabel(data, "floors", u.floorId), u.name, u.code || "",
         status, p.at ? fmtDT(p.at) : "", notes
       ]);
     }
-    downloadExcel(`${tab === "internal" ? "internal" : "owner"}-possession-${project?.code || "report"}`, headers, rows);
+    const pct = units.length ? Math.round((activePassed / units.length) * 100) : 0;
+
+    const bullets: string[] = [];
+    if (activeFailed > 0) bullets.push(`${activeFailed} unit(s) failed — rework needed: ${failedUnitNames.join(", ")}`);
+    if (activePending > 0) bullets.push(`${activePending} unit(s) still pending`);
+
+    return [
+      {
+        type: "kpi", title: "Executive Summary",
+        items: [
+          { label: "Total Units", value: units.length },
+          { label: `${tab === "internal" ? "Internal" : "Owner"} Completed`, value: `${activePassed} (${pct}%)` },
+          { label: "Failed", value: activeFailed },
+          { label: "Pending", value: activePending }
+        ]
+      },
+      {
+        type: "table", title: "Unit-Wise Possession Status",
+        headers: ["Floor", "Unit", "Flat No.", "Status", "Completed At", "Notes"],
+        rows
+      },
+      { type: "bullets", title: "Action Required", items: bullets },
+      { type: "remarks", title: "Remarks" }
+    ];
+  }
+
+  function reportMeta() {
+    return {
+      companyName: project?.name || "All Projects",
+      reportTitle: `${tab === "internal" ? "Internal" : "Owner"} Possession Report`,
+      scopeLine: `Scope: ${fFloor === ALL_FLOORS ? "All floors" : refLabel(data, "floors", fFloor)}`,
+      periodLine: `Units: ${units.length}`,
+      generatedLine: `Generated: ${fmtDT(Date.now())}`
+    };
+  }
+
+  function exportExcelReport() {
+    const { companyName, reportTitle, scopeLine, periodLine, generatedLine } = reportMeta();
+    downloadExcelReport(
+      `${tab === "internal" ? "internal" : "owner"}-possession-${project?.code || "report"}`,
+      companyName, reportTitle, scopeLine, periodLine, generatedLine, reportSections()
+    );
+  }
+
+  function exportPdfReport() {
+    const { companyName, reportTitle, scopeLine, periodLine, generatedLine } = reportMeta();
+    printSectionedReport(companyName, reportTitle, scopeLine, periodLine, generatedLine, reportSections());
   }
 
   return (
@@ -98,7 +151,7 @@ export default function HandoverChecklist({ initialTab }: { initialTab?: "intern
           <SearchDropdown
             value={viewProjectId}
             onChange={(v) => { setViewProjectId(v); setCurrentProjectId(v); setFFloor(ALL_FLOORS); }}
-            options={[{ value: "", label: "Choose" }, ...allProjects.map((p) => ({ value: p.id, label: p.name }))]}
+            options={[{ value: "", label: "All Projects" }, ...allProjects.map((p) => ({ value: p.id, label: p.name }))]}
             neutralActive
           />
         </div>
@@ -119,13 +172,10 @@ export default function HandoverChecklist({ initialTab }: { initialTab?: "intern
         {/* Report is generated off whatever Project/Floor/Search Unit currently
             filter `units` to — same list the table below renders, so the
             report always matches what's on screen. */}
-        <Btn
-          label="⬇ Generate Report"
-          color="secondary"
-          size="sm"
-          onClick={generateReport}
-          disabled={!mapped || units.length === 0}
-        />
+        <div className="flex gap-2">
+          <Btn label="🖨 PDF" color="secondary" size="sm" onClick={exportPdfReport} disabled={!mapped || units.length === 0} />
+          <Btn label="⬇ Excel" color="secondary" size="sm" onClick={exportExcelReport} disabled={!mapped || units.length === 0} />
+        </div>
       </Card>
 
       {!mapped ? (

@@ -12,7 +12,7 @@ import type { MasterKey } from "../types";
 export default function Masters() {
   const {
     data, currentProjectId, currentUserId, myRole, activeMaster: rawActiveMaster, setActiveMaster,
-    openRecordModal, apply, toast
+    openRecordModal, apply, toast, setActiveTab
   } = useApp();
   const [q, setQ] = useState("");
   const isAdmin = currentUserId === "U-ADMIN";
@@ -102,7 +102,17 @@ export default function Masters() {
         <div className="toolbar">
           <input className="input grow" placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} />
           <button className="btn btn-secondary btn-sm" onClick={exportMasterCsv}>⬇ Export CSV</button>
-          {editable && <button className="btn btn-primary btn-sm" onClick={() => openRecordModal({ master: activeMaster, id: null })}>＋ New</button>}
+          {editable && (
+            <button
+              className="btn btn-primary btn-sm"
+              // The Users master gets its own dedicated Add New User page
+              // (password + inline Permission Matrix) instead of the
+              // generic RecordModal — every other master is unaffected.
+              onClick={() => (activeMaster === "users" ? setActiveTab("addUser") : openRecordModal({ master: activeMaster, id: null }))}
+            >
+              ＋ New
+            </button>
+          )}
         </div>
         <div className="table-scroll">
           {rows.length === 0 ? (

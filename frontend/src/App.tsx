@@ -20,7 +20,9 @@ import DrawingRequests from "./pages/DrawingRequests";
 import Backups from "./pages/Backups";
 import AuditLog from "./pages/AuditLog";
 import PermissionMatrix from "./pages/PermissionMatrix";
+import AddUser from "./pages/AddUser";
 import { hasModuleGrant } from "./shared/permissionMatrix";
+import { coll } from "./shared/rules";
 
 export default function App() {
   const { loggedIn, currentUserId, activeTab, data } = useApp();
@@ -39,6 +41,7 @@ export default function App() {
     snags: <Snags />,
     team: <Team />,
     masters: <Masters />,
+    addUser: <AddUser />,
     dpr: <DailyProgressReport />,
     drawingRequests: <DrawingRequests />,
     backups: <Backups />,
@@ -54,11 +57,17 @@ export default function App() {
   // 4 tabs (Sidebar.tsx hides/shows the link the same way) — Permission
   // Matrix itself stays admin-only, since granting it would let a
   // non-admin grant themselves further access.
+  const isTeamLeader = coll(data, "teams").some((t) => t.leaderId === currentUserId);
   const restrictedTab =
-    ((activeTab === "team" && !hasModuleGrant(data, currentUserId, "team", "view")) ||
+    ((activeTab === "team" && !hasModuleGrant(data, currentUserId, "team", "view") && !isTeamLeader) ||
       (activeTab === "masters" && !hasModuleGrant(data, currentUserId, "masters", "view")) ||
       (activeTab === "backups" && !hasModuleGrant(data, currentUserId, "backups", "view")) ||
       (activeTab === "auditLog" && !hasModuleGrant(data, currentUserId, "auditLog", "view")) ||
+      // addUser needs the same "can actually edit Masters" grant Masters.tsx
+      // itself gates its "+ New" button on — matching masters/view here
+      // would let a read-only-granted user reach a create screen they
+      // can't otherwise act from.
+      (activeTab === "addUser" && !hasModuleGrant(data, currentUserId, "masters", "edit")) ||
       activeTab === "permissionMatrix") &&
     !isAdmin;
 

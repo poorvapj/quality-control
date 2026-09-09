@@ -154,13 +154,26 @@ export const MASTERS: Record<MasterKey, MasterDef> = {
   users: {
     label: "User", icon: "👤", prefix: "USR",
     desc: "Everyone who can act on the board. Role decides which stages they can complete.",
-    cols: ["code", "name", "role", "company", "phone", "email", "active"],
+    cols: ["code", "name", "role", "teamId", "company", "phone", "email", "active"],
     fields: [
       { k: "name", label: "Full name", type: "text", required: true },
       { k: "role", label: "Role", type: "select", options: Object.keys(ROLES), required: true },
+      { k: "teamId", label: "Team", type: "ref", coll: "teams", hint: "Which team this person belongs to (optional)." },
       { k: "company", label: "Company", type: "text" },
       { k: "phone", label: "Phone", type: "text" },
       { k: "email", label: "Email", type: "text" },
+      { k: "slackId", label: "Slack Member ID", type: "text", hint: "e.g. U0123ABCDE — lets notifications skip the email lookup" },
+      { k: "password", label: "Password", type: "password", hint: "Only needed when setting/resetting — leave blank to keep the current one." },
+      { k: "active", label: "Active", type: "bool" }
+    ]
+  },
+  teams: {
+    label: "Team", icon: "👥", prefix: "TEAM",
+    desc: "Groups of users under one Team Leader — the Leader sees and manages only their own team's workload.",
+    cols: ["code", "name", "leaderId", "active"],
+    fields: [
+      { k: "name", label: "Team name", type: "text", required: true },
+      { k: "leaderId", label: "Team Leader", type: "ref", coll: "users" },
       { k: "active", label: "Active", type: "bool" }
     ]
   },

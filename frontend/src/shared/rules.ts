@@ -168,6 +168,17 @@ export function canAct(myRole: Role, stage: Stage): boolean {
   return myRole === "ADMIN" || myRole === stage.role;
 }
 
+/** Is `leaderId` the Team Leader of whichever team `memberUserId` belongs
+ *  to? Used to additively extend "mine"-style checks (e.g. AssignRow.tsx)
+ *  so a Team Leader can act on their own team's members' work, without
+ *  needing Admin or a broader Permission Matrix grant. */
+export function isTeamLeaderOf(data: BoardData | null, leaderId: string | null, memberUserId: string | null | undefined): boolean {
+  if (!leaderId || !memberUserId) return false;
+  const member = byId(coll(data, "users"), memberUserId);
+  const team = member?.teamId ? byId(coll(data, "teams"), member.teamId) : null;
+  return !!team && team.leaderId === leaderId;
+}
+
 export interface UnitSummary { done: number; total: number; fail: boolean; started: boolean; locked: boolean; snags: number; complete: boolean; }
 
 export function unitSummary(data: BoardData | null, projectId: string | null, unitId: string): UnitSummary {

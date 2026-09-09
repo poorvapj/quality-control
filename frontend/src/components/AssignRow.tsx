@@ -1,6 +1,6 @@
 import React from "react";
 import { useApp } from "../context/AppContext";
-import { refLabel } from "../shared/rules";
+import { refLabel, isTeamLeaderOf } from "../shared/rules";
 import { dueLabel, ago } from "../shared/helpers";
 import { useActions } from "../hooks/useActions";
 import type { Assignment } from "../types";
@@ -10,7 +10,7 @@ export default function AssignRow({ a }: { a: Assignment }) {
   const { setAssignStatus } = useActions();
   const d = dueLabel(a.dueAt);
   const target = a.targetType === "unit" ? refLabel(data, "units", a.targetId) : refLabel(data, "floors", a.targetId);
-  const mine = a.assignedTo === currentUserId || myRole() === "ADMIN";
+  const mine = a.assignedTo === currentUserId || myRole() === "ADMIN" || isTeamLeaderOf(data, currentUserId, a.assignedTo);
 
   return (
     <div className={"qitem" + (d.cls === "fail" ? " alert" : "")} onClick={() => openDrawer({ kind: a.targetType, id: a.targetId })}>

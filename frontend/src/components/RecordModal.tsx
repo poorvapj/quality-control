@@ -93,8 +93,8 @@ export default function RecordModal() {
         </div>
       );
     } else {
-      const type = f.type === "number" ? "number" : f.type === "date" ? "date" : f.type === "color" ? "color" : "text";
-      inner = <input className="input" type={type} value={v ?? ""} onChange={(e) => setV(f.k, e.target.value)} />;
+      const type = f.type === "number" ? "number" : f.type === "date" ? "date" : f.type === "color" ? "color" : f.type === "password" ? "password" : "text";
+      inner = <input className="input" type={type} autoComplete={f.type === "password" ? "new-password" : undefined} value={v ?? ""} onChange={(e) => setV(f.k, e.target.value)} />;
     }
 
     return (

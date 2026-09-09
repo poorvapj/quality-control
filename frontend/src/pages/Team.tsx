@@ -2,11 +2,23 @@ import React from "react";
 import { useApp } from "../context/AppContext";
 import { ROLES } from "../services/config";
 import { coll } from "../shared/rules";
+import { hasModuleGrant } from "../shared/permissionMatrix";
 import NavIcon from "../components/NavIcon";
 
 export default function Team() {
-  const { data, openAssignModal, openDrawer } = useApp();
-  const users = coll(data, "users").filter((u) => u.active !== false);
+  const { data, currentUserId, openAssignModal, openDrawer } = useApp();
+  const isAdmin = currentUserId === "U-ADMIN";
+  const allActiveUsers = coll(data, "users").filter((u) => u.active !== false);
+  const myTeam = coll(data, "teams").find((t) => t.leaderId === currentUserId) || null;
+  // Admin, or anyone additively granted the full board via the Permission
+  // Matrix, sees everyone — same as before this change. A Team Leader with
+  // neither of those instead sees ONLY their own team's roster.
+  const fullAccess = isAdmin || hasModuleGrant(data, currentUserId, "team", "view");
+  const users = fullAccess
+    ? allActiveUsers
+    : myTeam
+    ? allActiveUsers.filter((u) => u.teamId === myTeam.id || u.id === myTeam.leaderId)
+    : [];
   // Team workload is org-wide, not tied to whichever project happens to be
   // globally selected — same class of bug fixed in My Work: scoping to
   // `currentProjectId` alone silently hid a person's work on every other
@@ -29,7 +41,7 @@ export default function Team() {
         <div className="page-header-left">
           <div className="page-icon"><NavIcon name="team" size={20} /></div>
           <div>
-            <div className="page-title">Team Workload</div>
+            <div className="page-title">{fullAccess ? "Team Workload" : myTeam ? `${myTeam.name} — My Team` : "Team Workload"}</div>
             <div className="page-desc">Open assignments and snags per person. Tap a person to see their board.</div>
           </div>
         </div>
@@ -38,6 +50,7 @@ export default function Team() {
         </div>
       </div>
       <div className="card">
+        {rows.length === 0 && <div className="empty">No team workload to show.</div>}
         {rows.map((r) => (
           <div key={r.u.id} className={"qitem" + (r.overdue ? " warn" : "")} onClick={() => openDrawer({ kind: "user", id: r.u.id })}>
             <div className="qitem-main">

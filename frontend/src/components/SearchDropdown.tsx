@@ -9,13 +9,17 @@ export interface DropdownOption { value: string; label: string }
  *  Fully inline-styled (no shared CSS classes) so each usage is
  *  self-contained, same pattern as DropdownMenu.tsx. */
 export default function SearchDropdown({
-  value, onChange, options, searchable = true, icon, scrollable = true, pill = false, neutralActive = false
+  value, onChange, options, searchable = true, icon, scrollable = true, pill = false, neutralActive = false, disabled = false
 }: {
   value: string; onChange: (v: string) => void; options: DropdownOption[]; searchable?: boolean; icon?: string; scrollable?: boolean; pill?: boolean;
   /** Renders the selected row in the normal text color (just the checkmark
    *  stays orange) instead of orange bold text — used by Dashboard's
    *  "Active Project" filter to match its reference styling. */
   neutralActive?: boolean;
+  /** For cascading pickers (e.g. Floor before a Project is chosen) — greys
+   *  out the button and blocks opening the panel, instead of opening onto
+   *  an empty/meaningless option list. */
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -41,11 +45,14 @@ export default function SearchDropdown({
       <button
         type="button"
         className="select"
+        disabled={disabled}
         style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, textAlign: "left", cursor: "pointer",
+          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, textAlign: "left",
+          cursor: disabled ? "not-allowed" : "pointer",
+          opacity: disabled ? 0.55 : 1,
           ...(pill ? { borderRadius: 999, width: "auto", fontWeight: 600 } : {})
         }}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => { if (!disabled) setOpen((o) => !o); }}
       >
         <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {icon && <span style={{ color: "var(--text-muted)", flexShrink: 0, display: "flex" }}><NavIcon name={icon} size={13} /></span>}

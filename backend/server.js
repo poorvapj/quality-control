@@ -151,7 +151,11 @@ const SLACK_CHANNEL_ID = process.env.SLACK_CHANNEL_ID || "";
 // Slack accounts) — avoids one lookupByEmail call per notification.
 const slackUserIdByEmail = new Map();
 
-async function slackUserIdForEmail(email) {
+async function slackUserIdForEmail(email, knownSlackId) {
+  // A manually-entered Slack Member ID on the user record (Masters ▸ User /
+  // Add New User) skips the live lookupByEmail call entirely — also covers
+  // accounts where the Slack profile's email doesn't match this app's.
+  if (knownSlackId) return knownSlackId;
   if (!email || !SLACK_BOT_TOKEN) return null;
   if (slackUserIdByEmail.has(email)) return slackUserIdByEmail.get(email);
   try {
@@ -191,10 +195,10 @@ function slackMessageFor(eventType, payload) {
   switch (eventType) {
     case "drawing_request_stage_change":
       if (payload.reviewStatus === "approved") {
-        return { text: `✅ Drawing request *${payload.ticketNo}* (${payload.projectName}) is fully *approved*.`, recipientEmail: payload.requesterEmail, who: payload.requesterName };
+        return { text: `✅ Drawing request *${payload.ticketNo}* (${payload.projectName}) is fully *approved*.`, recipientEmail: payload.requesterEmail, recipientSlackId: payload.requesterSlackId, who: payload.requesterName };
       }
       if (payload.reviewStatus === "returned") {
-        return { text: `↩️ Drawing request *${payload.ticketNo}* (${payload.projectName}) was *returned* to ${payload.requesterName} for changes.`, recipientEmail: payload.requesterEmail, who: payload.requesterName };
+        return { text: `↩️ Drawing request *${payload.ticketNo}* (${payload.projectName}) was *returned* to ${payload.requesterName} for changes.`, recipientEmail: payload.requesterEmail, recipientSlackId: payload.requesterSlackId, who: payload.requesterName };
       }
       return null;
     case "work_assigned":
@@ -203,12 +207,13 @@ function slackMessageFor(eventType, payload) {
           + (payload.dueAt ? `, due ${new Date(payload.dueAt).toLocaleString()}` : "")
           + (payload.note ? `.\n> ${payload.note}` : "."),
         recipientEmail: payload.assignedToEmail,
+        recipientSlackId: payload.assignedToSlackId,
         who: payload.assignedToName
       };
     case "snag_assigned":
-      return { text: `🐞 Snag *${payload.title}* assigned to *${payload.assignedToName}*.`, recipientEmail: payload.assignedToEmail, who: payload.assignedToName };
+      return { text: `🐞 Snag *${payload.title}* assigned to *${payload.assignedToName}*.`, recipientEmail: payload.assignedToEmail, recipientSlackId: payload.assignedToSlackId, who: payload.assignedToName };
     case "snag_reopened":
-      return { text: `⚠️ Snag *${payload.title}* was *reopened* — assigned to *${payload.assignedToName}*, needs attention.`, recipientEmail: payload.assignedToEmail, who: payload.assignedToName };
+      return { text: `⚠️ Snag *${payload.title}* was *reopened* — assigned to *${payload.assignedToName}*, needs attention.`, recipientEmail: payload.assignedToEmail, recipientSlackId: payload.assignedToSlackId, who: payload.assignedToName };
     default:
       return null;
   }
@@ -220,9 +225,9 @@ async function notifySlack(eventType, payload) {
     const msg = slackMessageFor(eventType, payload);
     if (!msg) return;
     const tasks = [];
-    if (msg.recipientEmail) {
+    if (msg.recipientEmail || msg.recipientSlackId) {
       tasks.push(
-        slackUserIdForEmail(msg.recipientEmail).then((uid) => uid && slackPostMessage(uid, msg.text))
+        slackUserIdForEmail(msg.recipientEmail, msg.recipientSlackId).then((uid) => uid && slackPostMessage(uid, msg.text))
       );
     }
     if (SLACK_CHANNEL_ID) {
@@ -251,7 +256,7 @@ const PROJECT_SCOPED_COLLECTIONS = ["floors", "units", "snags", "assignments", "
 // controls when `myRole() === "ADMIN"`, but that was UI-only: any other
 // signed-in session could still upsert/delete these directly via
 // /api/ops. Mirrored here server-side (see assertOpAllowed).
-const MASTER_ROLE_GATED_COLLECTIONS = ["projects", "floors", "units", "stages", "qparams", "checklists", "stagemap", "permissions", "workTargets"];
+const MASTER_ROLE_GATED_COLLECTIONS = ["projects", "floors", "units", "stages", "qparams", "checklists", "stagemap", "permissions", "workTargets", "teams"];
 
 const roleCache = new Map(); // userId -> role, cleared per request is overkill; a stale role for a few seconds is an acceptable tradeoff for not hitting Mongo on every single op in a batch
 async function getUserRole(userId) {
@@ -328,7 +333,7 @@ async function notifyDrawingRequestStageChange(doc) {
     // reliable link back to a real account — resolve it here so n8n can
     // match the requester to Slack by email without guessing off the name.
     const requester = doc.submittedByUserId
-      ? await mongoDb.collection("users").findOne({ id: doc.submittedByUserId }, { projection: { email: 1 } })
+      ? await mongoDb.collection("users").findOne({ id: doc.submittedByUserId }, { projection: { email: 1, slackId: 1 } })
       : null;
     notifyEvent("drawing_request_stage_change", {
       id: doc.id,
@@ -339,6 +344,7 @@ async function notifyDrawingRequestStageChange(doc) {
       priority: doc.priority || doc.requestedPriority || null,
       requesterName: doc.requesterName,
       requesterEmail: requester?.email || null,
+      requesterSlackId: requester?.slackId || null,
       assignedTo: doc.assignedTo || null,
       lastHistoryEntry: doc.reviewHistory?.[doc.reviewHistory.length - 1] || null
     });
@@ -350,7 +356,7 @@ async function notifyDrawingRequestStageChange(doc) {
 async function notifyAssignmentTarget(eventType, rec) {
   try {
     const [assignee, assigner] = await Promise.all([
-      mongoDb.collection("users").findOne({ id: rec.assignedTo }, { projection: { name: 1, email: 1 } }),
+      mongoDb.collection("users").findOne({ id: rec.assignedTo }, { projection: { name: 1, email: 1, slackId: 1 } }),
       rec.assignedBy ? mongoDb.collection("users").findOne({ id: rec.assignedBy }, { projection: { name: 1 } }) : null
     ]);
     notifyEvent(eventType, {
@@ -364,6 +370,7 @@ async function notifyAssignmentTarget(eventType, rec) {
       assignedToId: rec.assignedTo,
       assignedToName: assignee?.name || rec.assignedTo,
       assignedToEmail: assignee?.email || null,
+      assignedToSlackId: assignee?.slackId || null,
       assignedByName: assigner?.name || "Someone"
     });
   } catch (e) {
@@ -375,7 +382,7 @@ async function notifySnagTarget(eventType, rec, existing) {
   try {
     const assignedTo = rec.assignedTo || existing?.assignedTo || null;
     const assignee = assignedTo
-      ? await mongoDb.collection("users").findOne({ id: assignedTo }, { projection: { name: 1, email: 1 } })
+      ? await mongoDb.collection("users").findOne({ id: assignedTo }, { projection: { name: 1, email: 1, slackId: 1 } })
       : null;
     notifyEvent(eventType, {
       id: rec.id,
@@ -383,7 +390,8 @@ async function notifySnagTarget(eventType, rec, existing) {
       projectId: rec.projectId || existing?.projectId || null,
       assignedToId: assignedTo,
       assignedToName: assignee?.name || assignedTo,
-      assignedToEmail: assignee?.email || null
+      assignedToEmail: assignee?.email || null,
+      assignedToSlackId: assignee?.slackId || null
     });
   } catch (e) {
     console.error(`notifySnagTarget failed (${eventType}):`, e.message);

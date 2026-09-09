@@ -107,6 +107,24 @@ export interface User extends BaseRecord {
   company?: string;
   phone?: string;
   email?: string;
+  /** Manually-entered Slack user id (e.g. "U0123ABCDE") — lets
+   *  backend/server.js's slackUserIdForEmail() skip the live email
+   *  lookup when present. Optional; falls back to email lookup as
+   *  before when absent. */
+  slackId?: string;
+  /** Which team (see Team below) this person belongs to — one team per
+   *  person, same pattern as `role`. Optional. */
+  teamId?: string;
+  active?: boolean;
+}
+
+/** A group of users under one Team Leader — Masters ▸ Teams manages
+ *  these; membership is the reverse side, `User.teamId`, not a
+ *  memberIds array here, so there's one source of truth to keep in
+ *  sync. */
+export interface Team extends BaseRecord {
+  name: string;
+  leaderId?: string;
   active?: boolean;
 }
 
@@ -187,6 +205,8 @@ export interface ProgressPatch {
     /** Present only for room-wise (possession) checklists — per-room
      *  breakdown behind the single rolled-up `result` above. */
     cells?: { room: string; result: "pass" | "fail" | "na" }[];
+    /** Evidence photo for this item, if the checklist required one. */
+    photo?: Photo;
   }[];
   /** Free-text note attached to a possession-checklist submission
    *  (HandoverChecklist.tsx) — separate from `note`, which holds the
@@ -339,6 +359,7 @@ export interface BoardData {
   permissions: UserPermission[];
   workTargets: WorkTarget[];
   moduleGrants: ModuleGrant[];
+  teams: Team[];
   progress: Record<string, ProgressPatch>;
   events: EventLog[];
   [key: string]: unknown;
@@ -352,10 +373,10 @@ export type Op =
   | { op: "progress"; key: string; patch: Partial<ProgressPatch> }
   | { op: "event"; ev: EventLog };
 
-export type TabKey = "dash" | "work" | "board" | "handoverChecklist" | "handoverInternal" | "handoverOwner" | "snags" | "team" | "masters" | "dpr" | "drawingRequests" | "backups" | "auditLog" | "permissionMatrix";
-export type MasterKey = "projects" | "floors" | "units" | "stages" | "qparams" | "checklists" | "stagemap" | "users" | "permissions" | "workTargets";
+export type TabKey = "dash" | "work" | "board" | "handoverChecklist" | "handoverInternal" | "handoverOwner" | "snags" | "team" | "masters" | "addUser" | "dpr" | "drawingRequests" | "backups" | "auditLog" | "permissionMatrix";
+export type MasterKey = "projects" | "floors" | "units" | "stages" | "qparams" | "checklists" | "stagemap" | "users" | "permissions" | "workTargets" | "teams";
 
-export type FieldType = "text" | "number" | "date" | "color" | "select" | "ref" | "bool" | "textarea" | "items";
+export type FieldType = "text" | "number" | "date" | "color" | "select" | "ref" | "bool" | "textarea" | "items" | "password";
 
 export interface MasterField {
   k: string;

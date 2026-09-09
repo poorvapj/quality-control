@@ -11,7 +11,7 @@ interface NavItem { key: TabKey; icon: string; label: string; badge?: number; ch
 export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: { open: boolean; collapsed: boolean; onNavigate: () => void }) {
   const { activeTab, setActiveTab, data, currentUserId, currentProjectId } = useApp();
   const isAdmin = currentUserId === "U-ADMIN";
-  const canViewTeam = isAdmin || hasModuleGrant(data, currentUserId, "team", "view");
+  const canViewTeam = isAdmin || hasModuleGrant(data, currentUserId, "team", "view") || coll(data, "teams").some((t) => t.leaderId === currentUserId);
   const canViewMasters = isAdmin || hasModuleGrant(data, currentUserId, "masters", "view");
   const canViewBackups = isAdmin || hasModuleGrant(data, currentUserId, "backups", "view");
   const canViewAuditLog = isAdmin || hasModuleGrant(data, currentUserId, "auditLog", "view");
