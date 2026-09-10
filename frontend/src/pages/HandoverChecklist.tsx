@@ -333,7 +333,7 @@ function StageCell({
   // untouched — it still gates every other stage in Drawer.tsx as before.
   const block = blockReason(data, currentProjectId, "unit", unitId, idx);
   const openSnags = coll(data, "snags").filter((s: any) => s.unitId === unitId && s.status !== "Closed");
-  const mine = canAct(myRole(), joined.stage) || hasModuleGrant(data, currentUserId, "handoverChecklist", "edit");
+  const mine = canAct(myRole(), joined.stage) || hasModuleGrant(data, currentUserId, solid ? "handoverInternal" : "handoverOwner", "edit");
   const chk = joined.map.checklistId ? byId(coll(data, "checklists"), joined.map.checklistId) : null;
 
   const subtext = fail && p.note
