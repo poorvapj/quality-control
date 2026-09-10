@@ -4,7 +4,7 @@
    changes the wire format, it just names it.
    =========================================================================== */
 
-export type Role = "CRM" | "CIVIL" | "ADMIN";
+export type Role = "DRI" | "CRM" | "CIVIL" | "ADMIN";
 export type Track = "unit" | "floor";
 export type Severity = "Critical" | "Major" | "Minor";
 export type SnagStatus = "Open" | "In Progress" | "Closed";

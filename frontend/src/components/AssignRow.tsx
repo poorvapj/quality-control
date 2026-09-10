@@ -10,7 +10,7 @@ export default function AssignRow({ a }: { a: Assignment }) {
   const { setAssignStatus } = useActions();
   const d = dueLabel(a.dueAt);
   const target = a.targetType === "unit" ? refLabel(data, "units", a.targetId) : refLabel(data, "floors", a.targetId);
-  const mine = a.assignedTo === currentUserId || myRole() === "ADMIN" || isTeamLeaderOf(data, currentUserId, a.assignedTo);
+  const mine = a.assignedTo === currentUserId || myRole() === "ADMIN" || myRole() === "DRI" || isTeamLeaderOf(data, currentUserId, a.assignedTo);
 
   return (
     <div className={"qitem" + (d.cls === "fail" ? " alert" : "")} onClick={() => openDrawer({ kind: a.targetType, id: a.targetId })}>

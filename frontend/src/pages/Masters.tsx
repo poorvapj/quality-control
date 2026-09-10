@@ -16,7 +16,7 @@ export default function Masters() {
   } = useApp();
   const [q, setQ] = useState("");
   const isAdmin = currentUserId === "U-ADMIN";
-  const editable = myRole() === "ADMIN" || hasModuleGrant(data, currentUserId, "masters", "edit");
+  const editable = myRole() === "ADMIN" || myRole() === "DRI" || hasModuleGrant(data, currentUserId, "masters", "edit");
   // User Master exposes every account's contact/role data — Admin only.
   // Every other master stays fully open to any signed-in user.
   const activeMaster: MasterKey = (rawActiveMaster === "users" && !isAdmin) ? "projects" : rawActiveMaster;

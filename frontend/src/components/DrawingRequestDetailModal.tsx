@@ -389,7 +389,7 @@ export default function DrawingRequestDetailModal({ dr, onClose }: { dr: Drawing
         );
       })()}
 
-      {dr.reviewStatus === "approved" && (myRole() === "ADMIN" || currentUserId === "U-ADMIN") && (
+      {dr.reviewStatus === "approved" && (myRole() === "ADMIN" || myRole() === "DRI" || currentUserId === "U-ADMIN") && (
         <Card style={{ marginBottom: 16 }}>
           <div className="micro-label" style={{ marginBottom: 10 }}>UPDATE TRACKING</div>
           <div className="form-grid">

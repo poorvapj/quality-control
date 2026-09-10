@@ -697,14 +697,14 @@ async function assertOpAllowed(op, session) {
     if (!session) { const e = new Error("Sign-in required"); e.status = 401; throw e; }
     if (!session.isAdmin) {
       const role = await getUserRole(session.userId);
-      if (role !== "ADMIN") {
+      if (role !== "ADMIN" && role !== "DRI") {
         // Additive grant on top of the role check above — a user without
-        // the Owner/Admin role can still be individually authorized via the
-        // Permission Matrix (moduleGrants.masters.edit) without changing
-        // their Role and therefore without changing anything else they can
-        // or can't do elsewhere in the app.
+        // the Owner/Admin (or DRI) role can still be individually
+        // authorized via the Permission Matrix (moduleGrants.masters.edit)
+        // without changing their Role and therefore without changing
+        // anything else they can or can't do elsewhere in the app.
         const grant = await getModuleGrant(session.userId, "masters");
-        if (!grant || !grant.edit) { const e = new Error("Only Owner/Admin can edit Masters"); e.status = 403; throw e; }
+        if (!grant || !grant.edit) { const e = new Error("Only Owner/Admin or DRI can edit Masters"); e.status = 403; throw e; }
       }
     }
     return;
@@ -728,7 +728,7 @@ async function assertOpAllowed(op, session) {
         stageId ? mongoDb.collection("stages").findOne({ id: stageId }, { projection: { role: 1 } }) : null
       ]);
       const stageRole = stage ? stage.role : null;
-      if (role !== "ADMIN" && (!stageRole || role !== stageRole)) {
+      if (role !== "ADMIN" && role !== "DRI" && (!stageRole || role !== stageRole)) {
         const e = new Error("Not authorized to act on this stage");
         e.status = 403;
         throw e;

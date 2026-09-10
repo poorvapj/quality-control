@@ -165,7 +165,7 @@ export function blockReason(
 }
 
 export function canAct(myRole: Role, stage: Stage): boolean {
-  return myRole === "ADMIN" || myRole === stage.role;
+  return myRole === "ADMIN" || myRole === "DRI" || myRole === stage.role;
 }
 
 /** Is `leaderId` the Team Leader of whichever team `memberUserId` belongs
@@ -255,7 +255,7 @@ export function myReleases(data: BoardData | null, projectId: string | null, use
   const out: Release[] = [];
   const scan = (targetType: Track, targetId: string, list: JoinedStage[]) => {
     list.forEach((x, i) => {
-      if (x.stage.role !== u.role && u.role !== "ADMIN") return;
+      if (x.stage.role !== u.role && u.role !== "ADMIN" && u.role !== "DRI") return;
       const p = prog(data, targetId, x.stage.id);
       if (p.status === "done") return;
       if (p.status === "released" || p.status === "ack" || p.status === "wip" || p.status === "fail") {

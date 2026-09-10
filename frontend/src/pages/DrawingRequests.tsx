@@ -31,7 +31,7 @@ const TONE = {
 export default function DrawingRequestsPage() {
   const { data, myRole, currentUserId, apply, toast } = useApp();
   const isAdmin = currentUserId === "U-ADMIN";
-  const editable = myRole() === "ADMIN" || hasModuleGrant(data, currentUserId, "drawingRequests", "edit");
+  const editable = myRole() === "ADMIN" || myRole() === "DRI" || hasModuleGrant(data, currentUserId, "drawingRequests", "edit");
   const [createOpen, setCreateOpen] = useState(false);
   const [detail, setDetail] = useState<DrawingRequest | null>(null);
   const [editing, setEditing] = useState<DrawingRequest | null>(null);
@@ -65,7 +65,7 @@ export default function DrawingRequestsPage() {
   // DRI isn't a reviewer here (see shared/permissions.ts — only Admin +
   // explicitly-granted reviewers act on stages), so the board itself should
   // only surface the tickets they personally raised, not everyone's.
-  if (!isAdmin && myRole() === "ADMIN") rows = rows.filter((r) => r.submittedByUserId === currentUserId);
+  if (!isAdmin && (myRole() === "ADMIN" || myRole() === "DRI")) rows = rows.filter((r) => r.submittedByUserId === currentUserId);
   if (fStatus) rows = rows.filter((r) => r.reviewStatus === fStatus);
   if (fTracking) rows = rows.filter((r) => r.trackingStatus === fTracking);
   if (fPriority) rows = rows.filter((r) => r.priority === fPriority);
