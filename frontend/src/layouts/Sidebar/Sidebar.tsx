@@ -15,6 +15,8 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
   const canViewMasters = isAdmin || hasModuleGrant(data, currentUserId, "masters", "view");
   const canViewBackups = isAdmin || hasModuleGrant(data, currentUserId, "backups", "view");
   const canViewAuditLog = isAdmin || hasModuleGrant(data, currentUserId, "auditLog", "view");
+  const canViewDpr = isAdmin || hasModuleGrant(data, currentUserId, "dpr", "view");
+  const canViewDrawingRequests = isAdmin || hasModuleGrant(data, currentUserId, "drawingRequests", "view");
 
   // Icon-only collapse only ever makes sense on desktop. A stale
   // collapsed=true from localStorage (e.g. set on desktop, then this page
@@ -50,8 +52,8 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
         },
         { key: "snags", icon: "snags", label: "Snags", badge: snagBadge },
         ...(canViewTeam ? [{ key: "team" as TabKey, icon: "team", label: "Team" }] : []),
-        { key: "dpr", icon: "dpr", label: "Daily Progress Report" },
-        { key: "drawingRequests", icon: "drawing", label: "Drawing Requests" }
+        ...(canViewDpr ? [{ key: "dpr" as TabKey, icon: "dpr", label: "Daily Progress Report" }] : []),
+        ...(canViewDrawingRequests ? [{ key: "drawingRequests" as TabKey, icon: "drawing", label: "Drawing Requests" }] : [])
       ]
     },
     {

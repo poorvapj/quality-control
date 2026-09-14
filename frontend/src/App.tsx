@@ -68,6 +68,8 @@ export default function App() {
       // would let a read-only-granted user reach a create screen they
       // can't otherwise act from.
       (activeTab === "addUser" && !hasModuleGrant(data, currentUserId, "masters", "edit")) ||
+      (activeTab === "dpr" && !hasModuleGrant(data, currentUserId, "dpr", "view")) ||
+      (activeTab === "drawingRequests" && !hasModuleGrant(data, currentUserId, "drawingRequests", "view")) ||
       activeTab === "permissionMatrix") &&
     !isAdmin;
 
