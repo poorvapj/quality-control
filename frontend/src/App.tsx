@@ -25,7 +25,7 @@ import { hasModuleGrant } from "./shared/permissionMatrix";
 import { coll } from "./shared/rules";
 
 export default function App() {
-  const { loggedIn, currentUserId, activeTab, data, myRole } = useApp();
+  const { loggedIn, currentUserId, activeTab, data } = useApp();
 
   if (!loggedIn) return <><LoginScreen /><Toast /></>;
 
@@ -58,14 +58,6 @@ export default function App() {
   // Matrix itself stays admin-only, since granting it would let a
   // non-admin grant themselves further access.
   const isTeamLeader = coll(data, "teams").some((t) => t.leaderId === currentUserId);
-  // Internal/Owner Handover's stages are owned by the "CIVIL" role — DRI/
-  // ADMIN/CIVIL already see the page by default (same as canAct() would
-  // already let them act on it); anyone else needs an explicit grant.
-  const isDefaultHandoverRole = myRole() === "DRI" || myRole() === "CIVIL";
-  const canViewHandoverInternal = isDefaultHandoverRole
-    || hasModuleGrant(data, currentUserId, "handoverInternal", "view") || hasModuleGrant(data, currentUserId, "handoverInternal", "edit");
-  const canViewHandoverOwner = isDefaultHandoverRole
-    || hasModuleGrant(data, currentUserId, "handoverOwner", "view") || hasModuleGrant(data, currentUserId, "handoverOwner", "edit");
   const restrictedTab =
     ((activeTab === "team" && !hasModuleGrant(data, currentUserId, "team", "view") && !isTeamLeader) ||
       (activeTab === "masters" && !hasModuleGrant(data, currentUserId, "masters", "view")) ||
@@ -78,8 +70,6 @@ export default function App() {
       (activeTab === "addUser" && !hasModuleGrant(data, currentUserId, "masters", "edit")) ||
       (activeTab === "dpr" && !hasModuleGrant(data, currentUserId, "dpr", "view")) ||
       (activeTab === "drawingRequests" && !hasModuleGrant(data, currentUserId, "drawingRequests", "view")) ||
-      (activeTab === "handoverInternal" && !canViewHandoverInternal) ||
-      (activeTab === "handoverOwner" && !canViewHandoverOwner) ||
       activeTab === "permissionMatrix") &&
     !isAdmin;
 

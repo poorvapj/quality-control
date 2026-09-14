@@ -9,17 +9,8 @@ import "./Sidebar.css";
 interface NavItem { key: TabKey; icon: string; label: string; badge?: number; children?: NavItem[] }
 
 export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: { open: boolean; collapsed: boolean; onNavigate: () => void }) {
-  const { activeTab, setActiveTab, data, currentUserId, currentProjectId, myRole } = useApp();
+  const { activeTab, setActiveTab, data, currentUserId, currentProjectId } = useApp();
   const isAdmin = currentUserId === "U-ADMIN";
-  // Internal/Owner Handover's stages are owned by the "CIVIL" role
-  // (canAct() would already let DRI/ADMIN/CIVIL act on them) — so those
-  // three see the page by default same as before, and anyone else (CRM,
-  // or a future role) needs an explicit Permission Matrix view/edit grant.
-  const isDefaultHandoverRole = myRole() === "DRI" || myRole() === "CIVIL";
-  const canViewHandoverInternal = isAdmin || isDefaultHandoverRole
-    || hasModuleGrant(data, currentUserId, "handoverInternal", "view") || hasModuleGrant(data, currentUserId, "handoverInternal", "edit");
-  const canViewHandoverOwner = isAdmin || isDefaultHandoverRole
-    || hasModuleGrant(data, currentUserId, "handoverOwner", "view") || hasModuleGrant(data, currentUserId, "handoverOwner", "edit");
   const canViewTeam = isAdmin || hasModuleGrant(data, currentUserId, "team", "view") || coll(data, "teams").some((t) => t.leaderId === currentUserId);
   const canViewMasters = isAdmin || hasModuleGrant(data, currentUserId, "masters", "view");
   const canViewBackups = isAdmin || hasModuleGrant(data, currentUserId, "backups", "view");
@@ -52,13 +43,13 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
       items: [
         { key: "work", icon: "work", label: "My Work", badge: workBadge },
         { key: "board", icon: "board", label: "Tower Board" },
-        ...((canViewHandoverInternal || canViewHandoverOwner) ? [{
-          key: "handoverInternal" as TabKey, icon: "handover", label: "Handover Checklist",
+        {
+          key: "handoverInternal", icon: "handover", label: "Handover Checklist",
           children: [
-            ...(canViewHandoverInternal ? [{ key: "handoverInternal" as TabKey, icon: "handover", label: "Internal Possession" }] : []),
-            ...(canViewHandoverOwner ? [{ key: "handoverOwner" as TabKey, icon: "handover", label: "Owner Possession" }] : [])
+            { key: "handoverInternal", icon: "handover", label: "Internal Possession" },
+            { key: "handoverOwner", icon: "handover", label: "Owner Possession" }
           ]
-        }] : []),
+        },
         { key: "snags", icon: "snags", label: "Snags", badge: snagBadge },
         ...(canViewTeam ? [{ key: "team" as TabKey, icon: "team", label: "Team" }] : []),
         ...(canViewDpr ? [{ key: "dpr" as TabKey, icon: "dpr", label: "Daily Progress Report" }] : []),
