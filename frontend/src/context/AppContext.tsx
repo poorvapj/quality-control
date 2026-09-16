@@ -41,9 +41,9 @@ function applyOpsLocal(d: BoardData, ops: Op[]) {
 
 interface DrawerRef { kind: "unit" | "floor" | "snag" | "user"; id: string }
 
-export interface AssignModalState { targetType: "unit" | "floor"; targetId: string; stageId: string; presetUser?: string; projectId?: string }
-export interface SnagModalState { unitId: string; stageId: string; preset?: string }
-export interface ChecklistModalState { kind: "unit" | "floor"; id: string; stageId: string; checklistId: string }
+export interface AssignModalState { targetType: "unit" | "floor"; targetId: string; stageId: string; itemId?: string; presetUser?: string; projectId?: string }
+export interface SnagModalState { unitId: string; stageId: string; itemId?: string; preset?: string }
+export interface ChecklistModalState { kind: "unit" | "floor"; id: string; stageId: string; itemId?: string; checklistId: string }
 export interface RecordModalState { master: MasterKey; id: string | null }
 
 interface AppContextValue {
@@ -228,9 +228,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const savedUser = localStorage.getItem("neoteric_user");
     const users = coll(data, "users");
     const validUser = savedUser && byId(users, savedUser);
-    setCurrentUserIdState(validUser ? savedUser : (users[0]?.id ?? null));
-    const projects = coll(data, "projects");
-    setCurrentProjectIdState(projects[0]?.id ?? null);
+    const initialUserId = validUser ? savedUser : (users[0]?.id ?? null);
+    setCurrentUserIdState(initialUserId);
+    // Default project respects that user's projectIds restriction (see
+    // shared/rules.ts's myProjects()) — never defaults to a project they
+    // aren't allowed to see.
+    const initialUser = initialUserId ? byId(users, initialUserId) : null;
+    const projects = coll(data, "projects").filter((p) => p.active !== false);
+    const allowedProjects = initialUser?.projectIds?.length && initialUserId !== "U-ADMIN"
+      ? projects.filter((p) => initialUser.projectIds!.includes(p.id))
+      : projects;
+    setCurrentProjectIdState((allowedProjects[0] ?? projects[0])?.id ?? null);
 
     if (LOGIN_GATE_ENABLED) {
       const sessionActive = localStorage.getItem(SESSION_KEY) === "1";
@@ -247,6 +255,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const setCurrentUserId = useCallback((id: string) => {
     setCurrentUserIdState(id);
     try { localStorage.setItem("neoteric_user", id); } catch {}
+    // If this user's projectIds restriction excludes whatever project was
+    // showing, jump to their first allowed one instead of silently
+    // leaving them looking at a project they can't pick from any dropdown.
+    const d = dataRef.current;
+    const user = id !== "U-ADMIN" ? byId(coll(d, "users"), id) : null;
+    if (user?.projectIds?.length) {
+      setCurrentProjectIdState((cur) => {
+        if (cur && user.projectIds!.includes(cur)) return cur;
+        const allowed = coll(d, "projects").filter((p) => p.active !== false && user.projectIds!.includes(p.id));
+        return allowed[0]?.id ?? cur;
+      });
+    }
   }, []);
   const setCurrentProjectId = useCallback((id: string) => setCurrentProjectIdState(id), []);
 
@@ -266,6 +286,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       try {
         localStorage.setItem(SESSION_KEY, "1");
         if (token) localStorage.setItem(TOKEN_KEY, token);
+        // A fresh real login is never mid-impersonation — clears any stale
+        // flag from a previous admin session on a shared browser, so
+        // Header.tsx's "Back to Admin" never shows to someone who didn't
+        // actually switch there from Admin this session.
+        localStorage.removeItem("neoteric_impersonating_from");
       } catch {}
       setLoggedIn(true);
       return null;

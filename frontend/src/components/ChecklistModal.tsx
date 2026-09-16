@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
-import { byId, coll, refLabel } from "../shared/rules";
+import { byId, coll, refLabel, rccChecklistItems } from "../shared/rules";
 import { useActions } from "../hooks/useActions";
 import { uploadPhoto } from "../shared/uploadPhoto";
 import Modal from "./Modal";
@@ -10,7 +10,7 @@ interface RowState { paramId: string; result: "pass" | "fail" | "na"; remark: st
 
 export default function ChecklistModal() {
   const { checklistModal, closeChecklistModal, data, toast } = useApp();
-  const { submitChecklist } = useActions();
+  const { submitChecklist, submitStageItemChecklist } = useActions();
   const [rows, setRows] = useState<RowState[]>([]);
   const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -61,7 +61,15 @@ export default function ChecklistModal() {
       toast(`"${param?.name || "This item"}" needs a photo before you can submit`);
       return;
     }
-    await submitChecklist(checklistModal!.kind, checklistModal!.id, checklistModal!.stageId, checklistModal!.checklistId, rows);
+    if (checklistModal!.itemId) {
+      // checklistModal.stageId is the parent item-based stage (RCC/Brick/
+      // AC/Electric/Plastering) — its own checklist holds the item list.
+      const parentChk = coll(data, "checklists").find((c) => c.stageId === checklistModal!.stageId);
+      const items = rccChecklistItems(data, parentChk?.id);
+      await submitStageItemChecklist(checklistModal!.id, checklistModal!.stageId, checklistModal!.itemId, items, checklistModal!.checklistId, rows);
+    } else {
+      await submitChecklist(checklistModal!.kind, checklistModal!.id, checklistModal!.stageId, checklistModal!.checklistId, rows);
+    }
     closeChecklistModal();
   }
 

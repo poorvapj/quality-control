@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
-import { coll } from "../shared/rules";
+import { coll, myProjects } from "../shared/rules";
 import { useDrawingRequestActions } from "../hooks/useDrawingRequestActions";
 import Field from "../ui/Field";
 import SField from "../ui/SField";
@@ -18,9 +18,9 @@ export default function DrawingRequestForm({
 }: {
   isPublic: boolean; onDone: (ticketNo: string) => void; editRecord?: DrawingRequest | null;
 }) {
-  const { data, toast, apply } = useApp();
+  const { data, toast, apply, currentUserId } = useApp();
   const { createDrawingRequest } = useDrawingRequestActions();
-  const projects = coll(data, "projects").filter((p) => p.active !== false);
+  const projects = isPublic ? coll(data, "projects").filter((p) => p.active !== false) : myProjects(data, currentUserId);
 
   const [projectId, setProjectId] = useState(editRecord?.projectId || "");
   const [description, setDescription] = useState(editRecord?.description || "");

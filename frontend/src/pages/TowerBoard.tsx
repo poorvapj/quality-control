@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
-import { coll, projectFloors, floorUnits, trackStages, prog, floorReleased, floorBelow, unitSummary } from "../shared/rules";
+import { coll, projectFloors, floorUnits, trackStages, prog, floorReleased, floorBelow, unitSummary, myProjects } from "../shared/rules";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
 import Card from "../ui/tw/Card";
@@ -9,8 +9,8 @@ const ALL_FLOORS = "__all__";
 type StatusFilter = "" | "open-snag" | "qc-fail" | "locked" | "handed-over" | "not-started";
 
 export default function TowerBoard() {
-  const { data, currentProjectId, setCurrentProjectId, openDrawer } = useApp();
-  const allProjects = coll(data, "projects").filter((p) => p.active !== false);
+  const { data, currentProjectId, setCurrentProjectId, currentUserId, openDrawer } = useApp();
+  const allProjects = myProjects(data, currentUserId);
   // The filter itself starts unset ("Choose") rather than showing whatever
   // project happens to be globally selected — but the board below still
   // shows real data from the start (currentProjectId), exactly like

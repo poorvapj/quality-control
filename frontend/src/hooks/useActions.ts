@@ -129,7 +129,7 @@ export function useActions() {
     toast(failed.length + " snag(s) raised · gate failed");
   }
 
-  async function saveAssignment(input: { targetType: Track; targetId: string; stageId: string; assignedTo: string; dueAt: number | null; note: string; projectId?: string }) {
+  async function saveAssignment(input: { targetType: Track; targetId: string; stageId: string; itemId?: string; assignedTo: string; dueAt: number | null; note: string; projectId?: string }) {
     if (!input.targetId) { toast("Pick a target first"); return; }
     const rec = {
       id: nextId("ASG", coll(data, "assignments")),
@@ -137,6 +137,7 @@ export function useActions() {
       targetType: input.targetType,
       targetId: input.targetId,
       stageId: input.stageId,
+      itemId: input.itemId,
       assignedTo: input.assignedTo,
       assignedBy: currentUserId || "",
       assignedAt: Date.now(),
@@ -164,13 +165,14 @@ export function useActions() {
     toast("Assignment marked " + status.toLowerCase());
   }
 
-  async function saveSnag(input: { unitId: string; stageId: string; paramId: string; title: string; description: string; severity: "Critical" | "Major" | "Minor"; assignedTo: string; dueAt: number | null; projectId?: string }) {
+  async function saveSnag(input: { unitId: string; stageId: string; itemId?: string; paramId: string; title: string; description: string; severity: "Critical" | "Major" | "Minor"; assignedTo: string; dueAt: number | null; projectId?: string }) {
     if (!input.title.trim()) { toast("Give the snag a title"); return; }
     const rec = {
       id: nextId("SNG", coll(data, "snags")),
       projectId: input.projectId || currentProjectId || "",
       unitId: input.unitId,
       stageId: input.stageId,
+      itemId: input.itemId,
       paramId: input.paramId,
       title: input.title.trim(),
       description: input.description.trim(),
@@ -248,9 +250,155 @@ export function useActions() {
     toast("Photo attached");
   }
 
+  /* ---------------------------------------------------------- item-based
+   * stages (RCC, Brick, AC, Electric, Plastering — any Stage.itemBased)
+   * live inside ONE progress record's `checklist[]`, each cell keyed by
+   * `itemId` and carrying the same status/rel/ack/start/at/by/meas/
+   * measBy lifecycle a whole stage used to. These mirror ackStage/
+   * startStage/completeStage/failStage/capturePhoto above, just writing
+   * into one cell of that array instead of a separate progress record. */
+
+  function stageCells(unitId: string, stageId: string) {
+    return (prog(data, unitId, stageId).checklist || []).slice();
+  }
+  function upsertCell(cells: any[], itemId: string, patch: Record<string, unknown>) {
+    const idx = cells.findIndex((c) => c.itemId === itemId);
+    if (idx === -1) cells.push({ itemId, ...patch });
+    else cells[idx] = { ...cells[idx], ...patch };
+    return cells;
+  }
+  function itemStageStatus(cells: any[], items: { id: string; name?: string }[]): "wip" | "done" {
+    return items.every((it) => cells.find((c) => c.itemId === it.id)?.status === "done") ? "done" : "wip";
+  }
+  async function writeStageCells(unitId: string, stageId: string, cells: any[], items: { id: string; name?: string }[]) {
+    await apply([{ op: "progress", key: pkey(unitId, stageId), patch: { status: itemStageStatus(cells, items), checklist: cells } }]);
+  }
+
+  async function ackStageItem(unitId: string, stageId: string, itemId: string) {
+    const cells = upsertCell(stageCells(unitId, stageId), itemId, { status: "ack", ack: Date.now(), by: currentUserId || "" });
+    await apply([{ op: "progress", key: pkey(unitId, stageId), patch: { checklist: cells } }, logEvent("ACK", unitId, stageId, "Acknowledged release")]);
+    reopenDrawer();
+    toast("Release acknowledged");
+  }
+
+  async function startStageItem(unitId: string, stageId: string, itemId: string) {
+    const existing = stageCells(unitId, stageId).find((c) => c.itemId === itemId);
+    const cells = upsertCell(stageCells(unitId, stageId), itemId, { status: "wip", ack: existing?.ack || Date.now(), start: Date.now(), by: currentUserId || "" });
+    await apply([{ op: "progress", key: pkey(unitId, stageId), patch: { checklist: cells } }, logEvent("START", unitId, stageId, "Work started")]);
+    reopenDrawer();
+    toast("Work started");
+  }
+
+  function releaseNextStageItem(cells: any[], items: { id: string; name?: string }[], idx: number): any[] {
+    if (idx + 1 >= items.length) return cells;
+    const nextId_ = items[idx + 1].id;
+    if (cells.find((c) => c.itemId === nextId_)?.status) return cells;
+    return upsertCell(cells, nextId_, { status: "released", rel: Date.now() });
+  }
+
+  async function completeStageItem(unitId: string, stageId: string, itemId: string, items: { id: string; name?: string }[]) {
+    const idx = items.findIndex((it) => it.id === itemId);
+    let cells = upsertCell(stageCells(unitId, stageId), itemId, { status: "done", at: Date.now(), by: currentUserId || "", note: null });
+    cells = releaseNextStageItem(cells, items, idx);
+    const ops: Op[] = [
+      { op: "progress", key: pkey(unitId, stageId), patch: { status: itemStageStatus(cells, items), checklist: cells } },
+      logEvent("COMPLETE", unitId, stageId, (items[idx]?.name || itemId) + " completed"),
+    ];
+    if (itemStageStatus(cells, items) === "done") ops.push(...releaseNextOps("unit", unitId, stageId));
+    await apply(ops);
+    reopenDrawer();
+    toast("Completed · next item released");
+  }
+
+  async function failStageItem(unitId: string, stageId: string, itemId: string, items: { id: string; name?: string }[]) {
+    const reason = prompt("QC failure reason (mandatory):");
+    if (!reason) return;
+    const cells = upsertCell(stageCells(unitId, stageId), itemId, { status: "fail", at: Date.now(), by: currentUserId || "", note: reason });
+    await writeStageCells(unitId, stageId, cells, items);
+    await apply([logEvent("QC_FAIL", unitId, stageId, reason)]);
+    reopenDrawer();
+    toast("Gate failed — raise a snag to track the rework");
+    openSnagModal({ unitId, stageId, itemId, preset: reason });
+  }
+
+  async function submitStageItemChecklist(unitId: string, stageId: string, itemId: string, items: { id: string; name?: string }[], checklistId: string, results: { paramId: string; result: string; remark: string }[]) {
+    const failed = results.filter((r) => r.result === "fail");
+    const now = Date.now();
+    const idx = items.findIndex((it) => it.id === itemId);
+    const item = items[idx];
+
+    if (!failed.length) {
+      let cells = upsertCell(stageCells(unitId, stageId), itemId, { status: "done", at: now, by: currentUserId || "", note: null });
+      cells = releaseNextStageItem(cells, items, idx);
+      const ops: Op[] = [
+        { op: "progress", key: pkey(unitId, stageId), patch: { status: itemStageStatus(cells, items), checklist: cells, checklistId } },
+        logEvent("QC_PASS", unitId, stageId, (item?.name || itemId) + " checklist passed (" + results.length + " lines)"),
+      ];
+      if (itemStageStatus(cells, items) === "done") ops.push(...releaseNextOps("unit", unitId, stageId));
+      await apply(ops);
+      reopenDrawer();
+      toast("Gate passed · next item released");
+      return;
+    }
+
+    const cells = upsertCell(stageCells(unitId, stageId), itemId, { status: "fail", at: now, by: currentUserId || "", note: failed.length + " parameter(s) failed" });
+    const ops: Op[] = [
+      { op: "progress", key: pkey(unitId, stageId), patch: { checklist: cells, checklistId } },
+      logEvent("QC_FAIL", unitId, stageId, failed.length + " parameter(s) failed"),
+    ];
+    let n = 0;
+    for (const f of failed) {
+      const p = byId(coll(data, "qparams"), f.paramId);
+      if (!p) continue;
+      ops.push({
+        op: "upsert", coll: "snags",
+        rec: {
+          id: nextId("SNG", coll(data, "snags")).replace(/(\d+)$/, (m) => String(parseInt(m, 10) + n++).padStart(4, "0")),
+          projectId: currentProjectId || "",
+          unitId, stageId, itemId, paramId: f.paramId,
+          title: p.name + " failed at " + (item?.name || ""),
+          description: f.remark || (p.name + " outside acceptance criteria (" + (p.acceptance || "as per spec") + ")."),
+          severity: p.severity || "Major",
+          status: "Open",
+          raisedBy: currentUserId || "", raisedAt: now,
+          assignedTo: currentUserId || "",
+          dueAt: now + (p.severity === "Critical" ? 24 : 72) * HOUR,
+          photos: [], comments: []
+        }
+      });
+    }
+    await apply(ops);
+    reopenDrawer();
+    toast(failed.length + " snag(s) raised · gate failed");
+  }
+
+  async function captureStageItemPhoto(unitId: string, stageId: string, itemId: string, file: File) {
+    toast("Processing photo…");
+    const label = refLabel(data, "units", unitId);
+    const dataUrl = await watermarkPhoto(file, label, data ? byId(coll(data, "users"), currentUserId)?.name : undefined);
+    let photo: { url: string; publicId: string | null } = { url: dataUrl, publicId: null };
+    try {
+      const r = await fetch(API_BASE + "/api/photo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dataUrl, type: "progress" })
+      });
+      const j = await r.json();
+      if (j.url) photo = { url: j.url, publicId: j.publicId || null };
+    } catch {}
+    const cells = upsertCell(stageCells(unitId, stageId), itemId, { meas: Date.now(), measBy: currentUserId || "", photo });
+    await apply([
+      { op: "progress", key: pkey(unitId, stageId), patch: { checklist: cells } },
+      logEvent("MEASURE", unitId, stageId, "Hidden work measured and photographed")
+    ]);
+    reopenDrawer();
+    toast("Photo attached");
+  }
+
   return {
     ackStage, startStage, completeStage, failStage, submitChecklist,
     saveAssignment, setAssignStatus, saveSnag, setSnagStatus, saveSnagAssignee, capturePhoto,
+    ackStageItem, startStageItem, completeStageItem, failStageItem, submitStageItemChecklist, captureStageItemPhoto,
     releaseNextOps, logEvent
   };
 }

@@ -56,21 +56,46 @@ function makeRng(seed) {
 
 /* --------------------------------------------------------------- masters */
 
+/* The 13 unit-track trade/gate stages that make up RCC live as
+ * ChecklistItems inside CHK-RCC (see seedChecklists) under one parent
+ * STG-RCC stage — see RCC_ITEMS below. Keeping this list here (rather
+ * than duplicating it in seedChecklists) means seedStages/seedChecklists/
+ * the demo generator all read from one source of truth for names/
+ * category/isGate/isHidden. */
+const RCC_ITEMS = [
+  ["mas", "Brick Masonry",              "Civil",     false, false, ""],
+  ["ac",  "AC Conduit",                 "MEP",       false, true,  ""],
+  ["plb", "Plumbing + Pressure Test",   "MEP",       false, true,  ""],
+  ["ele", "Electrical Wiring",          "MEP",       false, true,  ""],
+  ["g1",  "QC GATE 1 · Pre-Plaster",    "Gate",      true,  false, "CHK-G1"],
+  ["pls", "Plaster",                    "Wet Trade", false, false, ""],
+  ["g2",  "QC GATE 2 · Plaster Check",  "Gate",      true,  false, "CHK-G2"],
+  ["put", "Putty",                      "Finishes",  false, false, ""],
+  ["wpf", "Waterproofing + Pond Test",  "Wet Trade", false, true,  ""],
+  ["g3",  "QC GATE 3 · Pre-Tiling",     "Gate",      true,  false, "CHK-G3"],
+  ["til", "Tiling",                     "Finishes",  false, false, ""],
+  ["win", "Windows Installation",       "Finishes",  false, false, ""],
+  ["g4",  "QC GATE 4 · Final Handover", "Gate",      true,  false, "CHK-G4"]
+];
+
+/* Four more stages, siblings of RCC (not nested inside it), each driven by
+ * its own small sequenced checklist the same way RCC is — one progress
+ * record per unit with a `checklist[]` of 3 items, ack/start/complete/fail
+ * per item. Sits right after RCC and before Internal Handover. */
+const SUB_STAGES = [
+  { code: "brick", name: "Brick", items: [["Brickwork Layout", false], ["Brickwork", false], ["Curing", false]] },
+  { code: "ac2", name: "AC", items: [["AC J-Hooks", true], ["Copper pipe installation", true], ["UPVC Drainpipe installation", true]] },
+  { code: "electric", name: "Electric", items: [["Electrical J-Hooks", true], ["Conducting wall", true], ["Repairing", true]] },
+  { code: "plastering", name: "Plastering", items: [["Chicken/Fiber Mesh", false], ["Plaster", false], ["Curing", false]] }
+];
+
 function seedStages() {
   const unit = [
-    ["mas", "Brick Masonry",              "CIVIL",  "Civil",     false, false, "DWG-ARCH-01"],
-    ["ac",  "AC Conduit",                 "CIVIL",  "MEP",       false, true,  "DWG-MEP-02"],
-    ["plb", "Plumbing + Pressure Test",   "CIVIL",  "MEP",       false, true,  ""],
-    ["ele", "Electrical Wiring",          "CIVIL",  "MEP",       false, true,  ""],
-    ["g1",  "QC GATE 1 · Pre-Plaster",    "CIVIL",  "Gate",      true,  false, ""],
-    ["pls", "Plaster",                    "CIVIL",  "Wet Trade", false, false, ""],
-    ["g2",  "QC GATE 2 · Plaster Check",  "CIVIL",  "Gate",      true,  false, ""],
-    ["put", "Putty",                      "CIVIL",  "Finishes",  false, false, ""],
-    ["wpf", "Waterproofing + Pond Test",  "CIVIL",  "Wet Trade", false, true,  ""],
-    ["g3",  "QC GATE 3 · Pre-Tiling",     "CIVIL",  "Gate",      true,  false, ""],
-    ["til", "Tiling",                     "CIVIL",  "Finishes",  false, false, "DWG-ARCH-01"],
-    ["win", "Windows Installation",       "CIVIL",  "Finishes",  false, false, ""],
-    ["g4",  "QC GATE 4 · Final Handover", "CIVIL",  "Gate",      true,  false, ""],
+    ["rcc", "RCC & MEP",                  "CIVIL", "RCC",       false, false, "", true],
+    ["brick", "Brick",                    "CIVIL", "Civil",     false, false, "", true],
+    ["ac2",   "AC",                       "CIVIL", "MEP",       false, false, "", true],
+    ["electric", "Electric",              "CIVIL", "MEP",       false, false, "", true],
+    ["plastering", "Plastering",          "CIVIL", "Wet Trade", false, false, "", true],
     // Two separate handover sign-offs, run one after the other: the
     // technical Civil-staff walkthrough first (isGate — can't be skipped),
     // then the customer-facing sign-off. The owner checklist's answers
@@ -99,14 +124,16 @@ function seedStages() {
       : cat === "Wet Trade" ? "#eab308"
       : cat === "Finishes" ? "#a855f7"
       : cat === "Handover" ? "#0ea5e9"
+      : cat === "RCC" ? "#3b82f6"
       : "#64748b";
 
   const mk = (rows, track) =>
-    rows.map(([code, name, role, category, isGate, isHidden, dwg], i) => ({
+    rows.map(([code, name, role, category, isGate, isHidden, dwg, itemBased], i) => ({
       id: "STG-" + code.toUpperCase(),
       code, name, track, role, category,
       seq: (i + 1) * 10,
       isGate, isHidden, dwg,
+      itemBased: itemBased || undefined,
       color: colorFor(category),
       active: true
     }));
@@ -196,10 +223,13 @@ function seedQParams() {
 /* Quality Checklist — parameters grouped per stage, with evidence rules. */
 function seedChecklists() {
   const defs = [
-    ["CHK-G1",  "Pre-Plaster Gate Checklist",   "STG-G1",  ["QP-01","QP-02","QP-03","QP-04","QP-05","QP-06","QP-07","QP-08"]],
-    ["CHK-G2",  "Plaster Check Checklist",      "STG-G2",  ["QP-11","QP-12","QP-01","QP-02"]],
-    ["CHK-G3",  "Pre-Tiling Gate Checklist",    "STG-G3",  ["QP-09","QP-10","QP-02"]],
-    ["CHK-G4",  "Final Handover Checklist",     "STG-G4",  ["QP-13","QP-14","QP-15","QP-16","QP-17"]],
+    // stageId "" — these run only when opened from an RCC gate item
+    // (CHK-RCC's item.checklistId points at one of these), not mapped
+    // directly against any stage of their own any more.
+    ["CHK-G1",  "Pre-Plaster Gate Checklist",   "",  ["QP-01","QP-02","QP-03","QP-04","QP-05","QP-06","QP-07","QP-08"]],
+    ["CHK-G2",  "Plaster Check Checklist",      "",  ["QP-11","QP-12","QP-01","QP-02"]],
+    ["CHK-G3",  "Pre-Tiling Gate Checklist",    "",  ["QP-09","QP-10","QP-02"]],
+    ["CHK-G4",  "Final Handover Checklist",     "",  ["QP-13","QP-14","QP-15","QP-16","QP-17"]],
     ["CHK-CPA", "Column Pour Permit Checklist", "STG-CPA", ["QP-18","QP-19","QP-20"]],
     ["CHK-SPA", "Slab Pour Permit Checklist",   "STG-SPA", ["QP-18","QP-19","QP-20","QP-05"]],
     ["CHK-HOI", "Internal Handover Checklist",  "STG-HOI",
@@ -210,7 +240,7 @@ function seedChecklists() {
       ["QP-O01","QP-O02","QP-O03","QP-O04","QP-O05","QP-O06","QP-O07","QP-O08",
        "QP-O09","QP-O10","QP-O11","QP-O12","QP-O13","QP-O14"]]
   ];
-  return defs.map(([id, name, stageId, params]) => ({
+  const out = defs.map(([id, name, stageId, params]) => ({
     id, code: id, name, stageId, active: true,
     items: params.map((pid, i) => ({
       id: id + "-I" + String(i + 1).padStart(2, "0"),
@@ -220,6 +250,39 @@ function seedChecklists() {
       evidence: i < 3
     }))
   }));
+
+  // CHK-RCC — RCC's 13 trade/gate stages, items in one checklist against
+  // STG-RCC. Each item carries what used to be Stage fields (name/
+  // category/isGate/isHidden); gate items also carry a nested checklistId
+  // (CHK-G1..G4 above) for their "Run checklist" step.
+  out.push({
+    id: "CHK-RCC", code: "CHK-RCC", name: "RCC & MEP Checklist", stageId: "STG-RCC", active: true,
+    items: RCC_ITEMS.map(([code, name, category, isGate, isHidden, nestedChecklistId], i) => ({
+      id: "ITEM-RCC-" + code.toUpperCase(),
+      name, category, isGate, isHidden,
+      checklistId: nestedChecklistId || undefined,
+      seq: (i + 1) * 10,
+      mandatory: true
+    }))
+  });
+
+  // Brick / AC / Electric / Plastering — four more small sequenced
+  // checklists, each against its own sibling stage (STG-BRICK/STG-AC2/
+  // STG-ELECTRIC/STG-PLASTERING), same item shape as CHK-RCC's.
+  for (const sub of SUB_STAGES) {
+    out.push({
+      id: "CHK-" + sub.code.toUpperCase(), code: "CHK-" + sub.code.toUpperCase(),
+      name: sub.name + " Checklist", stageId: "STG-" + sub.code.toUpperCase(), active: true,
+      items: sub.items.map(([name, isHidden], i) => ({
+        id: "ITEM-" + sub.code.toUpperCase() + "-" + String(i + 1).padStart(2, "0"),
+        name, isGate: false, isHidden,
+        seq: (i + 1) * 10,
+        mandatory: true
+      }))
+    });
+  }
+
+  return out;
 }
 
 function seedStageMap(projectId, stages, checklists) {
@@ -392,18 +455,29 @@ function seedData() {
   ev(now - 30 * HR, someone("CIVIL", 3), "START", fId(9), floorStages[5].id, "MEP sleeves started on floor 9 slab");
 
   /* -------------------------------------------------------- unit track
-   * 72 unlocked units (floors 1–8) spread across all 13 stages, in every
-   * state the board can render. `reached` = stages fully complete.
+   * 72 unlocked units (floors 1–8) spread across the 13 RCC & MEP
+   * checklist items (one STG-RCC progress record per unit, item cells
+   * inside its `checklist[]`), then a smaller spread into Internal/Owner
+   * Handover for units that finished RCC — in every state the board can
+   * render. `reached` = items fully complete.
    */
+  const rccItems = d.checklists.find((c) => c.id === "CHK-RCC").items;
+  const RCC_COUNT = rccItems.length; // 21
   const variants = ["released", "slow", "ack", "wip", "fail", "hidden"];
   let unitIdx = 0;
+  // "hidden" variant parks a unit right at a gate whose immediately-prior
+  // hidden-work item was never measured — derived from CHK-RCC's actual
+  // item order instead of hardcoded indices, so it survives item-list
+  // reshuffles (e.g. Brick/AC/Electric/Plastering's sub-item expansion).
+  const gateIdxs = rccItems.map((it, i) => (it.isGate ? i : -1)).filter((i) => i >= 0);
+  const [firstGateIdx, thirdGateIdx] = [gateIdxs[0], gateIdxs[2]];
 
   for (let f = 1; f <= 8; f++) {
     for (let u = 1; u <= UNITS; u++) {
       const id = uId(f, u);
-      // Spread 0..13 evenly so every stage is somebody's current stage. The
+      // Spread 0..N evenly so every item is somebody's current item. The
       // variant cycles on a different modulus so depth and state stay independent.
-      let reached = unitIdx % (unitStages.length + 1);
+      let reached = unitIdx % (RCC_COUNT + 1);
       const variant = variants[unitIdx % variants.length];
       unitIdx++;
 
@@ -411,56 +485,76 @@ function seedData() {
       // measured — that is the only position where the hidden-work lock shows.
       let skipMeasIdx = -1;
       if (variant === "hidden") {
-        reached = unitIdx % 2 ? 9 : 4;                 // current stage = QC GATE 3 or GATE 1
-        skipMeasIdx = reached === 4 ? 3 : 8;           // Electrical Wiring / Waterproofing
+        reached = unitIdx % 2 ? thirdGateIdx : firstGateIdx;
+        skipMeasIdx = reached - 1;
       }
 
+      const cells = [];
       for (let i = 0; i < reached; i++) {
-        const s = unitStages[i];
+        const it = rccItems[i];
         const base = now - (reached - i) * 2 * DAY - Math.floor(rng() * 6) * HR;
-        mark(id + "::" + s.id, {
-          status: "done",
+        cells.push({
+          itemId: it.id, status: "done",
           rel: base - 8 * HR, ack: base - 6 * HR, start: base - 5 * HR, at: base,
-          by: someone(s.role, f * 11 + u + i),
-          meas: s.isHidden && i !== skipMeasIdx ? base - 3 * HR : undefined,
-          measBy: s.isHidden && i !== skipMeasIdx ? someone("CIVIL", f + u) : undefined
+          by: someone("CIVIL", f * 11 + u + i),
+          meas: it.isHidden && i !== skipMeasIdx ? base - 3 * HR : undefined,
+          measBy: it.isHidden && i !== skipMeasIdx ? someone("CIVIL", f + u) : undefined
         });
       }
 
-      if (reached >= unitStages.length) {
-        ev(now - Math.floor(rng() * 20) * DAY, qcUser(unitIdx), "QC_PASS", id, "STG-G4",
-           "Final handover checklist passed — flat released");
-        continue; // handed over
+      if (reached >= RCC_COUNT) {
+        mark(id + "::STG-RCC", { status: "done", checklist: cells });
+        ev(now - Math.floor(rng() * 20) * DAY, qcUser(unitIdx), "QC_PASS", id, "STG-RCC",
+           "RCC & MEP checklist complete — flat released to Handover");
+
+        // A subset of RCC-complete units also progress into Internal/Owner
+        // Handover, so those stages have live records to show too.
+        const handoverVariant = unitIdx % 3; // 0 not started, 1 internal done, 2 fully handed over
+        if (handoverVariant >= 1) {
+          const base = now - Math.floor(5 + rng() * 15) * DAY;
+          mark(id + "::STG-HOI", {
+            status: "done", rel: base - 8 * HR, ack: base - 6 * HR, start: base - 5 * HR, at: base,
+            by: someone("CIVIL", unitIdx)
+          });
+          if (handoverVariant === 2) {
+            const base2 = now - Math.floor(1 + rng() * 10) * DAY;
+            mark(id + "::STG-HOO", {
+              status: "done", rel: base2 - 8 * HR, ack: base2 - 6 * HR, start: base2 - 5 * HR, at: base2,
+              by: someone("ADMIN", unitIdx)
+            });
+          }
+        }
+        continue; // RCC handed over
       }
 
-      // The current stage carries the variant.
-      const s = unitStages[reached];
-      const key = id + "::" + s.id;
+      // The current item carries the variant.
+      const it = rccItems[reached];
+      const cell = { itemId: it.id };
 
       if (variant === "released" || variant === "hidden") {
-        mark(key, { status: "released", rel: now - Math.floor(2 + rng() * 10) * HR });
+        cell.status = "released"; cell.rel = now - Math.floor(2 + rng() * 10) * HR;
       } else if (variant === "slow") {
         // Deliberately past SLA and never acknowledged.
-        mark(key, { status: "released", rel: now - Math.floor(30 + rng() * 60) * HR });
+        cell.status = "released"; cell.rel = now - Math.floor(30 + rng() * 60) * HR;
       } else if (variant === "ack") {
         const rel = now - Math.floor(10 + rng() * 20) * HR;
-        mark(key, { status: "ack", rel, ack: rel + 3 * HR, by: someone(s.role, unitIdx) });
+        cell.status = "ack"; cell.rel = rel; cell.ack = rel + 3 * HR; cell.by = someone("CIVIL", unitIdx);
       } else if (variant === "wip") {
         const rel = now - Math.floor(20 + rng() * 30) * HR;
-        mark(key, { status: "wip", rel, ack: rel + 2 * HR, start: rel + 4 * HR, by: someone(s.role, unitIdx) });
+        cell.status = "wip"; cell.rel = rel; cell.ack = rel + 2 * HR; cell.start = rel + 4 * HR; cell.by = someone("CIVIL", unitIdx);
       } else if (variant === "fail") {
         const rel = now - Math.floor(12 + rng() * 40) * HR;
-        if (s.isGate) {
-          mark(key, {
-            status: "fail", rel, ack: rel + HR, start: rel + 2 * HR, at: rel + 4 * HR,
-            by: qcUser(unitIdx), note: "Checklist failed — see linked snags for rectification."
-          });
-          ev(rel + 4 * HR, qcUser(unitIdx), "QC_FAIL", id, s.id, "Gate failed at " + s.name);
+        if (it.isGate) {
+          cell.status = "fail"; cell.rel = rel; cell.ack = rel + HR; cell.start = rel + 2 * HR; cell.at = rel + 4 * HR;
+          cell.by = qcUser(unitIdx); cell.note = "Checklist failed — see linked snags for rectification.";
+          ev(rel + 4 * HR, qcUser(unitIdx), "QC_FAIL", id, "STG-RCC", "Gate failed at " + it.name);
         } else {
-          // Non-gate stages cannot fail a gate, so show them mid-work instead.
-          mark(key, { status: "wip", rel, ack: rel + 2 * HR, start: rel + 3 * HR, by: someone(s.role, unitIdx) });
+          // Non-gate items cannot fail a gate, so show them mid-work instead.
+          cell.status = "wip"; cell.rel = rel; cell.ack = rel + 2 * HR; cell.start = rel + 3 * HR; cell.by = someone("CIVIL", unitIdx);
         }
       }
+      cells.push(cell);
+      mark(id + "::STG-RCC", { status: reached > 0 ? "wip" : "released", checklist: cells });
     }
   }
 
@@ -471,12 +565,15 @@ function seedData() {
   // Demo snags are only generated against the original 20 QC-gate
   // parameters — the handover-checklist params (QP-H*/QP-O*) added later
   // have no SNAG_TEXT entries and aren't part of any QC gate's snag flow.
+  // Unit-track gate params now point at STG-RCC + one of CHK-RCC's 4 gate
+  // items (formerly separate STG-G1..G4 stages); floor-track params still
+  // point at the unchanged STG-SPA/STG-CPA structure-track stages.
   const gateForParam = {
-    "QP-01": "STG-G1", "QP-02": "STG-G1", "QP-03": "STG-G1", "QP-04": "STG-G1",
-    "QP-05": "STG-G1", "QP-06": "STG-G1", "QP-07": "STG-G1", "QP-08": "STG-G1",
-    "QP-11": "STG-G2", "QP-12": "STG-G2",
-    "QP-09": "STG-G3", "QP-10": "STG-G3",
-    "QP-13": "STG-G4", "QP-14": "STG-G4", "QP-15": "STG-G4", "QP-16": "STG-G4", "QP-17": "STG-G4",
+    "QP-01": "ITEM-RCC-G1", "QP-02": "ITEM-RCC-G1", "QP-03": "ITEM-RCC-G1", "QP-04": "ITEM-RCC-G1",
+    "QP-05": "ITEM-RCC-G1", "QP-06": "ITEM-RCC-G1", "QP-07": "ITEM-RCC-G1", "QP-08": "ITEM-RCC-G1",
+    "QP-11": "ITEM-RCC-G2", "QP-12": "ITEM-RCC-G2",
+    "QP-09": "ITEM-RCC-G3", "QP-10": "ITEM-RCC-G3",
+    "QP-13": "ITEM-RCC-G4", "QP-14": "ITEM-RCC-G4", "QP-15": "ITEM-RCC-G4", "QP-16": "ITEM-RCC-G4", "QP-17": "ITEM-RCC-G4",
     "QP-18": "STG-SPA", "QP-19": "STG-SPA", "QP-20": "STG-CPA"
   };
   const ownerRoleForParam = {
@@ -489,8 +586,10 @@ function seedData() {
     const p = d.qparams.find((q) => q.id === gateParamIds[i % gateParamIds.length]);
     const f = 1 + (i * 3) % 8;
     const u = 1 + (i * 5) % UNITS;
-    const stageId = gateForParam[p.id] || "STG-G1";
-    const isStructural = stageId === "STG-SPA" || stageId === "STG-CPA";
+    const target = gateForParam[p.id] || "ITEM-RCC-G1";
+    const isStructural = target === "STG-SPA" || target === "STG-CPA";
+    const stageId = isStructural ? target : "STG-RCC";
+    const itemId = isStructural ? undefined : target;
     const [title, description] = SNAG_TEXT[p.id];
 
     // Age spread: some fresh, some ageing, some long closed.
@@ -507,6 +606,7 @@ function seedData() {
       unitId: isStructural ? "" : uId(f, u),
       floorId: isStructural ? fId(f) : "",
       stageId,
+      itemId,
       paramId: p.id,
       title: title + (isStructural ? " · " + (f === 1 ? "Ground Floor" : "Floor " + f) : " · Flat " + f + String(u).padStart(2, "0")),
       description,
@@ -558,12 +658,16 @@ function seedData() {
     // Mix of comfortably-due, tight and overdue.
     const dueOffset = [-30, -6, 8, 20, 48, 72][i % 6];
 
+    const stageChk = stage.itemBased ? d.checklists.find((c) => c.stageId === stage.id) : null;
+    const itemId = stageChk ? stageChk.items[i % stageChk.items.length].id : undefined;
+
     d.assignments.push({
       id: "ASG-" + String(i + 1).padStart(4, "0"),
       projectId,
       targetType: useFloor ? "floor" : "unit",
       targetId: useFloor ? fId(f) : uId(f, u),
       stageId: stage.id,
+      itemId,
       assignedTo: worker.id,
       assignedBy: i % 5 === 0 ? "USR-17" : "USR-01",
       assignedAt,

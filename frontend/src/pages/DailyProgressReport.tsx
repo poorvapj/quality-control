@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
-import { coll, refLabel } from "../shared/rules";
+import { coll, refLabel, myProjects } from "../shared/rules";
 import { downloadCsv } from "../shared/csv";
 import { type DateRange, DATE_RANGES, isoWeekBounds, dateRangeBounds } from "../shared/dateRange";
 import NavIcon from "../components/NavIcon";
@@ -59,7 +59,7 @@ export default function DailyProgressReportPage() {
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [calendarOpen]);
 
-  const projects = coll(data, "projects").filter((p) => p.active !== false);
+  const projects = myProjects(data, currentUserId);
   const users = coll(data, "users").filter((u) => u.active !== false);
   const allDpr = coll(data, "dpr");
 

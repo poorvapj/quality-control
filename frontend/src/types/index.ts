@@ -63,6 +63,12 @@ export interface Stage extends BaseRecord {
   dwg?: string;
   color?: string;
   active?: boolean;
+  /** This stage's progress is driven by a sequenced checklist of items
+   *  (ack/start/complete/fail per item, inside ONE progress record's
+   *  `checklist[]`) rather than a single stage-level status — e.g. RCC,
+   *  Brick, AC, Electric, Plastering. See rules.ts's blockReason()/
+   *  unitSummary() and useActions.ts's ackStageItem() family. */
+  itemBased?: boolean;
 }
 
 export interface QParam extends BaseRecord {
@@ -80,6 +86,16 @@ export interface ChecklistItem {
   paramId: string;
   mandatory?: boolean;
   evidence?: boolean;
+  /** RCC sub-item metadata (CHK-RCC only) — carries over what used to be
+   *  separate Stage fields when the 13 unit-track stages were merged
+   *  into one STG-RCC stage with a 13-item checklist. */
+  isGate?: boolean;
+  isHidden?: boolean;
+  seq?: number;
+  /** Nests this item under one more heading level within its parent group
+   *  (e.g. "Brick"/"AC"/"Electric"/"Plastering" under RCC) — items without
+   *  one render directly under the parent group, same as before. */
+  subgroup?: string;
 }
 
 export interface Checklist extends BaseRecord {
@@ -115,6 +131,11 @@ export interface User extends BaseRecord {
   /** Which team (see Team below) this person belongs to — one team per
    *  person, same pattern as `role`. Optional. */
   teamId?: string;
+  /** Restricts which projects this person can see/pick anywhere in the
+   *  app (project pickers, Tower Board, Dashboard, Raise Snag/Assign
+   *  Work's Project field, etc.) — undefined/empty means unrestricted
+   *  (sees every active project), same as before this field existed. */
+  projectIds?: string[];
   active?: boolean;
 }
 
@@ -138,6 +159,9 @@ export interface Snag extends BaseRecord {
   unitId?: string;
   floorId?: string;
   stageId: string;
+  /** Which CHK-RCC checklist item this snag targets, when
+   *  stageId === "STG-RCC" — omitted for Internal/Owner Handover. */
+  itemId?: string;
   paramId?: string;
   title: string;
   description?: string;
@@ -170,6 +194,9 @@ export interface Assignment extends BaseRecord {
   targetType: Track;
   targetId: string;
   stageId: string;
+  /** Which CHK-RCC checklist item this assignment targets, when
+   *  stageId === "STG-RCC" — omitted for Internal/Owner Handover. */
+  itemId?: string;
   assignedTo: string;
   assignedBy: string;
   assignedAt: number;
@@ -207,11 +234,24 @@ export interface ProgressPatch {
     cells?: { room: string; result: "pass" | "fail" | "na" }[];
     /** Evidence photo for this item, if the checklist required one. */
     photo?: Photo;
+    /** RCC sub-item lifecycle (STG-RCC only) — each item progresses
+     *  through the same released->ack->wip->done/fail states a whole
+     *  stage used to, tracked per-item instead of per-stage-record now
+     *  that the 13 unit-track stages live as one STG-RCC checklist. */
+    itemId?: string;
+    status?: ProgressStatus;
+    rel?: number; ack?: number; start?: number; at?: number; by?: string;
+    meas?: number; measBy?: string;
+    note?: string | null;
   }[];
   /** Free-text note attached to a possession-checklist submission
    *  (HandoverChecklist.tsx) — separate from `note`, which holds the
    *  auto-generated "N parameter(s) failed" summary. */
   remarks?: string;
+  /** A photo of the owner, captured at the end of the Owner Possession
+   *  (STG-HOO) form as proof-of-handover — separate from any per-item
+   *  evidence photos, and only ever set on that one stage. */
+  ownerPhoto?: Photo;
   /** Every status transition this stage instance has ever gone through, oldest
    *  first — never trimmed on rework. `rel`/`ack`/`start`/`at` above only ever
    *  hold the LATEST cycle's timestamps (each write shallow-merges over the

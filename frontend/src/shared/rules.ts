@@ -5,7 +5,7 @@
    =========================================================================== */
 
 import type {
-  BoardData, CollectionName, Track, Stage, StageMap, Unit, Floor, Role, User, Snag, Assignment, ProgressHistoryEntry
+  BoardData, CollectionName, Track, Stage, StageMap, Unit, Floor, Role, User, Snag, Assignment, ProgressHistoryEntry, Project
 } from "../types";
 import { HOUR } from "../services/config";
 
@@ -74,6 +74,21 @@ export function trackStages(data: BoardData | null, projectId: string | null, tr
     .sort((a, b) => (a.map.seq || 0) - (b.map.seq || 0));
   byKey.set(key, result);
   return result;
+}
+
+/** Every active project this user is allowed to see — unrestricted (all
+ *  active projects) unless their User record's `projectIds` is set, in
+ *  which case only those. The one choke-point every project picker
+ *  (Dashboard, Tower Board, Handover Checklist, Raise Snag, Assign Work)
+ *  should build its options from, instead of `coll(data,"projects")`
+ *  directly. Admin is never restricted, even if `projectIds` was set. */
+export function myProjects(data: BoardData | null, userId: string | null): Project[] {
+  const all = coll(data, "projects").filter((p) => p.active !== false);
+  if (userId === "U-ADMIN") return all;
+  const user = byId(coll(data, "users"), userId);
+  if (!user?.projectIds?.length) return all;
+  const allowed = new Set(user.projectIds);
+  return all.filter((p) => allowed.has(p.id));
 }
 
 export function projectFloors(data: BoardData | null, projectId: string | null): Floor[] {
@@ -168,6 +183,60 @@ export function canAct(myRole: Role, stage: Stage): boolean {
   return myRole === "ADMIN" || myRole === "DRI" || myRole === stage.role;
 }
 
+/** CHK-RCC's items aren't their own collection — this looks up an item's
+ *  display name from the RCC checklist for Assign/Snag rows, the same way
+ *  refLabel() does for a real collection record. */
+export function rccItemLabel(data: BoardData | null, itemId?: string | null): string {
+  if (!itemId) return "—";
+  const checklists = coll(data, "checklists");
+  for (const c of checklists) {
+    const item = (c.items || []).find((it) => it.id === itemId);
+    if (item) return (item as any).name || itemId;
+  }
+  return itemId;
+}
+
+/** Item-level equivalent of blockReason(), scoped to one stage instance's
+ *  checklist (RCC's 13 sequenced sub-items). Item `idx` is blocked if the
+ *  previous item isn't done yet, if it's a gate item and a hidden-work
+ *  item since the previous gate hasn't been measured, or if there's an
+ *  open snag against an item up to and including this gate. */
+export function rccItemBlockReason(
+  data: BoardData | null,
+  unitId: string,
+  stageId: string,
+  items: { id: string; name?: string; isGate?: boolean; isHidden?: boolean }[],
+  idx: number
+): string | null {
+  const cur = items[idx];
+  if (!cur) return "Item not found";
+  const patch = prog(data, unitId, stageId);
+  const cells = patch.checklist || [];
+  const cellFor = (itemId: string) => cells.find((c: any) => c.itemId === itemId) as any;
+
+  if (idx > 0) {
+    const prev = items[idx - 1];
+    const prevCell = cellFor(prev.id);
+    if (!prevCell || prevCell.status !== "done") {
+      return "Waiting on " + (prev.name || prev.id);
+    }
+  }
+
+  if (cur.isGate) {
+    for (let i = idx - 1; i >= 0; i--) {
+      if (items[i].isGate) break;
+      const c = cellFor(items[i].id);
+      if (items[i].isHidden && !c?.meas) {
+        return "Hidden work lock — " + (items[i].name || items[i].id) + " not measured by DET";
+      }
+    }
+    const upto = new Set(items.slice(0, idx + 1).map((x) => x.id));
+    const open = openSnagsFor(data, unitId).filter((s) => s.stageId === stageId && s.itemId && upto.has(s.itemId));
+    if (open.length) return "Open snag" + (open.length > 1 ? "s" : "") + " on this item (" + open.length + ")";
+  }
+  return null;
+}
+
 /** Is `leaderId` the Team Leader of whichever team `memberUserId` belongs
  *  to? Used to additively extend "mine"-style checks (e.g. AssignRow.tsx)
  *  so a Team Leader can act on their own team's members' work, without
@@ -183,8 +252,22 @@ export interface UnitSummary { done: number; total: number; fail: boolean; start
 
 export function unitSummary(data: BoardData | null, projectId: string | null, unitId: string): UnitSummary {
   const list = trackStages(data, projectId, "unit");
-  let done = 0, fail = false, started = false;
+  let done = 0, total = 0, fail = false, started = false;
   for (const x of list) {
+    if (x.stage.itemBased) {
+      const items = rccChecklistItems(data, x.map.checklistId);
+      const p = prog(data, unitId, x.stage.id);
+      const cells = p.checklist || [];
+      total += items.length;
+      for (const it of items) {
+        const c = cells.find((cc: any) => cc.itemId === it.id);
+        if (c?.status === "done") done++;
+        else if (c?.status === "fail") fail = true;
+        if (c?.status && c.status !== "released") started = true;
+      }
+      continue;
+    }
+    total++;
     const p = prog(data, unitId, x.stage.id);
     if (p.status === "done") done++;
     else if (p.status === "fail") fail = true;
@@ -193,7 +276,15 @@ export function unitSummary(data: BoardData | null, projectId: string | null, un
   const unit = byId(coll(data, "units"), unitId);
   const locked = unit ? !floorReleased(data, projectId, unit.floorId) : true;
   const snags = openSnagsFor(data, unitId).length;
-  return { done, total: list.length, fail, started, locked, snags, complete: list.length > 0 && done === list.length };
+  return { done, total, fail, started, locked, snags, complete: total > 0 && done === total };
+}
+
+/** Resolves CHK-RCC's checklist items sorted by their `seq`, given the
+ *  stagemap's `checklistId` for STG-RCC. */
+export function rccChecklistItems(data: BoardData | null, checklistId?: string | null) {
+  if (!checklistId) return [];
+  const c = byId(coll(data, "checklists"), checklistId);
+  return ((c?.items || []) as any[]).slice().sort((a, b) => (a.seq || 0) - (b.seq || 0));
 }
 
 export interface SlowHandoff { targetType: Track; targetId: string; stage: Stage; hrs: number; sla: number; }

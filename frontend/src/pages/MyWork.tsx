@@ -1,6 +1,6 @@
 import React from "react";
 import { useApp } from "../context/AppContext";
-import { coll, myAssignments, mySnags, myReleases, assignmentsByMe, snagsByMe, refLabel, snagTarget } from "../shared/rules";
+import { coll, myAssignments, mySnags, myReleases, assignmentsByMe, snagsByMe, refLabel, snagTarget, myProjects } from "../shared/rules";
 import { ago, dueLabel } from "../shared/helpers";
 import AssignRow from "../components/AssignRow";
 import SnagRow from "../components/SnagRow";
@@ -12,7 +12,7 @@ export default function MyWork() {
   // not scoped to whichever project happens to be selected elsewhere.
   // `currentProjectId` defaults to projects[0] and this page has no project
   // switcher, so scoping to it silently hid work from other projects.
-  const projectIds = coll(data, "projects").filter((p) => p.active !== false).map((p) => p.id);
+  const projectIds = myProjects(data, currentUserId).map((p) => p.id);
   const asg = projectIds.flatMap((pid) => myAssignments(data, pid, currentUserId));
   const sng = projectIds.flatMap((pid) => mySnags(data, pid, currentUserId));
   const rel = projectIds.flatMap((pid) => myReleases(data, pid, currentUserId));

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
-import { coll, refLabel, snagTarget } from "../shared/rules";
+import { coll, refLabel, snagTarget, myProjects } from "../shared/rules";
 import { dueLabel, ago } from "../shared/helpers";
 import { ESCALATION_DAYS, HOUR } from "../services/config";
 import NavIcon from "../components/NavIcon";
@@ -27,7 +27,7 @@ export default function Snags() {
   // Checklist, which are inherently single-project pages), with this filter
   // to narrow down to one when needed.
   const [fp, setFp] = useState(ALL_PROJECTS);
-  const allProjects = coll(data, "projects").filter((p) => p.active !== false);
+  const allProjects = myProjects(data, currentUserId);
 
   async function deleteSnag(e: React.MouseEvent, s: { id: string; title: string }) {
     e.stopPropagation();

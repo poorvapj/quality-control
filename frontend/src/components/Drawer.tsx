@@ -1,7 +1,7 @@
 import React, { useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { ROLES } from "../services/config";
-import { byId, coll, canAct, blockReason, openSnagsFor, prog, refLabel, trackStages, snagTarget, unitSummary } from "../shared/rules";
+import { byId, coll, canAct, blockReason, openSnagsFor, prog, refLabel, trackStages, snagTarget, unitSummary, rccChecklistItems, rccItemBlockReason, rccItemLabel, myProjects } from "../shared/rules";
 import { fmtDT, ago, dueLabel } from "../shared/helpers";
 import { useActions } from "../hooks/useActions";
 import AssignRow from "./AssignRow";
@@ -45,9 +45,12 @@ export default function Drawer() {
 
 function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
   const { data, currentProjectId, myRole, closeDrawer, openAssignModal, openSnagModal, openChecklistModal } = useApp();
-  const { ackStage, startStage, completeStage, failStage, capturePhoto } = useActions();
+  const {
+    ackStage, startStage, completeStage, failStage, capturePhoto,
+    ackStageItem, startStageItem, completeStageItem, failStageItem, captureStageItemPhoto
+  } = useActions();
   const fileRef = useRef<HTMLInputElement>(null);
-  const pendingPhoto = useRef<{ kind: "unit" | "floor"; id: string; stageId: string } | null>(null);
+  const pendingPhoto = useRef<{ kind: "unit" | "floor"; id: string; stageId: string; itemId?: string } | null>(null);
   // Before the Unit 360° tabs existed, opening a unit that Tower Board
   // flags as an "issue" (red tile) showed the full detail immediately —
   // inline "Failed: <note>" text per stage, plus an open-snags banner.
@@ -74,6 +77,95 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
 
   const snags = kind === "unit" ? openSnagsFor(data, id) : [];
 
+  // itemBased stages (RCC, Brick, AC, Electric, Plastering) render as
+  // their own section, one row per checklist item, reusing the exact same
+  // row markup/actions a whole stage used to have — just reading/writing
+  // one item cell inside this stage's own progress record instead of a
+  // separate stage progress record per row. Internal/Owner Handover (real,
+  // separate Stage records) render exactly as before, below these sections.
+  function renderItemStageRows(idx: number) {
+    const x = list[idx];
+    const s = x.stage;
+    const items = rccChecklistItems(data, x.map.checklistId);
+    const stageProg = prog(data, id, s.id);
+    const cellFor = (itemId: string) => (stageProg.checklist || []).find((c: any) => c.itemId === itemId) || {};
+
+    return (
+      <div key={s.id} style={{ marginBottom: 6 }}>
+        <div className="micro-label" style={{ margin: "10px 0 6px" }}>{s.name.toUpperCase()}</div>
+        {items.map((it: any, i: number) => {
+          const p: any = cellFor(it.id);
+          const done = p.status === "done";
+          const fail = p.status === "fail";
+          const block = rccItemBlockReason(data, id, s.id, items, i);
+          const mine = myRole() === "ADMIN" || myRole() === "DRI" || myRole() === "CIVIL";
+          const nestedChk = it.checklistId ? byId(coll(data, "checklists"), it.checklistId) : null;
+
+          return (
+            <div className={"stage-row" + (block && !done ? " is-locked" : "")} key={it.id}>
+              <div className="stage-dot" style={{ background: done ? "var(--color-pass)" : fail ? "var(--color-fail)" : "var(--color-struct)" }}>
+                {done ? "✓" : fail ? "✕" : i + 1}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 800 }}>{it.name}</div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
+                  {ROLES.CIVIL?.name || "CIVIL"}{nestedChk ? " · ✅ " + nestedChk.name : ""}
+                </div>
+
+                {it.isHidden && (
+                  <div style={{ marginTop: 5 }}>
+                    <span className={"badge-tag " + (p.meas ? "meas" : "gate")}>
+                      {p.meas ? "📷 Measured " + fmtDT(p.meas) : "⚠️ Hidden work — DET measurement required"}
+                    </span>
+                  </div>
+                )}
+
+                {(p.rel || p.ack || p.start || p.at) && (
+                  <div className="stage-meta">
+                    {p.rel ? "Released " + fmtDT(p.rel) + " · " : ""}
+                    {p.ack ? "Acknowledged " + fmtDT(p.ack) + " · " : ""}
+                    {p.start ? "Started " + fmtDT(p.start) + " · " : ""}
+                    {p.at ? "Completed " + fmtDT(p.at) : ""}
+                    {p.by && <><br />By {refLabel(data, "users", p.by)}</>}
+                  </div>
+                )}
+
+                {fail && p.note && <div className="note-box">Failed: {p.note}</div>}
+                {block && !done && <div className="stage-meta" style={{ color: "var(--color-gate)", fontWeight: 700 }}>🔒 {block}</div>}
+
+                <div className="stage-actions">
+                  {(!block || done) && (
+                    <>
+                      {it.isHidden && !p.meas && (myRole() === "CIVIL" || myRole() === "ADMIN" || myRole() === "DRI") && (
+                        <button className="btn btn-meas btn-sm" onClick={() => { pendingPhoto.current = { kind: "unit", id, stageId: s.id, itemId: it.id }; fileRef.current?.click(); }}>
+                          📸 Measure &amp; photograph
+                        </button>
+                      )}
+                      {!done && mine && (
+                        <>
+                          {p.rel && !p.ack && <button className="btn btn-secondary btn-sm" onClick={() => ackStageItem(id, s.id, it.id)}>Acknowledge</button>}
+                          {!p.start && <button className="btn btn-secondary btn-sm" onClick={() => startStageItem(id, s.id, it.id)}>Start work</button>}
+                          {it.isGate && nestedChk ? (
+                            <button className="btn btn-primary btn-sm" onClick={() => openChecklistModal({ kind: "unit", id, stageId: s.id, itemId: it.id, checklistId: nestedChk.id })}>✅ Run checklist</button>
+                          ) : (
+                            <button className="btn btn-primary btn-sm" onClick={() => completeStageItem(id, s.id, it.id, items)}>{fail ? "Rework done" : "Mark complete"}</button>
+                          )}
+                          {it.isGate && <button className="btn btn-danger btn-sm" onClick={() => failStageItem(id, s.id, it.id, items)}>Fail</button>}
+                        </>
+                      )}
+                    </>
+                  )}
+                  <button className="btn btn-secondary btn-sm" onClick={() => openAssignModal({ targetType: "unit", targetId: id, stageId: s.id, itemId: it.id })}>👤 Assign</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => openSnagModal({ unitId: id, stageId: s.id, itemId: it.id, preset: "" })}>🐞 Snag</button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   function renderStageList() {
     return (
       <>
@@ -85,6 +177,7 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
         {list.length === 0 && <div className="empty">No stages mapped for this track. Add them in Masters ▸ Stage Mapping.</div>}
         {list.map((x, idx) => {
           const s = x.stage;
+          if (s.itemBased) return renderItemStageRows(idx);
           const p = prog(data, id, s.id);
           const done = p.status === "done";
           const fail = p.status === "fail";
@@ -164,7 +257,10 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
         const file = e.target.files?.[0];
         const pending = pendingPhoto.current;
         e.target.value = "";
-        if (file && pending) capturePhoto(pending.kind, pending.id, pending.stageId, file);
+        if (file && pending) {
+          if (pending.itemId) captureStageItemPhoto(pending.id, pending.stageId, pending.itemId, file);
+          else capturePhoto(pending.kind, pending.id, pending.stageId, file);
+        }
       }}
     />
   );
@@ -198,7 +294,7 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
   const projectName = refLabel(data, "projects", currentProjectId);
   const activity = (data?.events || []).filter((e) => e.targetId === id).slice().sort((a, b) => b.ts - a.ts);
 
-  function openPossession(idx: number) {
+  function openPossession(idx: number, readOnly?: boolean) {
     if (idx === -1) return;
     const joined = list[idx];
     const chk = joined.map.checklistId ? byId(coll(data, "checklists"), joined.map.checklistId) : null;
@@ -208,7 +304,8 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
       stageId: joined.stage.id, stageName: joined.stage.name, checklistId: chk.id,
       stageDesc: joined.stage.id === "STG-HOI"
         ? "Civil / QC internal inspection before owner possession."
-        : "Final owner possession and handover inspection."
+        : "Final owner possession and handover inspection.",
+      readOnly
     });
   }
 
@@ -325,8 +422,16 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
               const done = p.status === "done";
               const fail = p.status === "fail";
               const block = blockReason(data, currentProjectId, "unit", id, idx);
-              const mine = canAct(myRole(), joined.stage);
+              // Owner Possession is ADMIN/CRM only — no DRI/CIVIL bypass,
+              // unlike every other stage's canAct(). CRM fills it from what
+              // the customer says verbally; Internal Possession stays
+              // CIVIL-only, CRM has no access there.
+              const mine = joined.stage.id === "STG-HOO" ? myRole() === "ADMIN" || myRole() === "CRM" : canAct(myRole(), joined.stage);
               const chk = joined.map.checklistId ? byId(coll(data, "checklists"), joined.map.checklistId) : null;
+              // Unlike the informational-only structure block above, Owner
+              // Possession is a REAL lock on Internal Possession — its Fill
+              // Form button doesn't render until Internal is done.
+              const waitingOnInternal = joined.stage.id === "STG-HOO" && prog(data, id, "STG-HOI").status !== "done";
               return (
                 <div key={label} className="card card-pad" style={{ marginBottom: 14 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
@@ -337,8 +442,14 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
                   {block && !done && (
                     <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 8 }}>⚠ {block} — informational only, form still opens.</div>
                   )}
-                  {!done && mine && chk && (
+                  {waitingOnInternal && !done && !fail && (
+                    <div style={{ fontSize: 11, color: "var(--color-gate)", fontWeight: 700, marginBottom: 8 }}>🔒 Waiting on Internal Possession</div>
+                  )}
+                  {mine && chk && !done && !(waitingOnInternal && !fail) && (
                     <button className="btn btn-primary btn-sm" onClick={() => openPossession(idx)}>{fail ? "Rework" : "Fill Form"}</button>
+                  )}
+                  {!mine && chk && (done || fail) && (
+                    <button className="btn btn-secondary btn-sm" onClick={() => openPossession(idx, true)}>View Details</button>
                   )}
                 </div>
               );
@@ -384,7 +495,8 @@ function SnagDrawer({ id }: { id: string }) {
 
   const d = dueLabel(s.dueAt);
   const closed = s.status === "Closed";
-  const users = coll(data, "users").filter((u) => u.active !== false);
+  // CRM doesn't do field/rework — snags shouldn't be reassignable to them.
+  const users = coll(data, "users").filter((u) => u.active !== false && u.role === "CIVIL");
 
   const label: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: "#9CA3AF", marginBottom: 4 };
   const value: React.CSSProperties = { fontSize: 14, fontWeight: 500, color: "var(--text-main)", lineHeight: 1.4 };
@@ -431,7 +543,7 @@ function SnagDrawer({ id }: { id: string }) {
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: 32, rowGap: 16, marginBottom: 20 }}>
           <Field full><div style={label}>Location</div><div style={value}>{snagTarget(data, s)}</div></Field>
-          <Field><div style={label}>Stage</div><div style={value}>{refLabel(data, "stages", s.stageId)}</div></Field>
+          <Field><div style={label}>Stage</div><div style={value}>{s.itemId ? rccItemLabel(data, s.itemId) : refLabel(data, "stages", s.stageId)}</div></Field>
           <Field><div style={label}>Parameter</div><div style={s.paramId ? value : empty}>{s.paramId ? refLabel(data, "qparams", s.paramId) : "—"}</div></Field>
           <Field><div style={label}>Raised By</div><div style={value}>{refLabel(data, "users", s.raisedBy)}<div style={{ fontSize: 11.5, color: "var(--text-sub)", marginTop: 2 }}>{ago(s.raisedAt)}</div></div></Field>
           <Field><div style={label}>Assigned To</div><div style={value}>{refLabel(data, "users", s.assignedTo)}</div></Field>
@@ -486,12 +598,13 @@ function SnagDrawer({ id }: { id: string }) {
 }
 
 function UserDrawer({ id }: { id: string }) {
-  const { data, closeDrawer, openAssignModal } = useApp();
+  const { data, closeDrawer, openAssignModal, currentUserId } = useApp();
   const u = byId(coll(data, "users"), id);
   if (!u) return null;
-  // Matches Team.tsx's row totals — aggregated across every active project,
-  // not just whichever one happens to be globally selected.
-  const projectIds = coll(data, "projects").filter((p) => p.active !== false).map((p) => p.id);
+  // Matches Team.tsx's row totals — aggregated across every project the
+  // VIEWER is allowed to see, not just whichever one happens to be
+  // globally selected.
+  const projectIds = myProjects(data, currentUserId).map((p) => p.id);
   const asg = coll(data, "assignments").filter((a) => a.assignedTo === id && projectIds.includes(a.projectId) && a.status !== "Done");
   const sng = coll(data, "snags").filter((s) => s.assignedTo === id && projectIds.includes(s.projectId) && s.status !== "Closed");
 

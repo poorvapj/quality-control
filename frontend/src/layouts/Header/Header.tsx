@@ -5,14 +5,37 @@ import { coll } from "../../shared/rules";
 import NavIcon from "../../components/NavIcon";
 import "./Header.css";
 
+// Which admin id this browser is currently impersonating-someone-else
+// from — set only when U-ADMIN switches to another account, cleared once
+// back on U-ADMIN (or signed out). Lets "Back to Admin" show up for
+// whichever account is active mid-impersonation, without ever showing it
+// for an ordinary (non-admin-originated) session.
+const IMPERSONATE_KEY = "neoteric_impersonating_from";
+
 export default function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
   const { data, currentUserId, setCurrentUserId, me, logout } = useApp();
   const [dark, setDark] = useState(() => localStorage.getItem("neoteric_theme") === "dark");
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuView, setMenuView] = useState<"menu" | "switch">("menu");
   const [switchQ, setSwitchQ] = useState("");
+  const [impersonatingFrom, setImpersonatingFrom] = useState<string | null>(() => {
+    try { return localStorage.getItem(IMPERSONATE_KEY); } catch { return null; }
+  });
   const menuRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
+
+  function switchTo(usr: { id: string }, fromAdminId?: string) {
+    if (fromAdminId) {
+      try { localStorage.setItem(IMPERSONATE_KEY, fromAdminId); } catch {}
+      setImpersonatingFrom(fromAdminId);
+    } else if (usr.id === impersonatingFrom) {
+      try { localStorage.removeItem(IMPERSONATE_KEY); } catch {}
+      setImpersonatingFrom(null);
+    }
+    setCurrentUserId(usr.id);
+    setMenuView("menu");
+    setMenuOpen(false);
+  }
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
@@ -94,14 +117,28 @@ export default function Header({ onToggleSidebar }: { onToggleSidebar: () => voi
                         onClick={(e) => { e.stopPropagation(); setMenuView("switch"); }}
                       >
                         <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <span style={{ fontSize: 14 }}>⇄</span> Switch Account
+                          <NavIcon name="switchAccount" size={14} /> Switch Account
                         </span>
                         <span style={{ color: "var(--theme-primary)", fontWeight: 800 }}>›</span>
                       </button>
                     )}
-                    <button type="button" className="account-menu-row danger" onClick={() => { setMenuOpen(false); logout(); }}>
+                    {/* Only shows mid-impersonation (U-ADMIN switched to this
+                        account) — never for an ordinary, non-admin-originated
+                        session, so only Admin ever gets a way back. */}
+                    {u?.id !== "U-ADMIN" && impersonatingFrom && (
+                      <button
+                        type="button"
+                        className="account-menu-row"
+                        onClick={() => switchTo({ id: impersonatingFrom })}
+                      >
+                        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <NavIcon name="switchAccount" size={14} /> Back to Admin
+                        </span>
+                      </button>
+                    )}
+                    <button type="button" className="account-menu-row danger" onClick={() => { try { localStorage.removeItem(IMPERSONATE_KEY); } catch {} setMenuOpen(false); logout(); }}>
                       <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ fontSize: 14 }}>⏻</span> Sign out
+                        <NavIcon name="logout" size={14} /> Sign out
                       </span>
                     </button>
                   </>
@@ -131,7 +168,7 @@ export default function Header({ onToggleSidebar }: { onToggleSidebar: () => voi
                               type="button"
                               key={usr.id}
                               className="account-menu-row"
-                              onClick={() => { setCurrentUserId(usr.id); setMenuView("menu"); setMenuOpen(false); }}
+                              onClick={() => switchTo(usr, u?.id === "U-ADMIN" && usr.id !== "U-ADMIN" ? "U-ADMIN" : undefined)}
                             >
                               <span style={{ color: active ? "var(--theme-primary)" : "var(--text-main)", fontWeight: active ? 800 : 600 }}>
                                 {usr.name} <span style={{ color: "var(--text-muted)", fontWeight: 500 }}>— {ROLES[usr.role]?.name || usr.role}</span>
