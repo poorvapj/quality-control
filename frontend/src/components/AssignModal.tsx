@@ -15,6 +15,7 @@ export default function AssignModal() {
 
   const [projectId, setProjectId] = useState("");
   const [targetType, setTargetType] = useState<Track>("unit");
+  const [floorId, setFloorId] = useState("");
   const [targetId, setTargetId] = useState("");
   // Holds a mix of flat stage ids (STG-HOI/STG-HOO/floor stages) and RCC
   // item ids — one assignment gets created per value on submit, per target.
@@ -41,6 +42,7 @@ export default function AssignModal() {
     setProjectId(assignModal.projectId || "");
     const t = assignModal.targetType || "unit";
     setTargetType(t);
+    setFloorId("");
     setTargetId(assignModal.targetId || "");
     setStageValues(assignModal.itemId ? [assignModal.itemId] : assignModal.stageId ? [assignModal.stageId] : []);
     setAssignedTo(assignModal.presetUser || "");
@@ -50,9 +52,13 @@ export default function AssignModal() {
     setBulkTargetIds([]);
   }, [assignModal]);
 
-  const targets = (targetType === "unit" ? projectUnits(data, projectId) : projectFloors(data, projectId))
-    .slice()
-    .sort((a, b) => (a.seq || 0) - (b.seq || 0));
+  const floors = projectFloors(data, projectId);
+  // Units aren't named uniquely across floors (every floor has its own
+  // Flat 1..9/10) — Floor must be picked first so the Target list only
+  // ever shows one floor's flats, never same-named units from different
+  // floors mixed together.
+  let targets: any[] = targetType === "unit" ? (floorId ? projectUnits(data, projectId).filter((u) => u.floorId === floorId) : []) : projectFloors(data, projectId);
+  targets = targets.slice().sort((a, b) => (a.seq || 0) - (b.seq || 0));
   const stages = trackStages(data, projectId, targetType);
   // Work assignments are always civil site work — only CIVIL-role users
   // can be assigned to them.
@@ -135,7 +141,7 @@ export default function AssignModal() {
           <label>Project *</label>
           <SearchDropdown
             value={projectId}
-            onChange={(v) => { setProjectId(v); setTargetId(""); setBulkTargetIds([]); setStageValues([]); }}
+            onChange={(v) => { setProjectId(v); setFloorId(""); setTargetId(""); setBulkTargetIds([]); setStageValues([]); }}
             options={[{ value: "", label: "Choose" }, ...projects.map((p) => ({ value: p.id, label: p.name }))]}
             neutralActive
           />
@@ -146,11 +152,23 @@ export default function AssignModal() {
           <SearchDropdown
             searchable={false}
             value={targetType}
-            onChange={(v) => { const t = v as Track; setTargetType(t); setTargetId(""); setBulkTargetIds([]); setStageValues([]); }}
+            onChange={(v) => { const t = v as Track; setTargetType(t); setFloorId(""); setTargetId(""); setBulkTargetIds([]); setStageValues([]); }}
             options={[{ value: "unit", label: "Unit / Flat" }, { value: "floor", label: "Floor / Structure" }]}
             neutralActive
           />
         </div>
+        {targetType === "unit" && (
+          <div className="field">
+            <label>Floor *</label>
+            <SearchDropdown
+              searchable={false}
+              value={floorId}
+              onChange={(v) => { setFloorId(v); setTargetId(""); setBulkTargetIds([]); }}
+              options={[{ value: "", label: "Choose" }, ...floors.map((f) => ({ value: f.id, label: f.name }))]}
+              neutralActive
+            />
+          </div>
+        )}
         <div className="field full" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <input id="bulk-assign-toggle" type="checkbox" checked={bulk} onChange={(e) => { setBulk(e.target.checked); setTargetId(""); setBulkTargetIds([]); }} />
           <label htmlFor="bulk-assign-toggle" style={{ margin: 0 }}>Assign the same stage to multiple {targetType === "unit" ? "units" : "floors"} at once</label>
@@ -161,13 +179,13 @@ export default function AssignModal() {
             <div className="card card-pad" style={{ maxHeight: 220, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
               {targets.length === 0 ? (
                 <div style={{ fontSize: 12.5, color: "var(--text-muted)", padding: "4px 2px" }}>
-                  {projectId ? `No ${targetType === "unit" ? "units" : "floors"} in this project yet.` : "Pick a project above first."}
+                  {!projectId ? "Pick a project above first." : targetType === "unit" && !floorId ? "Pick a floor above first." : `No ${targetType === "unit" ? "units" : "floors"} here yet.`}
                 </div>
               ) : (
                 targets.map((t) => (
                   <label key={t.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
                     <input type="checkbox" checked={bulkTargetIds.includes(t.id)} onChange={() => toggleBulkTarget(t.id)} />
-                    {targetType === "unit" ? String((t as any).seq ?? t.name) : t.name}
+                    {t.name}
                   </label>
                 ))
               )}
@@ -179,7 +197,8 @@ export default function AssignModal() {
             <SearchDropdown
               value={targetId}
               onChange={setTargetId}
-              options={[{ value: "", label: "Choose" }, ...targets.map((t) => ({ value: t.id, label: targetType === "unit" ? String((t as any).seq ?? t.name) : t.name }))]}
+              options={[{ value: "", label: "Choose" }, ...targets.map((t) => ({ value: t.id, label: t.name }))]}
+              disabled={targetType === "unit" && !floorId}
               neutralActive
             />
           </div>

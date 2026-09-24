@@ -55,8 +55,11 @@ export default function SnagModal() {
   }, [snagModal]);
 
   const floors = projectFloors(data, projectId);
-  let units = projectUnits(data, projectId);
-  if (floorId) units = units.filter((u) => u.floorId === floorId);
+  // Units aren't named uniquely across floors (every floor has its own
+  // Flat 1..9/10) — Floor must be picked first so the Unit list only
+  // ever shows one floor's flats, never same-named units from different
+  // floors mixed together.
+  let units = floorId ? projectUnits(data, projectId).filter((u) => u.floorId === floorId) : [];
   units = units.slice().sort((a, b) => (a.seq || 0) - (b.seq || 0));
   // Internal/Owner Possession are handled through the dedicated Possession
   // Form, not through a generic snag — a snag can only target one of the
@@ -148,12 +151,12 @@ export default function SnagModal() {
           />
           <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Which project this snag belongs to — floor, unit and stage below follow this choice.</div>
         </div>
-        <div className="field"><label>Floor</label>
+        <div className="field"><label>Floor *</label>
           <SearchDropdown
             searchable={false}
             value={floorId}
             onChange={(v) => { setFloorId(v); setUnitId(""); setBulkUnitIds([]); }}
-            options={[{ value: "", label: "All Floors" }, ...floors.map((f) => ({ value: f.id, label: f.name }))]}
+            options={[{ value: "", label: "Choose" }, ...floors.map((f) => ({ value: f.id, label: f.name }))]}
             neutralActive
           />
         </div>
@@ -168,7 +171,7 @@ export default function SnagModal() {
             <div className="card card-pad" style={{ maxHeight: 220, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
               {units.length === 0 ? (
                 <div style={{ fontSize: 12.5, color: "var(--text-muted)", padding: "4px 2px" }}>
-                  {projectId ? "No units in this project yet." : "Pick a project above first."}
+                  {!projectId ? "Pick a project above first." : !floorId ? "Pick a floor above first." : "No units on this floor yet."}
                 </div>
               ) : (
                 units.map((u) => (
@@ -187,6 +190,7 @@ export default function SnagModal() {
               onChange={setUnitId}
               options={[{ value: "", label: "Choose" }, ...units.map((u) => ({ value: u.id, label: u.name }))]}
               neutralActive
+              disabled={!floorId}
             />
           </div>
         )}
