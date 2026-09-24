@@ -50,7 +50,9 @@ export default function AssignModal() {
     setBulkTargetIds([]);
   }, [assignModal]);
 
-  const targets = targetType === "unit" ? projectUnits(data, projectId) : projectFloors(data, projectId);
+  const targets = (targetType === "unit" ? projectUnits(data, projectId) : projectFloors(data, projectId))
+    .slice()
+    .sort((a, b) => (a.seq || 0) - (b.seq || 0));
   const stages = trackStages(data, projectId, targetType);
   // Work assignments are always civil site work — only CIVIL-role users
   // can be assigned to them.
@@ -165,7 +167,7 @@ export default function AssignModal() {
                 targets.map((t) => (
                   <label key={t.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
                     <input type="checkbox" checked={bulkTargetIds.includes(t.id)} onChange={() => toggleBulkTarget(t.id)} />
-                    {t.name}
+                    {targetType === "unit" ? String((t as any).seq ?? t.name) : t.name}
                   </label>
                 ))
               )}
@@ -177,7 +179,7 @@ export default function AssignModal() {
             <SearchDropdown
               value={targetId}
               onChange={setTargetId}
-              options={[{ value: "", label: "Choose" }, ...targets.map((t) => ({ value: t.id, label: t.name }))]}
+              options={[{ value: "", label: "Choose" }, ...targets.map((t) => ({ value: t.id, label: targetType === "unit" ? String((t as any).seq ?? t.name) : t.name }))]}
               neutralActive
             />
           </div>
