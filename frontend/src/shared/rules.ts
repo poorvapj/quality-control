@@ -180,6 +180,11 @@ export function blockReason(
 }
 
 export function canAct(myRole: Role, stage: Stage): boolean {
+  // SUPERVISOR has the same stage access as CIVIL — every unit/floor
+  // stage's owning role is "CIVIL", never "SUPERVISOR" itself, so it needs
+  // an explicit match here rather than the plain myRole === stage.role
+  // check the other roles use.
+  if (myRole === "SUPERVISOR") return stage.role === "CIVIL";
   return myRole === "ADMIN" || myRole === "DRI" || myRole === stage.role;
 }
 
@@ -346,7 +351,7 @@ export function myReleases(data: BoardData | null, projectId: string | null, use
   const out: Release[] = [];
   const scan = (targetType: Track, targetId: string, list: JoinedStage[]) => {
     list.forEach((x, i) => {
-      if (x.stage.role !== u.role && u.role !== "ADMIN" && u.role !== "DRI") return;
+      if (!canAct(u.role, x.stage)) return;
       const p = prog(data, targetId, x.stage.id);
       if (p.status === "done") return;
       if (p.status === "released" || p.status === "ack" || p.status === "wip" || p.status === "fail") {

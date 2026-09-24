@@ -9,7 +9,8 @@ export const ROLES: Record<Role, { name: string; note: string }> = {
   DRI: { name: "Site In-charge (DRI)", note: "Owns the board day-to-day — same blanket bypass as Owner/Admin, kept as a distinct label for existing site in-charges." },
   CRM: { name: "CRM", note: "Customer/coordination-facing — Drawing Requests, DPR, and anything granted via the Permission Matrix." },
   CIVIL: { name: "Civil Engineer", note: "Runs and inspects every construction stage — structure, MEP, finishes, QC gates, and hidden-work measurement." },
-  ADMIN: { name: "Owner / Admin", note: "Full rights everywhere — the blanket bypass role." }
+  ADMIN: { name: "Owner / Admin", note: "Full rights everywhere — the blanket bypass role." },
+  SUPERVISOR: { name: "Site Supervisor", note: "Day-to-day site oversight — same stage access as Civil Engineer (acknowledge/start/complete/fail, hidden-work measurement, Assign/Snag), distinct label for site supervisory staff." }
 };
 
 /* Backend base URL.

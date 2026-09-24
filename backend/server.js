@@ -731,9 +731,12 @@ async function assertOpAllowed(op, session) {
       // Owner Possession (STG-HOO) is ADMIN/CRM only — no DRI bypass,
       // unlike every other stage — mirrors Drawer.tsx/HandoverChecklist.tsx.
       const isOwnerPossession = stageId === "STG-HOO";
+      // SUPERVISOR has the same stage access as CIVIL — every stage's
+      // owning role is "CIVIL", never "SUPERVISOR" itself, so it needs an
+      // explicit match here too, mirroring rules.ts's canAct().
       const allowed = isOwnerPossession
         ? role === "ADMIN" || role === "CRM"
-        : role === "ADMIN" || role === "DRI" || (!!stageRole && role === stageRole);
+        : role === "ADMIN" || role === "DRI" || (!!stageRole && role === stageRole) || (role === "SUPERVISOR" && stageRole === "CIVIL");
       if (!allowed) {
         const e = new Error("Not authorized to act on this stage");
         e.status = 403;

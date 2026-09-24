@@ -62,7 +62,7 @@ export default function AssignModal() {
   const stages = trackStages(data, projectId, targetType);
   // Work assignments are always civil site work — only CIVIL-role users
   // can be assigned to them.
-  const users = coll(data, "users").filter((u) => u.active !== false && u.role === "CIVIL");
+  const users = coll(data, "users").filter((u) => u.active !== false && (u.role === "CIVIL" || u.role === "SUPERVISOR"));
 
   // Item-based stages (RCC, Brick, AC, Electric, Plastering) each render as
   // their own group in the Stage picker, one heading per stage, their items

@@ -98,7 +98,7 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
           const done = p.status === "done";
           const fail = p.status === "fail";
           const block = rccItemBlockReason(data, id, s.id, items, i);
-          const mine = myRole() === "ADMIN" || myRole() === "DRI" || myRole() === "CIVIL";
+          const mine = myRole() === "ADMIN" || myRole() === "DRI" || myRole() === "CIVIL" || myRole() === "SUPERVISOR";
           const nestedChk = it.checklistId ? byId(coll(data, "checklists"), it.checklistId) : null;
 
           return (
@@ -136,7 +136,7 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
                 <div className="stage-actions">
                   {(!block || done) && (
                     <>
-                      {it.isHidden && !p.meas && (myRole() === "CIVIL" || myRole() === "ADMIN" || myRole() === "DRI") && (
+                      {it.isHidden && !p.meas && (myRole() === "CIVIL" || myRole() === "SUPERVISOR" || myRole() === "ADMIN" || myRole() === "DRI") && (
                         <button className="btn btn-meas btn-sm" onClick={() => { pendingPhoto.current = { kind: "unit", id, stageId: s.id, itemId: it.id }; fileRef.current?.click(); }}>
                           📸 Measure &amp; photograph
                         </button>
@@ -220,7 +220,7 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
                 <div className="stage-actions">
                   {(!block || done) && (
                     <>
-                      {s.isHidden && !p.meas && (myRole() === "CIVIL" || myRole() === "ADMIN" || myRole() === "DRI") && (
+                      {s.isHidden && !p.meas && (myRole() === "CIVIL" || myRole() === "SUPERVISOR" || myRole() === "ADMIN" || myRole() === "DRI") && (
                         <button className="btn btn-meas btn-sm" onClick={() => { pendingPhoto.current = { kind, id, stageId: s.id }; fileRef.current?.click(); }}>
                           📸 Measure &amp; photograph
                         </button>
@@ -496,7 +496,7 @@ function SnagDrawer({ id }: { id: string }) {
   const d = dueLabel(s.dueAt);
   const closed = s.status === "Closed";
   // CRM doesn't do field/rework — snags shouldn't be reassignable to them.
-  const users = coll(data, "users").filter((u) => u.active !== false && u.role === "CIVIL");
+  const users = coll(data, "users").filter((u) => u.active !== false && (u.role === "CIVIL" || u.role === "SUPERVISOR"));
 
   const label: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: "#9CA3AF", marginBottom: 4 };
   const value: React.CSSProperties = { fontSize: 14, fontWeight: 500, color: "var(--text-main)", lineHeight: 1.4 };

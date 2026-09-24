@@ -69,7 +69,7 @@ export default function SnagModal() {
   const params = coll(data, "qparams").filter((p) => p.active !== false);
   // Snags on RCC's item-based stages are always civil site work — only
   // CIVIL-role users can be assigned to fix them.
-  const users = coll(data, "users").filter((u) => u.active !== false && u.role === "CIVIL");
+  const users = coll(data, "users").filter((u) => u.active !== false && (u.role === "CIVIL" || u.role === "SUPERVISOR"));
   const stageOptions = stages.flatMap((x) =>
     rccChecklistItems(data, x.map.checklistId).map((it: any) => ({ value: it.id, label: it.name, group: x.stage.name, subgroup: it.subgroup }))
   );
