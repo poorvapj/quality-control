@@ -3,7 +3,7 @@ import { useApp } from "../context/AppContext";
 import { SEVERITIES } from "../services/config";
 import {
   coll, projectUnits, projectFloors, floorUnits, unitSummary, slowHandoffs, floorReleased,
-  myAssignments, mySnags, refLabel, prog, trackStages
+  myAssignments, mySnags, refLabel, prog, trackStages, myProjects
 } from "../shared/rules";
 import { type DateRange, DATE_RANGES, isoWeekBounds, dateRangeBounds, tsInBounds } from "../shared/dateRange";
 import AssignRow from "../components/AssignRow";
@@ -52,7 +52,7 @@ export default function Dashboard() {
     setActiveTab(tab);
   }
   const slowSectionRef = useRef<HTMLDivElement>(null);
-  const allProjects = coll(data, "projects").filter((p) => p.active !== false);
+  const allProjects = myProjects(data, currentUserId);
   // Dashboard-only "All Projects" view, owned entirely by this page.
   // Deliberately NOT stored on currentProjectId — that value is shared by
   // Tower Board/My Work/Snags, none of which have an "all projects" mode,

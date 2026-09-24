@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
 import {
   byId, coll, refLabel, trackStages, projectUnits, projectFloors,
-  blockReason, prog, canAct
+  blockReason, prog, canAct, myProjects
 } from "../shared/rules";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
@@ -35,7 +35,7 @@ export default function HandoverChecklist({ initialTab }: { initialTab?: "intern
   // instead of only trusting whatever the global currentProjectId happens
   // to be (set from Dashboard/TowerBoard) — a DRI landing here directly
   // shouldn't have to switch project somewhere else first.
-  const allProjects = coll(data, "projects").filter((p) => p.active !== false);
+  const allProjects = myProjects(data, currentUserId);
   const [viewProjectId, setViewProjectId] = useState("");
   const projectId = viewProjectId || currentProjectId;
   const project = byId(allProjects, projectId);
@@ -118,6 +118,61 @@ export default function HandoverChecklist({ initialTab }: { initialTab?: "intern
     ];
   }
 
+  // Same shape as reportSections(), but one row per unit shows BOTH
+  // Internal and Owner status side by side — a reporting-only view, does
+  // not change the actual possession dependency/workflow (Owner still
+  // isn't gated on Internal being done, per the existing rule — this just
+  // displays both columns together for a combined at-a-glance report).
+  function combinedReportSections(): ReportSection[] {
+    const rows: (string | number | null)[][] = [];
+    const issues: string[] = [];
+    for (const u of units) {
+      const pi = prog(data, u.id, "STG-HOI");
+      const po = prog(data, u.id, "STG-HOO");
+      const label = (p: typeof pi) => p.status === "done" ? "Completed" : p.status === "fail" ? "Failed" : "Pending";
+      if (pi.status === "fail") issues.push(`${u.name} — Internal failed`);
+      if (po.status === "fail") issues.push(`${u.name} — Owner failed`);
+      rows.push([
+        refLabel(data, "floors", u.floorId), u.name, u.code || "",
+        label(pi), pi.at ? fmtDT(pi.at) : "",
+        label(po), po.at ? fmtDT(po.at) : ""
+      ]);
+    }
+    const iPct = units.length ? Math.round((hoiPassed / units.length) * 100) : 0;
+    const oPct = units.length ? Math.round((hooPassed / units.length) * 100) : 0;
+
+    return [
+      {
+        type: "kpi", title: "Executive Summary",
+        items: [
+          { label: "Total Units", value: units.length },
+          { label: "Internal Completed", value: `${hoiPassed} (${iPct}%)` },
+          { label: "Owner Completed", value: `${hooPassed} (${oPct}%)` }
+        ]
+      },
+      {
+        type: "table", title: "Unit-Wise Possession Status (Internal + Owner)",
+        headers: ["Floor", "Unit", "Flat No.", "Internal Status", "Internal Completed At", "Owner Status", "Owner Completed At"],
+        rows
+      },
+      { type: "bullets", title: "Action Required", items: issues },
+      { type: "remarks", title: "Remarks" }
+    ];
+  }
+
+  function exportCombined(kind: "pdf" | "excel") {
+    const meta = {
+      companyName: project?.name || "All Projects",
+      reportTitle: "Combined Possession Report",
+      scopeLine: `Scope: ${fFloor === ALL_FLOORS ? "All floors" : refLabel(data, "floors", fFloor)}`,
+      periodLine: `Units: ${units.length}`,
+      generatedLine: `Generated: ${fmtDT(Date.now())}`
+    };
+    const sections = combinedReportSections();
+    if (kind === "pdf") printSectionedReport(meta.companyName, meta.reportTitle, meta.scopeLine, meta.periodLine, meta.generatedLine, sections);
+    else downloadExcelReport(`combined-possession-${project?.code || "report"}`, meta.companyName, meta.reportTitle, meta.scopeLine, meta.periodLine, meta.generatedLine, sections);
+  }
+
   function reportMeta() {
     return {
       companyName: project?.name || "All Projects",
@@ -175,6 +230,12 @@ export default function HandoverChecklist({ initialTab }: { initialTab?: "intern
         <div className="flex gap-2">
           <Btn label="🖨 PDF" color="secondary" size="sm" onClick={exportPdfReport} disabled={!mapped || units.length === 0} />
           <Btn label="⬇ Excel" color="secondary" size="sm" onClick={exportExcelReport} disabled={!mapped || units.length === 0} />
+        </div>
+        {/* Combined report — Internal + Owner status side by side per unit,
+            regardless of which tab (Internal/Owner) is currently open. */}
+        <div className="flex gap-2">
+          <Btn label="🖨 Combined PDF" color="secondary" size="sm" onClick={() => exportCombined("pdf")} disabled={!mapped || units.length === 0} />
+          <Btn label="⬇ Combined Excel" color="secondary" size="sm" onClick={() => exportCombined("excel")} disabled={!mapped || units.length === 0} />
         </div>
       </Card>
 
@@ -333,13 +394,25 @@ function StageCell({
   // untouched — it still gates every other stage in Drawer.tsx as before.
   const block = blockReason(data, currentProjectId, "unit", unitId, idx);
   const openSnags = coll(data, "snags").filter((s: any) => s.unitId === unitId && s.status !== "Closed");
-  const mine = canAct(myRole(), joined.stage) || hasModuleGrant(data, currentUserId, solid ? "handoverInternal" : "handoverOwner", "edit");
+  // Owner Possession is ADMIN/CRM only — no DRI/CIVIL bypass, unlike every
+  // other stage's canAct() — but an explicit Permission Matrix grant still
+  // additively unlocks it, same as Internal Possession (which stays
+  // CIVIL-only, CRM has no access there).
+  const canActBase = joined.stage.id === "STG-HOO" ? myRole() === "ADMIN" || myRole() === "CRM" : canAct(myRole(), joined.stage);
+  const mine = canActBase || hasModuleGrant(data, currentUserId, solid ? "handoverInternal" : "handoverOwner", "edit");
   const chk = joined.map.checklistId ? byId(coll(data, "checklists"), joined.map.checklistId) : null;
+
+  // Unlike the informational-only structure block above, Owner Possession
+  // is a REAL lock on Internal Possession — the button doesn't render at
+  // all until Internal is done, it's not just a subtext note.
+  const waitingOnInternal = joined.stage.id === "STG-HOO" && prog(data, unitId, "STG-HOI").status !== "done";
 
   const subtext = fail && p.note
     ? p.note
     : openSnags.length > 0
     ? `Open snag on this unit (${openSnags.length})`
+    : waitingOnInternal
+    ? "Waiting on Internal Possession"
     : block || null;
 
   return (
@@ -354,7 +427,7 @@ function StageCell({
         )}
         {!done && subtext && <div className="text-[10.5px] text-[var(--text-muted)] mt-1 max-w-[220px]">{subtext}</div>}
       </div>
-      {mine && chk ? (
+      {mine && chk && !(waitingOnInternal && !done && !fail) ? (
         <Btn
           label={(done ? "View / Refill" : fail ? "Rework" : "Fill Form") + " →"}
           size="sm"
@@ -363,6 +436,21 @@ function StageCell({
           onClick={() => onOpenForm({
             unitId, unitName, floorName, projectName,
             stageId: joined.stage.id, stageName: joined.stage.name, stageDesc, checklistId: chk.id
+          })}
+        />
+      ) : !mine && chk && (done || fail) ? (
+        // No edit rights on this stage, but if it was already
+        // completed/failed there's real submitted data (photos, remarks,
+        // room results) worth being able to see — a read-only detail view
+        // instead of hiding it entirely behind "Not started".
+        <Btn
+          label="View Details →"
+          size="sm"
+          color="secondary"
+          onClick={() => onOpenForm({
+            unitId, unitName, floorName, projectName,
+            stageId: joined.stage.id, stageName: joined.stage.name, stageDesc, checklistId: chk.id,
+            readOnly: true
           })}
         />
       ) : (

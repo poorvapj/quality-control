@@ -1,6 +1,6 @@
 import React from "react";
 import { useApp } from "../context/AppContext";
-import { refLabel, isTeamLeaderOf } from "../shared/rules";
+import { refLabel, isTeamLeaderOf, rccItemLabel } from "../shared/rules";
 import { dueLabel, ago } from "../shared/helpers";
 import { useActions } from "../hooks/useActions";
 import type { Assignment } from "../types";
@@ -15,7 +15,7 @@ export default function AssignRow({ a }: { a: Assignment }) {
   return (
     <div className={"qitem" + (d.cls === "fail" ? " alert" : "")} onClick={() => openDrawer({ kind: a.targetType, id: a.targetId })}>
       <div className="qitem-main">
-        <div className="qitem-title">📌 {target} · {refLabel(data, "stages", a.stageId)}</div>
+        <div className="qitem-title">📌 {target} · {a.itemId ? rccItemLabel(data, a.itemId) : refLabel(data, "stages", a.stageId)}</div>
         <div className="qitem-sub">{a.note || "Assigned work"} · from {refLabel(data, "users", a.assignedBy)} {ago(a.assignedAt)}</div>
       </div>
       <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>

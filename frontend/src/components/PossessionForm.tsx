@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
-import { byId, coll, pkey, prog, projectFloors, floorUnits, trackStages, refLabel } from "../shared/rules";
+import { byId, coll, pkey, prog, projectFloors, floorUnits, trackStages, refLabel, myProjects } from "../shared/rules";
 import { useActions } from "../hooks/useActions";
 import { uploadPhoto } from "../shared/uploadPhoto";
 import NavIcon from "./NavIcon";
@@ -12,6 +12,11 @@ import type { ChecklistItem, Photo, QParam } from "../types";
 export interface PossessionActiveForm {
   unitId: string; unitName: string; floorName: string; projectName: string;
   stageId: string; stageName: string; stageDesc: string; checklistId: string;
+  /** Opened by someone without edit rights on this stage (e.g. a CRM user
+   *  viewing a failed unit) — shows the same submitted photos/remarks/room
+   *  results but nothing is clickable and there's no Save/Submit, just a
+   *  read-only look at what was recorded. */
+  readOnly?: boolean;
 }
 
 type CellResult = "pass" | "fail" | "na";
@@ -70,7 +75,7 @@ function aggregateResult(row: RowState): CellResult {
 type StageKey = "internal" | "owner";
 
 export default function PossessionForm({ form, onDone }: { form: PossessionActiveForm | null; onDone: () => void }) {
-  const { data, toast, apply } = useApp();
+  const { data, toast, apply, currentUserId } = useApp();
   const { submitChecklist } = useActions();
   const [rows, setRows] = useState<RowState[]>([]);
   const [remarks, setRemarks] = useState("");
@@ -79,6 +84,11 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
   const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const pendingPhotoRow = useRef<number | null>(null);
+  // A photo of the owner, captured at the very end of the Owner Possession
+  // (STG-HOO) form only — separate from any per-item evidence photos.
+  const [ownerPhoto, setOwnerPhoto] = useState<Photo | undefined>(undefined);
+  const [uploadingOwnerPhoto, setUploadingOwnerPhoto] = useState(false);
+  const ownerPhotoFileRef = useRef<HTMLInputElement>(null);
 
   // The form always opens FOR a specific unit+stage (whichever row's "Fill
   // Form" button was clicked), but Project/Floor/Unit/Stage are still
@@ -92,23 +102,24 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
   const [selStageKey, setSelStageKey] = useState<StageKey>("internal");
   const [unitSearchQ, setUnitSearchQ] = useState("");
 
-  // Project/Floor/Unit start blank ("All Projects"/"Choose") every time the
-  // form opens, rather than pre-filled from whichever row's "Fill Form"
-  // button was clicked — an explicit pick each time, same reasoning as
-  // SnagModal/AssignModal already starting unset. Stage still follows
-  // whichever button opened the form (Internal vs Owner) since it isn't a
-  // dropdown at all.
+  // Auto-fill Project/Floor/Unit from whichever row's "Fill Form" button
+  // was actually clicked — that's the whole point of clicking a specific
+  // unit's button, it shouldn't dump you back into an empty picker. Still
+  // fully editable from there (cascading dropdowns) in case the wrong
+  // unit/stage was opened. Stage always follows the button (Internal vs
+  // Owner) since it isn't a dropdown at all.
   useEffect(() => {
     if (!form) return;
-    setSelProjectId("");
-    setSelFloorId("");
-    setSelUnitId("");
+    const unit0 = byId(coll(data, "units"), form.unitId);
+    setSelProjectId(unit0?.projectId || "");
+    setSelFloorId(unit0?.floorId || "");
+    setSelUnitId(form.unitId);
     setUnitSearchQ("");
     setSelStageKey(form.stageId === "STG-HOO" ? "owner" : "internal");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form?.unitId, form?.stageId]);
 
-  const projects = coll(data, "projects").filter((p) => p.active !== false);
+  const projects = myProjects(data, currentUserId);
   const floors = projectFloors(data, selProjectId);
   const units = floorUnits(data, selProjectId, selFloorId);
   const unitStages = trackStages(data, selProjectId, "unit");
@@ -131,8 +142,9 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
   const unitSearchMatches = (() => {
     const ql = unitSearchQ.trim().toLowerCase();
     if (!ql) return [];
+    const allowedProjectIds = new Set(projects.map((p) => p.id));
     return coll(data, "units")
-      .filter((u) => u.active !== false && (u.name + " " + u.code).toLowerCase().includes(ql))
+      .filter((u) => u.active !== false && allowedProjectIds.has(u.projectId) && (u.name + " " + u.code).toLowerCase().includes(ql))
       .slice(0, 8);
   })();
 
@@ -164,7 +176,7 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
   // answers already exist, forcing a full refill from scratch every time.
   useEffect(() => {
     if (!form || !selUnitId || !mapped) return;
-    let restored: { rows: RowState[]; remarks?: string } | null = null;
+    let restored: { rows: RowState[]; remarks?: string; ownerPhoto?: Photo } | null = null;
     try {
       const raw = localStorage.getItem(draftKey(selUnitId, effStageId));
       if (raw) restored = JSON.parse(raw);
@@ -173,6 +185,7 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
     if (restored && restored.rows.length === items.length) {
       setRows(restored.rows);
       setRemarks(restored.remarks || "");
+      setOwnerPhoto(restored.ownerPhoto);
       return;
     }
 
@@ -187,11 +200,13 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
         }))
       );
       setRemarks(p.remarks || "");
+      setOwnerPhoto(p.ownerPhoto);
       return;
     }
 
     setRows(items.map((it) => ({ paramId: it.paramId, cells: {}, remark: "" })));
     setRemarks("");
+    setOwnerPhoto(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form, selUnitId, effStageId, effChecklistId]);
 
@@ -221,7 +236,7 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
     if (!form || !selUnitId) return;
     setSavingDraft(true);
     try {
-      localStorage.setItem(draftKey(selUnitId, effStageId), JSON.stringify({ rows, remarks }));
+      localStorage.setItem(draftKey(selUnitId, effStageId), JSON.stringify({ rows, remarks, ownerPhoto }));
       toast("Draft saved");
     } catch {
       toast("Couldn't save draft — browser storage unavailable");
@@ -255,12 +270,23 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
     setUploadingIdx(null);
   }
 
-  // Items flagged `evidence: true` in Masters ▸ Quality Checklist need a
-  // photo attached before this can be submitted — previously that flag was
-  // set-and-forget (RecordModal.tsx wrote it, nothing ever read it back).
+  async function onOwnerPhotoPicked(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploadingOwnerPhoto(true);
+    const photo = await uploadPhoto(file, "qc", effUnitName + " · Owner");
+    setOwnerPhoto(photo);
+    setUploadingOwnerPhoto(false);
+  }
+
+  // Every item on this checklist needs a photo attached before it can be
+  // submitted — not just ones flagged `evidence: true` in Masters ▸ Quality
+  // Checklist.
   const missingEvidence = items
     .map((it, i) => ({ it, row: rows[i] }))
-    .find(({ it, row }) => it.evidence && row && aggregateResult(row) !== "na" && !row.photo);
+    .find(({ it, row }) => row && aggregateResult(row) !== "na" && !row.photo);
+  const missingOwnerPhoto = selStageKey === "owner" && !ownerPhoto;
 
   async function submit() {
     if (!form) return;
@@ -271,6 +297,10 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
     if (missingEvidence) {
       const param = byId(coll(data, "qparams"), missingEvidence.it.paramId) as QParam | null;
       toast(`"${param?.name || "This item"}" needs a photo before you can submit`);
+      return;
+    }
+    if (missingOwnerPhoto) {
+      toast("A photo of the owner is required before submitting Owner Possession");
       return;
     }
     setSubmitting(true);
@@ -292,12 +322,16 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
       };
     });
     await submitChecklist("unit", selUnitId, effStageId, effChecklistId, results);
-    // Additive only — a free-text note alongside the pass/fail results,
-    // stored on the same progress record. submitChecklist()'s own `note`
-    // field is reserved for the auto-generated fail summary, so this is a
-    // separate key rather than overwriting it.
-    if (remarks.trim()) {
-      await apply([{ op: "progress", key: pkey(selUnitId, effStageId), patch: { remarks: remarks.trim() } }]);
+    // Additive only — a free-text note (and, for Owner Possession, the
+    // owner's photo) alongside the pass/fail results, stored on the same
+    // progress record. submitChecklist()'s own `note` field is reserved
+    // for the auto-generated fail summary, so these are separate keys
+    // rather than overwriting it.
+    const extraPatch: { remarks?: string; ownerPhoto?: Photo } = {};
+    if (remarks.trim()) extraPatch.remarks = remarks.trim();
+    if (selStageKey === "owner" && ownerPhoto) extraPatch.ownerPhoto = ownerPhoto;
+    if (Object.keys(extraPatch).length > 0) {
+      await apply([{ op: "progress", key: pkey(selUnitId, effStageId), patch: extraPatch }]);
     }
     try { localStorage.removeItem(draftKey(selUnitId, effStageId)); } catch { /* ignore */ }
     setSubmitting(false);
@@ -315,13 +349,17 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
       panelClassName="sharp-panel"
       footer={
         form && (
-          <>
-            <button className="btn btn-secondary" onClick={onDone} disabled={submitting || savingDraft}>Cancel</button>
-            <button className="btn btn-secondary" onClick={saveDraft} disabled={submitting || !mapped}>{savingDraft ? "Saving…" : "Save Draft"}</button>
-            <button className="btn btn-primary" onClick={submit} disabled={savingDraft || !mapped}>
-              {submitting ? "Submitting…" : "Submit " + (selStageKey === "internal" ? "Internal Possession" : "Owner Possession")}
-            </button>
-          </>
+          form.readOnly ? (
+            <button className="btn btn-secondary" onClick={onDone}>Close</button>
+          ) : (
+            <>
+              <button className="btn btn-secondary" onClick={onDone} disabled={submitting || savingDraft}>Cancel</button>
+              <button className="btn btn-secondary" onClick={saveDraft} disabled={submitting || !mapped}>{savingDraft ? "Saving…" : "Save Draft"}</button>
+              <button className="btn btn-primary" onClick={submit} disabled={savingDraft || !mapped}>
+                {submitting ? "Submitting…" : "Submit " + (selStageKey === "internal" ? "Internal Possession" : "Owner Possession")}
+              </button>
+            </>
+          )
         )
       }
     >
@@ -342,7 +380,12 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
               <input
                 className="input"
                 placeholder="Type a unit name or code…"
-                value={unitSearchQ}
+                // Reflects whichever unit is currently selected (auto-filled
+                // or picked) when not actively typing a new search — so this
+                // box doesn't sit blank right after a unit's already chosen
+                // below.
+                value={unitSearchQ || effUnitName}
+                onFocus={(e) => { if (!unitSearchQ) e.target.select(); }}
                 onChange={(e) => setUnitSearchQ(e.target.value)}
               />
               {unitSearchMatches.length > 0 && (
@@ -426,6 +469,11 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
             </div>
           ) : (
           <>
+          {form.readOnly && (
+            <div className="card card-pad" style={{ marginBottom: 18, background: "var(--bg-subtle)", fontSize: 12.5, color: "var(--text-muted)" }}>
+              👁 Read-only — showing what was submitted. You don't have edit access for this checklist.
+            </div>
+          )}
           <div className="micro-label" style={{ marginBottom: 8 }}>POSSESSION CHECKLIST</div>
           <div className="card card-pad" style={{ marginBottom: 18 }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, fontWeight: 700, marginBottom: 4 }}>
@@ -456,10 +504,10 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
                       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap", marginBottom: 8 }}>
                         <div style={{ fontSize: 13, fontWeight: 700, flex: 1, minWidth: 160 }}>{param.name}</div>
                         <div style={{ display: "flex", gap: 6 }}>
-                          <button type="button" className={"btn btn-sm " + (agg === "pass" ? "btn-primary" : "btn-secondary")} onClick={() => setAllCells(i, "pass")}>Pass</button>
-                          <button type="button" className={"btn btn-sm " + (agg === "fail" ? "btn-danger" : "btn-secondary")} onClick={() => setAllCells(i, "fail")}>Fail</button>
+                          <button type="button" disabled={form.readOnly} className={"btn btn-sm " + (agg === "pass" ? "btn-primary" : "btn-secondary")} onClick={() => setAllCells(i, "pass")}>Pass</button>
+                          <button type="button" disabled={form.readOnly} className={"btn btn-sm " + (agg === "fail" ? "btn-danger" : "btn-secondary")} onClick={() => setAllCells(i, "fail")}>Fail</button>
                           {item.mandatory === false && (
-                            <button type="button" className={"btn btn-sm " + (agg === "na" ? "btn-primary" : "btn-secondary")} onClick={() => setAllCells(i, "na")}>N/A</button>
+                            <button type="button" disabled={form.readOnly} className={"btn btn-sm " + (agg === "na" ? "btn-primary" : "btn-secondary")} onClick={() => setAllCells(i, "na")}>N/A</button>
                           )}
                         </div>
                       </div>
@@ -467,8 +515,9 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
                       {/* One cell per room — tap cycles blank → Pass → Fail →
                           N/A → blank. Matches the printed form's per-room
                           grid; a room that doesn't apply to this unit is
-                          simply left blank, same as on paper. */}
-                      <div style={{ display: "flex", gap: 4, overflowX: "auto", paddingBottom: 4 }}>
+                          simply left blank, same as on paper. Read-only mode
+                          just shows whatever's already there — no cycling. */}
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                         {ROOMS.map((room) => {
                           const v = row.cells[room];
                           const bg = v === "pass" ? "var(--color-pass, #22c55e)" : v === "fail" ? "var(--color-fail, #ef4444)" : v === "na" ? "var(--bg-subtle)" : "transparent";
@@ -477,14 +526,16 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
                             <button
                               key={room}
                               type="button"
+                              disabled={form.readOnly}
                               onClick={() => cycleCell(i, room, item.mandatory === false)}
                               title={room}
                               style={{
-                                flex: "0 0 auto", width: 46, height: 32, borderRadius: 6,
+                                flex: "0 0 auto", width: 68, height: 44, borderRadius: 8,
                                 border: v ? "none" : "1px dashed var(--border)",
                                 background: bg, color: fg,
-                                fontSize: 9.5, fontWeight: 700, lineHeight: 1.15,
-                                cursor: "pointer", padding: "2px 3px"
+                                fontSize: 12, fontWeight: 700, lineHeight: 1.2,
+                                cursor: form.readOnly ? "default" : "pointer", padding: "4px 5px",
+                                opacity: form.readOnly && !v ? 0.5 : 1
                               }}
                             >
                               {v === "pass" ? "✓" : v === "fail" ? "✕" : v === "na" ? "N/A" : ROOM_SHORT[room]}
@@ -493,20 +544,23 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
                         })}
                       </div>
 
-                      {item.evidence && agg !== "na" && (
+                      {agg !== "na" && (row.photo || !form.readOnly) && (
                         <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
-                          <button
-                            type="button"
-                            className={"btn btn-sm " + (row.photo ? "btn-secondary" : "btn-danger")}
-                            onClick={() => requestPhoto(i)}
-                            disabled={uploadingIdx === i}
-                          >
-                            {uploadingIdx === i ? "Uploading…" : row.photo ? "📷 Retake photo" : "📸 Photo required"}
-                          </button>
-                          {row.photo && <img src={row.photo.url} style={{ width: 36, height: 36, borderRadius: 6, objectFit: "cover" }} />}
+                          {!form.readOnly && (
+                            <button
+                              type="button"
+                              className={"btn btn-sm " + (row.photo ? "btn-secondary" : "btn-danger")}
+                              onClick={() => requestPhoto(i)}
+                              disabled={uploadingIdx === i}
+                            >
+                              {uploadingIdx === i ? "Uploading…" : row.photo ? "📷 Retake photo" : "📸 Photo required"}
+                            </button>
+                          )}
+                          {row.photo && <img src={row.photo.url} onClick={() => window.open(row.photo!.url, "_blank")} style={{ width: form.readOnly ? 64 : 36, height: form.readOnly ? 64 : 36, borderRadius: 6, objectFit: "cover", cursor: "pointer" }} />}
+                          {form.readOnly && !row.photo && <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>No photo attached</span>}
                         </div>
                       )}
-                      {agg === "fail" && (
+                      {(agg === "fail" && (row.remark || !form.readOnly)) && (
                         <div style={{ marginTop: 8 }}>
                           <label style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase" }}>Remarks</label>
                           <input
@@ -514,6 +568,7 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
                             style={{ marginTop: 4 }}
                             placeholder="What's wrong, and what needs to happen before this passes"
                             value={row.remark}
+                            readOnly={form.readOnly}
                             onChange={(e) => setRow(i, { remark: e.target.value })}
                           />
                         </div>
@@ -533,10 +588,34 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
                 rows={3}
                 placeholder="Any additional notes for this possession checklist…"
                 value={remarks}
+                readOnly={form.readOnly}
                 onChange={(e) => setRemarks(e.target.value)}
               />
             </div>
           </div>
+
+          {/* Owner's photo — required only on Owner Possession (STG-HOO),
+              captured last, as proof the actual owner was present for the
+              handover. Separate from any per-item evidence photos above. */}
+          {selStageKey === "owner" && (
+            <div style={{ marginBottom: 18 }}>
+              <div className="micro-label" style={{ marginBottom: 8 }}>OWNER PHOTO</div>
+              <div className="card card-pad" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                {!form.readOnly && (
+                  <button
+                    type="button"
+                    className={"btn btn-sm " + (ownerPhoto ? "btn-secondary" : "btn-danger")}
+                    onClick={() => ownerPhotoFileRef.current?.click()}
+                    disabled={uploadingOwnerPhoto}
+                  >
+                    {uploadingOwnerPhoto ? "Uploading…" : ownerPhoto ? "📷 Retake photo" : "📸 Photo required"}
+                  </button>
+                )}
+                {ownerPhoto && <img src={ownerPhoto.url} onClick={() => window.open(ownerPhoto.url, "_blank")} style={{ width: 48, height: 48, borderRadius: 6, objectFit: "cover", cursor: "pointer" }} />}
+                {form.readOnly && !ownerPhoto && <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>No photo attached</span>}
+              </div>
+            </div>
+          )}
 
           <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
             Any item marked Fail automatically raises a snag for rework.
@@ -546,6 +625,10 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
           <input
             type="file" accept="image/*" capture="environment" ref={fileRef} style={{ display: "none" }}
             onChange={onPhotoPicked}
+          />
+          <input
+            type="file" accept="image/*" capture="environment" ref={ownerPhotoFileRef} style={{ display: "none" }}
+            onChange={onOwnerPhotoPicked}
           />
         </>
       )}

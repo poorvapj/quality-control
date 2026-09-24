@@ -9,14 +9,18 @@ import "./Sidebar.css";
 interface NavItem { key: TabKey; icon: string; label: string; badge?: number; children?: NavItem[] }
 
 export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: { open: boolean; collapsed: boolean; onNavigate: () => void }) {
-  const { activeTab, setActiveTab, data, currentUserId, currentProjectId } = useApp();
+  const { activeTab, setActiveTab, data, currentUserId, currentProjectId, myRole } = useApp();
   const isAdmin = currentUserId === "U-ADMIN";
+  const isDri = myRole() === "DRI";
+  const isCrm = myRole() === "CRM";
   const canViewTeam = isAdmin || hasModuleGrant(data, currentUserId, "team", "view") || coll(data, "teams").some((t) => t.leaderId === currentUserId);
   const canViewMasters = isAdmin || hasModuleGrant(data, currentUserId, "masters", "view");
   const canViewBackups = isAdmin || hasModuleGrant(data, currentUserId, "backups", "view");
   const canViewAuditLog = isAdmin || hasModuleGrant(data, currentUserId, "auditLog", "view");
-  const canViewDpr = isAdmin || hasModuleGrant(data, currentUserId, "dpr", "view");
-  const canViewDrawingRequests = isAdmin || hasModuleGrant(data, currentUserId, "drawingRequests", "view");
+  // DRI always sees Daily Progress Report and Drawing Requests — the
+  // Permission Matrix grant is only needed for other roles.
+  const canViewDpr = isAdmin || isDri || hasModuleGrant(data, currentUserId, "dpr", "view");
+  const canViewDrawingRequests = isAdmin || isDri || hasModuleGrant(data, currentUserId, "drawingRequests", "view");
 
   // Icon-only collapse only ever makes sense on desktop. A stale
   // collapsed=true from localStorage (e.g. set on desktop, then this page
@@ -41,7 +45,9 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
     {
       label: "Execution",
       items: [
-        { key: "work", icon: "work", label: "My Work", badge: workBadge },
+        // CRM has no stage/gate work of its own to release/acknowledge —
+        // My Work would only ever show empty for them.
+        ...(!isCrm ? [{ key: "work" as TabKey, icon: "work", label: "My Work", badge: workBadge }] : []),
         { key: "board", icon: "board", label: "Tower Board" },
         {
           key: "handoverInternal", icon: "handover", label: "Handover Checklist",

@@ -728,7 +728,13 @@ async function assertOpAllowed(op, session) {
         stageId ? mongoDb.collection("stages").findOne({ id: stageId }, { projection: { role: 1 } }) : null
       ]);
       const stageRole = stage ? stage.role : null;
-      if (role !== "ADMIN" && role !== "DRI" && (!stageRole || role !== stageRole)) {
+      // Owner Possession (STG-HOO) is ADMIN/CRM only — no DRI bypass,
+      // unlike every other stage — mirrors Drawer.tsx/HandoverChecklist.tsx.
+      const isOwnerPossession = stageId === "STG-HOO";
+      const allowed = isOwnerPossession
+        ? role === "ADMIN" || role === "CRM"
+        : role === "ADMIN" || role === "DRI" || (!!stageRole && role === stageRole);
+      if (!allowed) {
         const e = new Error("Not authorized to act on this stage");
         e.status = 403;
         throw e;

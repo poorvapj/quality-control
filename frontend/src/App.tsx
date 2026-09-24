@@ -25,7 +25,7 @@ import { hasModuleGrant } from "./shared/permissionMatrix";
 import { coll } from "./shared/rules";
 
 export default function App() {
-  const { loggedIn, currentUserId, activeTab, data } = useApp();
+  const { loggedIn, currentUserId, activeTab, data, myRole } = useApp();
 
   if (!loggedIn) return <><LoginScreen /><Toast /></>;
 
@@ -58,6 +58,7 @@ export default function App() {
   // Matrix itself stays admin-only, since granting it would let a
   // non-admin grant themselves further access.
   const isTeamLeader = coll(data, "teams").some((t) => t.leaderId === currentUserId);
+  const isDri = myRole() === "DRI";
   const restrictedTab =
     ((activeTab === "team" && !hasModuleGrant(data, currentUserId, "team", "view") && !isTeamLeader) ||
       (activeTab === "masters" && !hasModuleGrant(data, currentUserId, "masters", "view")) ||
@@ -68,8 +69,10 @@ export default function App() {
       // would let a read-only-granted user reach a create screen they
       // can't otherwise act from.
       (activeTab === "addUser" && !hasModuleGrant(data, currentUserId, "masters", "edit")) ||
-      (activeTab === "dpr" && !hasModuleGrant(data, currentUserId, "dpr", "view")) ||
-      (activeTab === "drawingRequests" && !hasModuleGrant(data, currentUserId, "drawingRequests", "view")) ||
+      // DRI always sees Daily Progress Report and Drawing Requests — the
+      // Permission Matrix grant is only needed for other roles.
+      (activeTab === "dpr" && !isDri && !hasModuleGrant(data, currentUserId, "dpr", "view")) ||
+      (activeTab === "drawingRequests" && !isDri && !hasModuleGrant(data, currentUserId, "drawingRequests", "view")) ||
       activeTab === "permissionMatrix") &&
     !isAdmin;
 

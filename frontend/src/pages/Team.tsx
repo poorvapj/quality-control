@@ -1,7 +1,7 @@
 import React from "react";
 import { useApp } from "../context/AppContext";
 import { ROLES } from "../services/config";
-import { coll } from "../shared/rules";
+import { coll, myProjects } from "../shared/rules";
 import { hasModuleGrant } from "../shared/permissionMatrix";
 import NavIcon from "../components/NavIcon";
 
@@ -24,7 +24,7 @@ export default function Team() {
   // `currentProjectId` alone silently hid a person's work on every other
   // project, which is exactly why someone could show "0 work · 0 snags"
   // here while genuinely having open items elsewhere.
-  const projectIds = coll(data, "projects").filter((p) => p.active !== false).map((p) => p.id);
+  const projectIds = myProjects(data, currentUserId).map((p) => p.id);
   const rows = users
     .map((u) => {
       const a = coll(data, "assignments").filter((x) => x.assignedTo === u.id && x.status !== "Done" && projectIds.includes(x.projectId));

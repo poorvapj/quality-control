@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
-import { coll } from "../shared/rules";
+import { coll, myProjects } from "../shared/rules";
 import { nextId } from "../shared/helpers";
 import { buildEventOp } from "../shared/eventLog";
 import { WORK_CATEGORIES } from "../services/config";
@@ -13,7 +13,7 @@ function slugCode(name: string): string {
 
 export default function DprForm({ isPublic, onDone }: { isPublic: boolean; onDone: (id: string) => void }) {
   const { data, apply, toast, currentUserId } = useApp();
-  const projects = coll(data, "projects").filter((p) => p.active !== false);
+  const projects = isPublic ? coll(data, "projects").filter((p) => p.active !== false) : myProjects(data, currentUserId);
   const users = coll(data, "users").filter((u) => u.active !== false);
 
   const [projectId, setProjectId] = useState("");
