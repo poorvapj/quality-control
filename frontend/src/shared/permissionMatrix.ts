@@ -1,5 +1,5 @@
-import type { BoardData, ModuleAction } from "../types";
-import { coll } from "./rules";
+import type { BoardData, ModuleAction, Role } from "../types";
+import { coll, byId } from "./rules";
 
 /* Per-module admin-grantable actions — drives both pages/PermissionMatrix.tsx's
    UI (which toggles are shown per module) and every additive gate check
@@ -30,18 +30,70 @@ export function getModuleGrant(
   return rec?.grants?.[moduleKey] || null;
 }
 
+/* Baseline grants every user of this role gets automatically, without
+   needing an explicit per-user Permission Matrix record — matches what
+   was manually granted to a representative user of each role (Dayansh
+   Shrivastava for CIVIL/SUPERVISOR, Deepti Dixit for DRI) and is now the
+   standard for everyone in that role. An explicit per-user grant (saved
+   via pages/PermissionMatrix.tsx) always overrides this, in either
+   direction — this is only the fallback when nothing's been explicitly
+   set for that module+action yet. */
+export const DEFAULT_ROLE_GRANTS: Partial<Record<Role, Record<string, ModuleAction[]>>> = {
+  CIVIL: {
+    dashboard: ["view"], myWork: ["view"], towerBoard: ["view"],
+    handoverInternal: ["view", "edit"],
+    snags: ["view", "create", "edit", "delete"],
+    team: ["view"],
+    dpr: ["view", "create"]
+  },
+  SUPERVISOR: {
+    dashboard: ["view"], myWork: ["view"], towerBoard: ["view"],
+    handoverInternal: ["view", "edit"],
+    snags: ["view", "create", "edit", "delete"],
+    team: ["view"],
+    dpr: ["view", "create"]
+  },
+  DRI: {
+    dashboard: ["view"], myWork: ["view"], towerBoard: ["view"],
+    handoverInternal: ["view", "edit"],
+    snags: ["view", "create", "edit", "delete"],
+    team: ["view", "edit"],
+    dpr: ["view", "create"],
+    drawingRequests: ["view", "create", "edit"]
+  }
+};
+
+/* Full grants object for a role's baseline, in the same shape stored on a
+   ModuleGrant record — used by PermissionMatrix.tsx to pre-fill toggles
+   for a user who has no explicit record yet, so the defaults are visibly
+   ON rather than only working invisibly. */
+export function defaultGrantsForRole(role: Role | null | undefined): Record<string, Partial<Record<ModuleAction, boolean>>> {
+  const def = role ? DEFAULT_ROLE_GRANTS[role] : undefined;
+  if (!def) return {};
+  const out: Record<string, Partial<Record<ModuleAction, boolean>>> = {};
+  for (const [moduleKey, actions] of Object.entries(def)) {
+    out[moduleKey] = Object.fromEntries(actions.map((a) => [a, true]));
+  }
+  return out;
+}
+
 /* Admin (U-ADMIN) always has every permission — this is an unconditional
    bypass, matching every other permission mechanism in the app
    (canActOnStage, assertOpAllowed). Everyone else's grant is ADDITIVE: it
    only ever unlocks extra access beyond myRole()==="ADMIN"/canAct(), never
    revokes anything a Role already gives — call sites use
-   `existingCheck || hasModuleGrant(...)`, never as a sole gate. */
+   `existingCheck || hasModuleGrant(...)`, never as a sole gate. Falls back
+   to DEFAULT_ROLE_GRANTS only when nothing's been explicitly saved for
+   this exact module+action. */
 export function hasModuleGrant(
   data: BoardData | null, userId: string | null, moduleKey: string, action: ModuleAction
 ): boolean {
   if (userId === "U-ADMIN") return true;
   const g = getModuleGrant(data, userId, moduleKey);
-  return !!g?.[action];
+  if (g && action in g) return !!g[action];
+  const user = byId(coll(data, "users"), userId);
+  const def = user ? DEFAULT_ROLE_GRANTS[user.role]?.[moduleKey] : undefined;
+  return !!def?.includes(action);
 }
 
 export function countGrantedActions(grants: Record<string, Partial<Record<ModuleAction, boolean>>>): number {

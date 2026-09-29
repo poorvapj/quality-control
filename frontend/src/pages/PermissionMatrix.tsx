@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, byId } from "../shared/rules";
 import { buildEventOp } from "../shared/eventLog";
-import { countGrantedActions } from "../shared/permissionMatrix";
+import { countGrantedActions, defaultGrantsForRole } from "../shared/permissionMatrix";
 import type { ModuleAction, ModuleGrant } from "../types";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
@@ -16,8 +16,13 @@ export default function PermissionMatrix() {
   const [userId, setUserId] = useState(users[0]?.id || "");
   const existing = coll(data, "moduleGrants").find((g) => g.userId === userId) || null;
 
+  // A user with no explicit Permission Matrix record yet still starts
+  // pre-filled with their role's default grants (DEFAULT_ROLE_GRANTS) —
+  // makes the baseline visible as ON toggles instead of only working
+  // invisibly via hasModuleGrant()'s fallback. Saving from here always
+  // writes an explicit record, same as before.
   const [roleLabel, setRoleLabel] = useState(existing?.roleLabel || "");
-  const [grants, setGrants] = useState<Record<string, Partial<Record<ModuleAction, boolean>>>>(existing?.grants || {});
+  const [grants, setGrants] = useState<Record<string, Partial<Record<ModuleAction, boolean>>>>(existing?.grants || defaultGrantsForRole(byId(users, userId)?.role));
   const [loadedFor, setLoadedFor] = useState(userId);
 
   // Re-sync local draft when the selected user changes (not on every data
@@ -25,7 +30,7 @@ export default function PermissionMatrix() {
   if (loadedFor !== userId) {
     const rec = coll(data, "moduleGrants").find((g) => g.userId === userId) || null;
     setRoleLabel(rec?.roleLabel || "");
-    setGrants(rec?.grants || {});
+    setGrants(rec?.grants || defaultGrantsForRole(byId(users, userId)?.role));
     setLoadedFor(userId);
   }
 
