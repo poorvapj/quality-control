@@ -195,6 +195,8 @@ function seedQParams() {
     ["QP-H26", "AC Pipelines with drains (if Provided)",              "AC Pipelines","Visual", "-", "Minor"],
     ["QP-H27", "Proper slope or tiles Damage",                        "Terrace",     "Visual", "-", "Minor"],
     ["QP-H28", "Proper Grouting",                                     "Terrace",     "Visual", "-", "Minor"],
+    ["QP-H29", "Check for tile hollowness",                           "Flooring",    "Visual", "-", "Minor"],
+    ["QP-H30", "Check for Hollowness On Wall Tiles",                  "Wall",        "Visual", "-", "Minor"],
 
     // Owner Handover Sign-off — customer-facing wording, matches the
     // printed handover sheet's orange (owner) column. Filled by the DRI
@@ -235,7 +237,8 @@ function seedChecklists() {
     ["CHK-HOI", "Internal Handover Checklist",  "STG-HOI",
       ["QP-H01","QP-H02","QP-H03","QP-H04","QP-H05","QP-H06","QP-H07","QP-H08","QP-H09","QP-H10",
        "QP-H11","QP-H12","QP-H13","QP-H14","QP-H15","QP-H16","QP-H17","QP-H18","QP-H19","QP-H20",
-       "QP-H21","QP-H22","QP-H23","QP-H24","QP-H25","QP-H26","QP-H27","QP-H28"]],
+       "QP-H21","QP-H22","QP-H23","QP-H24","QP-H25","QP-H26","QP-H27","QP-H28",
+       "QP-H29","QP-H30"]],
     ["CHK-HOO", "Owner Handover Checklist",     "STG-HOO",
       ["QP-O01","QP-O02","QP-O03","QP-O04","QP-O05","QP-O06","QP-O07","QP-O08",
        "QP-O09","QP-O10","QP-O11","QP-O12","QP-O13","QP-O14"]]

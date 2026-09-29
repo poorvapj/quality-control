@@ -31,13 +31,13 @@ type ActiveForm = PossessionActiveForm;
    form — not a popup, not a plain card. */
 export default function HandoverChecklist({ initialTab }: { initialTab?: "internal" | "owner" }) {
   const { data, currentProjectId, setCurrentProjectId, myRole, currentUserId } = useApp();
-  // Same pattern as TowerBoard.tsx: this page owns its own Project filter
-  // instead of only trusting whatever the global currentProjectId happens
-  // to be (set from Dashboard/TowerBoard) — a DRI landing here directly
-  // shouldn't have to switch project somewhere else first.
+  // This page owns its own Project filter and starts unset ("Choose") —
+  // never silently defaulting to whatever project happens to be globally
+  // selected elsewhere (Dashboard/Tower Board), same reasoning as Raise
+  // Snag/Assign Work's Project field.
   const allProjects = myProjects(data, currentUserId);
   const [viewProjectId, setViewProjectId] = useState("");
-  const projectId = viewProjectId || currentProjectId;
+  const projectId = viewProjectId;
   const project = byId(allProjects, projectId);
 
   const floors = projectFloors(data, projectId);

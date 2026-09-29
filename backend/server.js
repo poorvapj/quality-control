@@ -52,6 +52,7 @@
 require("dotenv").config();
 
 const http = require("http");
+const zlib = require("zlib");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
@@ -529,10 +530,20 @@ async function getRev() {
 }
 
 async function getState() {
+  // Every collection fetch here is an independent round-trip to Atlas —
+  // awaiting them one at a time in a loop made total load time the SUM of
+  // every collection's latency instead of the max, which is most of why
+  // sign-in felt slow (this one call blocks the whole app on first load).
+  // Promise.all runs them concurrently instead.
+  const [collResults, progressDocs, events, rev] = await Promise.all([
+    Promise.all(COLLECTIONS.map((c) => mongoDb.collection(c).find({}, { projection: { _id: 0 } }).toArray())),
+    mongoDb.collection("progress").find({}).toArray(),
+    mongoDb.collection("events").find({}, { projection: { _id: 0 } }).sort({ ts: -1 }).limit(MAX_EVENTS).toArray(),
+    getRev()
+  ]);
+
   const data = {};
-  for (const c of COLLECTIONS) {
-    data[c] = await mongoDb.collection(c).find({}, { projection: { _id: 0 } }).toArray();
-  }
+  COLLECTIONS.forEach((c, i) => { data[c] = collResults[i]; });
   // Password hashes must never leave the server, even to an authenticated
   // browser — /api/state is otherwise a full generic dump of every collection.
   if (data.users) {
@@ -541,19 +552,12 @@ async function getState() {
       return rest;
     });
   }
-  const progressDocs = await mongoDb.collection("progress").find({}).toArray();
   data.progress = {};
   for (const p of progressDocs) {
     const { _id, ...rest } = p;
     data.progress[_id] = rest;
   }
-  data.events = await mongoDb
-    .collection("events")
-    .find({}, { projection: { _id: 0 } })
-    .sort({ ts: -1 })
-    .limit(MAX_EVENTS)
-    .toArray();
-  const rev = await getRev();
+  data.events = events;
   return { rev, data };
 }
 
@@ -1142,6 +1146,24 @@ async function handleApi(req, res, urlPath) {
   }
   if (req.method === "GET" && urlPath === "/api/state") {
     const state = await getState();
+    // The full board snapshot is the largest response this API ever sends
+    // (thousands of units/progress/events records) — gzip it when the
+    // client supports it (every browser does) instead of shipping raw JSON,
+    // which was a big share of how long sign-in felt on slower connections.
+    const body = JSON.stringify(state);
+    const acceptsGzip = String(req.headers["accept-encoding"] || "").includes("gzip");
+    if (acceptsGzip) {
+      const compressed = await new Promise((resolve, reject) =>
+        zlib.gzip(body, (err, buf) => (err ? reject(err) : resolve(buf)))
+      );
+      res.writeHead(200, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Content-Encoding": "gzip",
+        "Content-Length": compressed.length,
+        "Cache-Control": "no-store"
+      });
+      return res.end(compressed);
+    }
     return sendJson(res, 200, state);
   }
   if (req.method === "POST" && urlPath === "/api/login") {

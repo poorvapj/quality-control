@@ -161,8 +161,21 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
   const lastSubmitted = mapped && selUnitId ? prog(data, selUnitId, effStageId) : null;
 
   const chk = mapped ? byId(coll(data, "checklists"), effChecklistId) : null;
-  const items: ChecklistItem[] = chk?.items || [];
+  const items: ChecklistItem[] = (chk?.items || [])
+    .slice()
+    .sort((a, b) => {
+      const seqA = a.seq ?? Number(String(a.paramId).match(/\d+$/)?.[0] ?? 9999);
+      const seqB = b.seq ?? Number(String(b.paramId).match(/\d+$/)?.[0] ?? 9999);
 
+      return seqA - seqB;
+    });
+  console.log(
+    "FINAL ORDER:",
+    items.map((it) => {
+      const param = byId(coll(data, "qparams"), it.paramId);
+      return `${it.paramId} | itemSeq=${it.seq} | paramSeq=${param?.seq}`;
+    }).join("\n")
+  );
   // A draft is just this in-progress form state, kept client-side
   // (localStorage) rather than written to `progress` — submitChecklist()
   // is the only thing that actually finalizes a pass/fail (and can raise a
@@ -280,13 +293,15 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
     setUploadingOwnerPhoto(false);
   }
 
-  // Every item on this checklist needs a photo attached before it can be
-  // submitted — not just ones flagged `evidence: true` in Masters ▸ Quality
-  // Checklist.
-  const missingEvidence = items
-    .map((it, i) => ({ it, row: rows[i] }))
-    .find(({ it, row }) => row && aggregateResult(row) !== "na" && !row.photo);
-  const missingOwnerPhoto = selStageKey === "owner" && !ownerPhoto;
+  // Every item on the Internal Possession checklist needs a photo attached
+  // before it can be submitted — not just ones flagged `evidence: true` in
+  // Masters ▸ Quality Checklist. Owner/external possession is verbal
+  // (filled from what the customer says) and never requires a per-item
+  // photo — only the owner's own photo at the end (missingOwnerPhoto).
+  const missingEvidence = selStageKey === "internal"
+    ? items.map((it, i) => ({ it, row: rows[i] })).find(({ it, row }) => row && aggregateResult(row) !== "na" && !row.photo)
+    : undefined;
+
 
   async function submit() {
     if (!form) return;
@@ -299,10 +314,7 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
       toast(`"${param?.name || "This item"}" needs a photo before you can submit`);
       return;
     }
-    if (missingOwnerPhoto) {
-      toast("A photo of the owner is required before submitting Owner Possession");
-      return;
-    }
+
     setSubmitting(true);
     // Roll each item's per-room cells into the single pass/fail/na value
     // submitChecklist()/the rest of the app expects — the full room-level
@@ -468,159 +480,159 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
                 : "Pick a Project, Floor, and Unit above to continue."}
             </div>
           ) : (
-          <>
-          {form.readOnly && (
-            <div className="card card-pad" style={{ marginBottom: 18, background: "var(--bg-subtle)", fontSize: 12.5, color: "var(--text-muted)" }}>
-              👁 Read-only — showing what was submitted. You don't have edit access for this checklist.
-            </div>
-          )}
-          <div className="micro-label" style={{ marginBottom: 8 }}>POSSESSION CHECKLIST</div>
-          <div className="card card-pad" style={{ marginBottom: 18 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, fontWeight: 700, marginBottom: 4 }}>
-              <span>Progress</span>
-              <span>{answeredCount} / {items.length}</span>
-            </div>
-            <div className="workload-bar">
-              <div className="workload-fill" style={{ width: pct + "%" }} />
-            </div>
-          </div>
+            <>
+              {form.readOnly && (
+                <div className="card card-pad" style={{ marginBottom: 18, background: "var(--bg-subtle)", fontSize: 12.5, color: "var(--text-muted)" }}>
+                  👁 Read-only — showing what was submitted. You don't have edit access for this checklist.
+                </div>
+              )}
+              <div className="micro-label" style={{ marginBottom: 8 }}>POSSESSION CHECKLIST</div>
+              <div className="card card-pad" style={{ marginBottom: 18 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, fontWeight: 700, marginBottom: 4 }}>
+                  <span>Progress</span>
+                  <span>{answeredCount} / {items.length}</span>
+                </div>
+                <div className="workload-bar">
+                  <div className="workload-fill" style={{ width: pct + "%" }} />
+                </div>
+              </div>
 
-          {groups.map((g) => (
-            <div key={g.category} style={{ marginBottom: 18 }}>
-              <div className="micro-label" style={{ marginBottom: 8 }}>{g.category}</div>
-              <div className="card card-pad">
-                {g.entries.map(({ item, param, i }, gi) => {
-                  const row = rows[i];
-                  if (!row) return null;
-                  const agg = aggregateResult(row);
-                  return (
-                    <div
-                      key={item.id}
-                      style={{
-                        padding: "10px 0",
-                        borderBottom: gi < g.entries.length - 1 ? "1px solid var(--border)" : "none"
-                      }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap", marginBottom: 8 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, flex: 1, minWidth: 160 }}>{param.name}</div>
-                        <div style={{ display: "flex", gap: 6 }}>
-                          <button type="button" disabled={form.readOnly} className={"btn btn-sm " + (agg === "pass" ? "btn-primary" : "btn-secondary")} onClick={() => setAllCells(i, "pass")}>Pass</button>
-                          <button type="button" disabled={form.readOnly} className={"btn btn-sm " + (agg === "fail" ? "btn-danger" : "btn-secondary")} onClick={() => setAllCells(i, "fail")}>Fail</button>
-                          {item.mandatory === false && (
-                            <button type="button" disabled={form.readOnly} className={"btn btn-sm " + (agg === "na" ? "btn-primary" : "btn-secondary")} onClick={() => setAllCells(i, "na")}>N/A</button>
-                          )}
-                        </div>
-                      </div>
+              {groups.map((g) => (
+                <div key={g.category} style={{ marginBottom: 18 }}>
+                  <div className="micro-label" style={{ marginBottom: 8 }}>{g.category}</div>
+                  <div className="card card-pad">
+                    {g.entries.map(({ item, param, i }, gi) => {
+                      const row = rows[i];
+                      if (!row) return null;
+                      const agg = aggregateResult(row);
+                      return (
+                        <div
+                          key={item.id}
+                          style={{
+                            padding: "10px 0",
+                            borderBottom: gi < g.entries.length - 1 ? "1px solid var(--border)" : "none"
+                          }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap", marginBottom: 8 }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, flex: 1, minWidth: 160 }}>{param.name}</div>
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <button type="button" disabled={form.readOnly} className={"btn btn-sm " + (agg === "pass" ? "btn-primary" : "btn-secondary")} onClick={() => setAllCells(i, "pass")}>Pass</button>
+                              <button type="button" disabled={form.readOnly} className={"btn btn-sm " + (agg === "fail" ? "btn-danger" : "btn-secondary")} onClick={() => setAllCells(i, "fail")}>Fail</button>
+                              {item.mandatory === false && (
+                                <button type="button" disabled={form.readOnly} className={"btn btn-sm " + (agg === "na" ? "btn-primary" : "btn-secondary")} onClick={() => setAllCells(i, "na")}>N/A</button>
+                              )}
+                            </div>
+                          </div>
 
-                      {/* One cell per room — tap cycles blank → Pass → Fail →
+                          {/* One cell per room — tap cycles blank → Pass → Fail →
                           N/A → blank. Matches the printed form's per-room
                           grid; a room that doesn't apply to this unit is
                           simply left blank, same as on paper. Read-only mode
                           just shows whatever's already there — no cycling. */}
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                        {ROOMS.map((room) => {
-                          const v = row.cells[room];
-                          const bg = v === "pass" ? "var(--color-pass, #22c55e)" : v === "fail" ? "var(--color-fail, #ef4444)" : v === "na" ? "var(--bg-subtle)" : "transparent";
-                          const fg = v ? "#fff" : "var(--text-muted)";
-                          return (
-                            <button
-                              key={room}
-                              type="button"
-                              disabled={form.readOnly}
-                              onClick={() => cycleCell(i, room, item.mandatory === false)}
-                              title={room}
-                              style={{
-                                flex: "0 0 auto", width: 68, height: 44, borderRadius: 8,
-                                border: v ? "none" : "1px dashed var(--border)",
-                                background: bg, color: fg,
-                                fontSize: 12, fontWeight: 700, lineHeight: 1.2,
-                                cursor: form.readOnly ? "default" : "pointer", padding: "4px 5px",
-                                opacity: form.readOnly && !v ? 0.5 : 1
-                              }}
-                            >
-                              {v === "pass" ? "✓" : v === "fail" ? "✕" : v === "na" ? "N/A" : ROOM_SHORT[room]}
-                            </button>
-                          );
-                        })}
-                      </div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                            {ROOMS.map((room) => {
+                              const v = row.cells[room];
+                              const bg = v === "pass" ? "var(--color-pass, #22c55e)" : v === "fail" ? "var(--color-fail, #ef4444)" : v === "na" ? "var(--bg-subtle)" : "transparent";
+                              const fg = v ? "#fff" : "var(--text-muted)";
+                              return (
+                                <button
+                                  key={room}
+                                  type="button"
+                                  disabled={form.readOnly}
+                                  onClick={() => cycleCell(i, room, item.mandatory === false)}
+                                  title={room}
+                                  style={{
+                                    flex: "0 0 auto", width: 68, height: 44, borderRadius: 8,
+                                    border: v ? "none" : "1px dashed var(--border)",
+                                    background: bg, color: fg,
+                                    fontSize: 12, fontWeight: 700, lineHeight: 1.2,
+                                    cursor: form.readOnly ? "default" : "pointer", padding: "4px 5px",
+                                    opacity: form.readOnly && !v ? 0.5 : 1
+                                  }}
+                                >
+                                  {v === "pass" ? "✓" : v === "fail" ? "✕" : v === "na" ? "N/A" : ROOM_SHORT[room]}
+                                </button>
+                              );
+                            })}
+                          </div>
 
-                      {agg !== "na" && (row.photo || !form.readOnly) && (
-                        <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
-                          {!form.readOnly && (
-                            <button
-                              type="button"
-                              className={"btn btn-sm " + (row.photo ? "btn-secondary" : "btn-danger")}
-                              onClick={() => requestPhoto(i)}
-                              disabled={uploadingIdx === i}
-                            >
-                              {uploadingIdx === i ? "Uploading…" : row.photo ? "📷 Retake photo" : "📸 Photo required"}
-                            </button>
+                          {agg !== "na" && (row.photo || !form.readOnly) && (
+                            <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
+                              {!form.readOnly && (
+                                <button
+                                  type="button"
+                                  className={"btn btn-sm " + (row.photo ? "btn-secondary" : "btn-danger")}
+                                  onClick={() => requestPhoto(i)}
+                                  disabled={uploadingIdx === i}
+                                >
+                                  {uploadingIdx === i ? "Uploading…" : row.photo ? "📷 Retake photo" : "📸 Photo required"}
+                                </button>
+                              )}
+                              {row.photo && <img src={row.photo.url} onClick={() => window.open(row.photo!.url, "_blank")} style={{ width: form.readOnly ? 64 : 36, height: form.readOnly ? 64 : 36, borderRadius: 6, objectFit: "cover", cursor: "pointer" }} />}
+                              {form.readOnly && !row.photo && <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>No photo attached</span>}
+                            </div>
                           )}
-                          {row.photo && <img src={row.photo.url} onClick={() => window.open(row.photo!.url, "_blank")} style={{ width: form.readOnly ? 64 : 36, height: form.readOnly ? 64 : 36, borderRadius: 6, objectFit: "cover", cursor: "pointer" }} />}
-                          {form.readOnly && !row.photo && <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>No photo attached</span>}
+                          {(agg === "fail" && (row.remark || !form.readOnly)) && (
+                            <div style={{ marginTop: 8 }}>
+                              <label style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase" }}>Remarks</label>
+                              <input
+                                className="input"
+                                style={{ marginTop: 4 }}
+                                placeholder="What's wrong, and what needs to happen before this passes"
+                                value={row.remark}
+                                readOnly={form.readOnly}
+                                onChange={(e) => setRow(i, { remark: e.target.value })}
+                              />
+                            </div>
+                          )}
                         </div>
-                      )}
-                      {(agg === "fail" && (row.remark || !form.readOnly)) && (
-                        <div style={{ marginTop: 8 }}>
-                          <label style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase" }}>Remarks</label>
-                          <input
-                            className="input"
-                            style={{ marginTop: 4 }}
-                            placeholder="What's wrong, and what needs to happen before this passes"
-                            value={row.remark}
-                            readOnly={form.readOnly}
-                            onChange={(e) => setRow(i, { remark: e.target.value })}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+
+              <div style={{ marginBottom: 18 }}>
+                <div className="micro-label" style={{ marginBottom: 8 }}>REMARKS</div>
+                <div className="card card-pad">
+                  <textarea
+                    className="textarea"
+                    rows={3}
+                    placeholder="Any additional notes for this possession checklist…"
+                    value={remarks}
+                    readOnly={form.readOnly}
+                    onChange={(e) => setRemarks(e.target.value)}
+                  />
+                </div>
               </div>
-            </div>
-          ))}
 
-          <div style={{ marginBottom: 18 }}>
-            <div className="micro-label" style={{ marginBottom: 8 }}>REMARKS</div>
-            <div className="card card-pad">
-              <textarea
-                className="textarea"
-                rows={3}
-                placeholder="Any additional notes for this possession checklist…"
-                value={remarks}
-                readOnly={form.readOnly}
-                onChange={(e) => setRemarks(e.target.value)}
-              />
-            </div>
-          </div>
-
-          {/* Owner's photo — required only on Owner Possession (STG-HOO),
+              {/* Owner's photo — required only on Owner Possession (STG-HOO),
               captured last, as proof the actual owner was present for the
               handover. Separate from any per-item evidence photos above. */}
-          {selStageKey === "owner" && (
-            <div style={{ marginBottom: 18 }}>
-              <div className="micro-label" style={{ marginBottom: 8 }}>OWNER PHOTO</div>
-              <div className="card card-pad" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                {!form.readOnly && (
-                  <button
-                    type="button"
-                    className={"btn btn-sm " + (ownerPhoto ? "btn-secondary" : "btn-danger")}
-                    onClick={() => ownerPhotoFileRef.current?.click()}
-                    disabled={uploadingOwnerPhoto}
-                  >
-                    {uploadingOwnerPhoto ? "Uploading…" : ownerPhoto ? "📷 Retake photo" : "📸 Photo required"}
-                  </button>
-                )}
-                {ownerPhoto && <img src={ownerPhoto.url} onClick={() => window.open(ownerPhoto.url, "_blank")} style={{ width: 48, height: 48, borderRadius: 6, objectFit: "cover", cursor: "pointer" }} />}
-                {form.readOnly && !ownerPhoto && <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>No photo attached</span>}
-              </div>
-            </div>
-          )}
+              {selStageKey === "owner" && (
+                <div style={{ marginBottom: 18 }}>
+                  <div className="micro-label" style={{ marginBottom: 8 }}>OWNER PHOTO</div>
+                  <div className="card card-pad" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    {!form.readOnly && (
+                      <button
+                        type="button"
+                        className={"btn btn-sm " + (ownerPhoto ? "btn-secondary" : "btn-danger")}
+                        onClick={() => ownerPhotoFileRef.current?.click()}
+                        disabled={uploadingOwnerPhoto}
+                      >
+                        {uploadingOwnerPhoto ? "Uploading…" : ownerPhoto ? "📷 Retake photo" : "📸 Add owner photo"}
+                      </button>
+                    )}
+                    {ownerPhoto && <img src={ownerPhoto.url} onClick={() => window.open(ownerPhoto.url, "_blank")} style={{ width: 48, height: 48, borderRadius: 6, objectFit: "cover", cursor: "pointer" }} />}
+                    {form.readOnly && !ownerPhoto && <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>No photo attached</span>}
+                  </div>
+                </div>
+              )}
 
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
-            Any item marked Fail automatically raises a snag for rework.
-          </div>
-          </>
+              <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
+                Any item marked Fail automatically raises a snag for rework.
+              </div>
+            </>
           )}
           <input
             type="file" accept="image/*" capture="environment" ref={fileRef} style={{ display: "none" }}
