@@ -239,7 +239,11 @@ export default function HandoverChecklist({ initialTab }: { initialTab?: "intern
         </div>
       </Card>
 
-      {!mapped ? (
+      {!projectId ? (
+        <Card className="text-center text-[13px] text-[var(--text-muted)]">
+          Please select a project above to continue.
+        </Card>
+      ) : !mapped ? (
         <Card className="text-center text-[13px] text-[var(--text-muted)]">
           Internal Possession / Owner Possession stages aren't mapped for this project yet.
           Add them via <b>Masters ▸ Stage Mapping</b> (see STG-HOI / STG-HOO in Masters ▸ Stages).
