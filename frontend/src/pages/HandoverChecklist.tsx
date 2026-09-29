@@ -206,7 +206,7 @@ export default function HandoverChecklist({ initialTab }: { initialTab?: "intern
           <SearchDropdown
             value={viewProjectId}
             onChange={(v) => { setViewProjectId(v); setCurrentProjectId(v); setFFloor(ALL_FLOORS); }}
-            options={[{ value: "", label: "All Projects" }, ...allProjects.map((p) => ({ value: p.id, label: p.name }))]}
+            options={[{ value: "", label: "Choose" }, ...allProjects.map((p) => ({ value: p.id, label: p.name }))]}
             neutralActive
           />
         </div>
