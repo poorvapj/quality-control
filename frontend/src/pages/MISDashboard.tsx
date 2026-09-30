@@ -168,7 +168,7 @@ export default function MISDashboard() {
             <NavIcon name="bug" size={16} />
             <div className="text-[13px] font-bold">Attention Required</div>
           </div>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 max-h-[360px] overflow-y-auto pr-1">
             {alerts.map((a, i) => (
               <div key={i} className="flex items-center gap-2 text-[12.5px]">
                 <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: a.severity === "critical" ? "#dc2626" : "#f59e0b" }} />
@@ -182,10 +182,10 @@ export default function MISDashboard() {
       {/* ----------------------------------------- 2. Project Quality Overview */}
       <Card className="mb-6">
         <div className="text-[13px] font-bold mb-4">Project Quality Overview</div>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto overflow-y-auto max-h-[440px]">
           <table className="w-full text-[12.5px] border-collapse">
             <thead>
-              <tr className="text-left text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
+              <tr className="text-left text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] sticky top-0 bg-[var(--bg-card)]">
                 <th className="pb-2 pr-4">Project</th>
                 <th className="pb-2 pr-4">Units</th>
                 <th className="pb-2 pr-4">Completed</th>
