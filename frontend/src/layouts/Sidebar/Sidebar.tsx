@@ -41,7 +41,13 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
   const snagBadge = coll(data, "snags").filter((s) => s.status !== "Closed" && s.projectId === currentProjectId).length;
 
   const groups: { label: string; items: NavItem[] }[] = [
-    { label: "Overview", items: [{ key: "dash", icon: "dashboard", label: "Dashboard" }] },
+    {
+      label: "Overview",
+      items: [
+        { key: "dash", icon: "dashboard", label: "Dashboard" },
+        ...(isAdmin ? [{ key: "misDashboard" as TabKey, icon: "trend", label: "Quality MIS" }] : [])
+      ]
+    },
     {
       label: "Execution",
       items: [

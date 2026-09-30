@@ -9,6 +9,7 @@ import SnagModal from "./components/SnagModal";
 import ChecklistModal from "./components/ChecklistModal";
 import RecordModal from "./components/RecordModal";
 import Dashboard from "./pages/Dashboard";
+import MISDashboard from "./pages/MISDashboard";
 import MyWork from "./pages/MyWork";
 import TowerBoard from "./pages/TowerBoard";
 import HandoverChecklist from "./pages/HandoverChecklist";
@@ -33,6 +34,7 @@ export default function App() {
 
   const pages: Record<string, React.ReactNode> = {
     dash: <Dashboard />,
+    misDashboard: <MISDashboard />,
     work: <MyWork />,
     board: <TowerBoard />,
     handoverChecklist: <HandoverChecklist />,
@@ -73,6 +75,9 @@ export default function App() {
       // Permission Matrix grant is only needed for other roles.
       (activeTab === "dpr" && !isDri && !hasModuleGrant(data, currentUserId, "dpr", "view")) ||
       (activeTab === "drawingRequests" && !isDri && !hasModuleGrant(data, currentUserId, "drawingRequests", "view")) ||
+      // MIS Dashboard is management/CEO-level cross-project analytics —
+      // admin-only, same as Permission Matrix, not additively grantable.
+      activeTab === "misDashboard" ||
       activeTab === "permissionMatrix") &&
     !isAdmin;
 
