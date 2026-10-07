@@ -16,7 +16,16 @@ export const DATE_RANGES: { key: DateRange; label: string }[] = [
 ];
 
 export function ymd(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  // Local calendar date, NOT toISOString() — that converts to UTC first,
+  // which shifts every date back by one day in any positive-UTC-offset
+  // timezone (e.g. India, UTC+5:30): a local midnight Date becomes the
+  // previous day once converted to UTC. Every preset below (Today, This
+  // Week, This Month, ...) built its [from, to] bounds from local-midnight
+  // Date objects, so this one bug silently shifted all of them back a day.
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 /** Monday..Sunday bounds for ISO week `week` of `year`. */

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, refLabel, myProjects, byId } from "../shared/rules";
-import { type DateRange, DATE_RANGES, isoWeekBounds, dateRangeBounds } from "../shared/dateRange";
+import { type DateRange, DATE_RANGES, isoWeekBounds, dateRangeBounds, ymd } from "../shared/dateRange";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
 import CalendarRangePicker from "../components/CalendarRangePicker";
@@ -147,7 +147,15 @@ export default function DailyProgressReportPage() {
     const prevBounds = bounds
       ? (() => {
           const spanDays = Math.round((new Date(bounds.to).getTime() - new Date(bounds.from).getTime()) / 86400000) + 1;
-          const shift = (d: string) => { const dt = new Date(d); dt.setDate(dt.getDate() - spanDays); return dt.toISOString().slice(0, 10); };
+          // Parse as a local calendar date (new Date(string) parses a bare
+          // "YYYY-MM-DD" as UTC midnight, which can land on the wrong local
+          // day) and format back the same way — same fix as ymd() itself.
+          const shift = (d: string) => {
+            const [y, m, day] = d.split("-").map(Number);
+            const dt = new Date(y, m - 1, day);
+            dt.setDate(dt.getDate() - spanDays);
+            return ymd(dt);
+          };
           return { from: shift(bounds.from), to: shift(bounds.to) };
         })()
       : null;

@@ -7,6 +7,7 @@ import { WORK_CATEGORIES } from "../services/config";
 import type { DailyProgressReport, DprWorkEntry, ShiftType, Photo, WorkTarget, Op } from "../types";
 import PhotoGroupUploader from "./PhotoGroupUploader";
 import SearchDropdown from "./SearchDropdown";
+import { ymd } from "../shared/dateRange";
 
 const OTHER_VENDOR = "__other__";
 
@@ -21,7 +22,7 @@ export default function DprForm({ isPublic, onDone }: { isPublic: boolean; onDon
 
   const [projectId, setProjectId] = useState("");
   const [submittedByName, setSubmittedByName] = useState("");
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => ymd(new Date()));
   const [vendorChoice, setVendorChoice] = useState("");
   const [vendorNameOther, setVendorNameOther] = useState("");
   const [shift, setShift] = useState<ShiftType | "">("");

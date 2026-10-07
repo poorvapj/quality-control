@@ -1,10 +1,7 @@
 import React, { useState } from "react";
+import { ymd } from "../shared/dateRange";
 
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
-
-function ymd(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
 
 /** Click-to-pick date range calendar — click a start day, click an end day,
  *  the range between highlights. Matches the reference's month-grid picker
