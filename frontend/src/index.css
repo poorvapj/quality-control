@@ -456,7 +456,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-weight: 800;
+      font-weight: 700;
       font-size: 13px;
       border: 1px solid rgba(249, 115, 22, 0.3);
     }
@@ -596,12 +596,13 @@
       background: var(--bg-card);
       border-color: var(--border-strong);
       color: var(--text-main);
-      font-weight: 800;
+      font-weight: 700;
     }
 
     .two-col-cards {
       display: grid;
       grid-template-columns: 1fr;
+      align-items: start;
       gap: 16px;
       padding: 0 16px 16px;
     }
@@ -649,6 +650,174 @@
       height: 100%;
       border-radius: 99px;
       background: var(--theme-primary);
+    }
+
+    /* Work Progress table (DPR) — inset bordered table, compact rows, mono
+       figures, and an inline thin bar with the % beside it. */
+    .card-title-row.wp-head {
+      border-bottom: none;
+      padding: 16px 18px 0;
+    }
+
+    .wp-body {
+      padding: 12px 18px 18px;
+    }
+
+    .wp-table-wrap {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      overflow: auto;
+      max-height: 340px;
+    }
+
+    /* Fixed-height, vertically scrolling table body for the DPR Work tab
+       cards — header stays pinned while the rows scroll. */
+    .wp-scroll {
+      max-height: 340px;
+      overflow: auto;
+    }
+
+    /* All four Work-tab cards share one fixed size: header on top, then a
+       framed table filling the rest and scrolling vertically inside. */
+    .two-col-cards .card.wp-card {
+      height: 420px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .wp-card .card-title-row.wp-head {
+      flex: none;
+      min-height: 62px;
+      align-items: flex-start;
+    }
+
+    .wp-card .wp-body {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .wp-card .wp-body .empty {
+      margin: auto;
+    }
+
+    .wp-card .wp-table-wrap {
+      flex: 1;
+      min-height: 0;
+      max-height: none;
+    }
+
+    .wp-card .table-scroll.wp-scroll {
+      flex: 1;
+      min-height: 0;
+      max-height: none;
+      margin: 12px 18px 18px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+    }
+
+    .wp-scroll table.data {
+      min-width: 0;
+    }
+
+    .wp-scroll table.data th,
+    .wp-table-wrap table.data th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    .wp-scroll table.data th {
+      padding: 10px 14px;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+    }
+
+    .wp-scroll table.data td {
+      padding: 8px 14px;
+      font-size: 13px;
+    }
+
+    table.data.wp-table {
+      min-width: 0;
+    }
+
+    /* VMS proportions: the name column takes whatever is left (and wraps
+       if it must); every other column hugs its content on one line. */
+    .wp-card table.data.wp-table th,
+    .wp-card table.data.wp-table td {
+      padding-left: 12px;
+      padding-right: 12px;
+      line-height: 1.35;
+    }
+
+    .wp-card table.data.wp-table td {
+      padding-top: 7px;
+      padding-bottom: 7px;
+    }
+
+    .wp-card table.data.wp-table th:not(:first-child),
+    .wp-card table.data.wp-table td:not(:first-child) {
+      width: 1%;
+      white-space: nowrap;
+    }
+
+    .wp-card table.data.wp-table td.wp-item {
+      width: auto;
+      min-width: 110px;
+    }
+
+    table.data.wp-table th {
+      padding: 10px 14px;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+    }
+
+    table.data.wp-table th.num {
+      text-align: right;
+    }
+
+    table.data.wp-table td {
+      padding: 8px 14px;
+      font-size: 13px;
+    }
+
+    table.data.wp-table td.wp-item {
+      white-space: normal;
+      min-width: 130px;
+    }
+
+    .wp-mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+    }
+
+    .wp-progress {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .wp-track {
+      width: 64px;
+      height: 4px;
+      border-radius: 99px;
+      background: var(--bg-subtle);
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .wp-fill {
+      height: 100%;
+      border-radius: 99px;
+    }
+
+    .wp-pct {
+      font-size: 11px;
+      font-weight: 700;
+      min-width: 34px;
     }
 
     /* Compact filter bar — matches the reference's tight, low-height
@@ -965,7 +1134,7 @@
 
     .stat-val {
       font-size: 32px;
-      font-weight: 800;
+      font-weight: 700;
       color: var(--text-main);
       margin-top: 6px;
       letter-spacing: -.5px;
@@ -1027,6 +1196,18 @@
       border-radius: var(--radius-lg);
       box-shadow: var(--shadow-card);
       overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* A two-col-cards row stretches both cards to equal height by default —
+       without this, an empty sibling (e.g. "No Work Targets set yet") just
+       gets taller with its message stuck at the top, leaving dead
+       whitespace below it instead of centering in the space it was given. */
+    .card > .table-scroll {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
     }
 
     .card-pad {
@@ -1085,12 +1266,16 @@
       text-align: center;
       color: var(--text-muted);
       font-size: 13px;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     /* ---------------------------------------------------------- badges */
     .badge-tag {
       font-size: 10px;
-      font-weight: 800;
+      font-weight: 700;
       padding: 3px 8px;
       border-radius: 99px;
       display: inline-flex;
@@ -1160,7 +1345,7 @@
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
       font-size: 10px;
-      font-weight: 800;
+      font-weight: 700;
       text-align: center;
       cursor: pointer;
       line-height: 1.25;
@@ -1187,7 +1372,7 @@
       align-items: center;
       justify-content: center;
       font-size: 10px;
-      font-weight: 800;
+      font-weight: 700;
       color: white;
       cursor: pointer;
       min-width: 0;
@@ -1280,9 +1465,10 @@
     }
 
     table.data td {
-      padding: 14px 16px;
+      padding: 11px 16px;
       border-bottom: 1px solid var(--border);
       vertical-align: middle;
+      white-space: nowrap;
     }
 
     table.data tr:last-child td {
@@ -1420,7 +1606,7 @@
     .field label {
       display: block;
       font-size: 9.5px;
-      font-weight: 800;
+      font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.09em;
       color: var(--text-sub);
@@ -1663,7 +1849,7 @@
       align-items: center;
       justify-content: center;
       font-size: 11px;
-      font-weight: 800;
+      font-weight: 700;
       color: white;
       flex-shrink: 0;
       margin-top: 2px;
@@ -1881,7 +2067,7 @@
     .sync-pill {
       border-radius: 999px;
       font-size: 10px;
-      font-weight: 800;
+      font-weight: 700;
       padding: 6px 10px;
     }
 
@@ -1907,7 +2093,7 @@
       background: #fff0e5;
       color: #f56f00;
       border: 1px solid #ffcfaa;
-      font-weight: 800;
+      font-weight: 700;
     }
 
     /* Page container */
@@ -1984,7 +2170,7 @@
     .micro-label {
       color: #98a2b3;
       font-size: 10px;
-      font-weight: 800;
+      font-weight: 700;
       letter-spacing: .07em;
     }
 
@@ -2098,7 +2284,7 @@
     th {
       color: #64748b;
       font-size: 10px;
-      font-weight: 800;
+      font-weight: 700;
       text-transform: uppercase;
       letter-spacing: .04em;
     }

@@ -14,7 +14,7 @@ export default function LoginScreen() {
     return (
       <div className="login-screen">
         <div className="login-card">
-          <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 8 }}>Can't reach the board</div>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>Can't reach the board</div>
           <div style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.6 }}>
             Start the backend (<code>node server.js</code> in <code>backend/</code>) so the app has data to sign in against, then reload.
           </div>
@@ -40,7 +40,7 @@ export default function LoginScreen() {
           <div
             style={{
               width: 48, height: 48, flexShrink: 0, borderRadius: 12,
-              background: "#ff7a00", color: "#fff", fontSize: 20, fontWeight: 800,
+              background: "#ff7a00", color: "#fff", fontSize: 20, fontWeight: 700,
               display: "flex", alignItems: "center", justifyContent: "center",
               boxShadow: "0 4px 12px rgba(255,122,0,0.3)"
             }}

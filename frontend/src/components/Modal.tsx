@@ -15,7 +15,7 @@ export default function Modal({
           <div className="drawer-header">
             <div>
               <div className="micro-label">{sub}</div>
-              <div style={{ fontSize: 16, fontWeight: 800 }}>{title}</div>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>{title}</div>
             </div>
             <button className="btn-icon" onClick={onClose}>✕</button>
           </div>

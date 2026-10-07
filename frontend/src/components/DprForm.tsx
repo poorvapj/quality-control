@@ -6,6 +6,9 @@ import { buildEventOp } from "../shared/eventLog";
 import { WORK_CATEGORIES } from "../services/config";
 import type { DailyProgressReport, DprWorkEntry, ShiftType, Photo, WorkTarget, Op } from "../types";
 import PhotoGroupUploader from "./PhotoGroupUploader";
+import SearchDropdown from "./SearchDropdown";
+
+const OTHER_VENDOR = "__other__";
 
 function slugCode(name: string): string {
   return name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 20) || "VENDOR";
@@ -19,7 +22,8 @@ export default function DprForm({ isPublic, onDone }: { isPublic: boolean; onDon
   const [projectId, setProjectId] = useState("");
   const [submittedByName, setSubmittedByName] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [vendorName, setVendorName] = useState("");
+  const [vendorChoice, setVendorChoice] = useState("");
+  const [vendorNameOther, setVendorNameOther] = useState("");
   const [shift, setShift] = useState<ShiftType | "">("");
   const [labourCount, setLabourCount] = useState("");
   const [checked, setChecked] = useState<Record<string, boolean>>({});
@@ -47,9 +51,27 @@ export default function DprForm({ isPublic, onDone }: { isPublic: boolean; onDon
     return workTargets.find((t) => t.projectId === projectId && t.category === cat && t.active !== false);
   }
 
+  // Known contractors — derived from every vendorCode/vendorName pair seen
+  // across past submissions (including the 762 reports migrated from VMS),
+  // not a separate master list QC doesn't have. "Other" reveals a free-text
+  // field for a contractor that hasn't submitted a report here before.
+  const vendorOptions = Array.from(
+    new Map(coll(data, "dpr").filter((r) => r.vendorCode).map((r) => [r.vendorCode, r])).values()
+  )
+    .sort((a, b) => a.vendorName.localeCompare(b.vendorName))
+    .map((r) => ({ value: r.vendorCode, label: `${r.vendorCode} — ${r.vendorName}` }));
+  const resolvedVendor = vendorChoice === OTHER_VENDOR
+    ? { vendorCode: slugCode(vendorNameOther), vendorName: vendorNameOther.trim() }
+    : (() => {
+        const match = vendorOptions.find((o) => o.value === vendorChoice);
+        if (!match) return null;
+        const rec = coll(data, "dpr").find((r) => r.vendorCode === vendorChoice);
+        return rec ? { vendorCode: rec.vendorCode, vendorName: rec.vendorName } : null;
+      })();
+
   async function submit() {
     if (!projectId) { toast("Pick a project"); return; }
-    if (!vendorName.trim()) { toast("Contractor name is required"); return; }
+    if (!resolvedVendor || !resolvedVendor.vendorName.trim()) { toast("Contractor name is required"); return; }
     if (!submittedByName.trim()) { toast("DRI name is required"); return; }
     if (!shift) { toast("Pick a shift type"); return; }
     const labour = Number(labourCount);
@@ -69,8 +91,8 @@ export default function DprForm({ isPublic, onDone }: { isPublic: boolean; onDon
       submittedByUserId: isPublic ? null : currentUserId,
       submittedByName: submittedByName.trim(),
       date,
-      vendorCode: slugCode(vendorName),
-      vendorName: vendorName.trim(),
+      vendorCode: resolvedVendor.vendorCode,
+      vendorName: resolvedVendor.vendorName.trim(),
       shift,
       labourCount: labour,
       workEntries,
@@ -102,10 +124,19 @@ export default function DprForm({ isPublic, onDone }: { isPublic: boolean; onDon
         </div>
         <div className="field">
           <label>Contractor name *</label>
-          <input className="input" list="dpr-contractors" value={vendorName} onChange={(e) => setVendorName(e.target.value)} placeholder="Choose or type" />
-          <datalist id="dpr-contractors">
-            {Array.from(new Set(coll(data, "dpr").map((r) => r.vendorName).filter(Boolean))).map((v) => <option key={v} value={v} />)}
-          </datalist>
+          <SearchDropdown
+            value={vendorChoice}
+            onChange={setVendorChoice}
+            options={[...vendorOptions, { value: OTHER_VENDOR, label: "+ Other (new contractor)" }]}
+          />
+          {vendorChoice === OTHER_VENDOR && (
+            <input
+              className="input" style={{ marginTop: 6 }}
+              placeholder="New contractor's name"
+              value={vendorNameOther}
+              onChange={(e) => setVendorNameOther(e.target.value)}
+            />
+          )}
         </div>
         <div className="field">
           <label>DRI name *</label>
@@ -152,7 +183,7 @@ export default function DprForm({ isPublic, onDone }: { isPublic: boolean; onDon
           const target = targetFor(cat);
           return (
             <div key={cat} style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
-              <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 4 }}>{cat}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{cat}</div>
               <div className="form-grid" style={{ marginBottom: 10 }}>
                 <div className="field">
                   <label>Qty done today {target ? `(planned ${target.plannedQty} ${target.unit})` : ""}</label>

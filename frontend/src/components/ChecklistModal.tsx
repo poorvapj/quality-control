@@ -91,7 +91,7 @@ export default function ChecklistModal() {
           <div key={it.paramId + i} style={{ borderBottom: "1px solid var(--border)", padding: "12px 0" }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 800 }}>{i + 1}. {p.name}</div>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>{i + 1}. {p.name}</div>
                 <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3, lineHeight: 1.5 }}>
                   {p.method || ""}{p.acceptance ? " · Accept: " + p.acceptance : ""}
                 </div>

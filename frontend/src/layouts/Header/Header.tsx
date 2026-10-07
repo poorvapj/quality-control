@@ -119,7 +119,7 @@ export default function Header({ onToggleSidebar }: { onToggleSidebar: () => voi
                         <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                           <NavIcon name="switchAccount" size={14} /> Switch Account
                         </span>
-                        <span style={{ color: "var(--theme-primary)", fontWeight: 800 }}>›</span>
+                        <span style={{ color: "var(--theme-primary)", fontWeight: 700 }}>›</span>
                       </button>
                     )}
                     {/* Only shows mid-impersonation (U-ADMIN switched to this

@@ -173,7 +173,7 @@ export default function SearchDropdown({
                         }}
                       >
                         {checkbox(multi ? groupAllSelected : groupCovered)}
-                        <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: 0.4, color: "var(--text-muted)", textTransform: "uppercase" }}>
+                        <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.4, color: "var(--text-muted)", textTransform: "uppercase" }}>
                           {o.group}
                         </span>
                       </button>

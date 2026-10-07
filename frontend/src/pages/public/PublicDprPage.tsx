@@ -19,7 +19,7 @@ export default function PublicDprPage() {
         </div>
         {doneId ? (
           <div style={{ marginTop: 20, textAlign: "center" }}>
-            <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 8 }}>✅ Submitted</div>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>✅ Submitted</div>
             <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Your daily progress report has been recorded. You can close this page.</div>
           </div>
         ) : (

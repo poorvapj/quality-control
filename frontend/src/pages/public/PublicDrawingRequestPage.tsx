@@ -18,7 +18,7 @@ export default function PublicDrawingRequestPage() {
         </div>
         {ticketNo ? (
           <div style={{ marginTop: 20, textAlign: "center" }}>
-            <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 8 }}>✅ Ticket {ticketNo} created</div>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>✅ Ticket {ticketNo} created</div>
             <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Your drawing request has been raised and will go through the review chain. You can close this page.</div>
           </div>
         ) : (

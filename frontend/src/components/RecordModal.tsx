@@ -165,7 +165,7 @@ function ItemsEditor({ items, setItems }: { items: ChecklistItem[]; setItems: Re
     <div>
       {items.map((it, i) => (
         <div key={i} className="check-row" style={{ gap: 8, alignItems: "flex-start", borderBottom: "1px solid var(--border)", padding: "9px 0" }}>
-          <span style={{ fontSize: 11, fontWeight: 800, color: "var(--text-sub)", width: 20, paddingTop: 9 }}>{i + 1}</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-sub)", width: 20, paddingTop: 9 }}>{i + 1}</span>
           <select
             className="select" style={{ flex: 1 }} value={it.paramId}
             onChange={(e) => setItems((its) => its.map((x, xi) => xi === i ? { ...x, paramId: e.target.value } : x))}

@@ -168,7 +168,7 @@ export default function DrawingRequestDetailModal({ dr, onClose }: { dr: Drawing
                       width: 30, height: 30, borderRadius: "50%", border: "2px solid " + circleColor,
                       display: "flex", alignItems: "center", justifyContent: "center",
                       color: done ? "#fff" : circleColor, background: done ? "var(--color-pass)" : "transparent",
-                      fontSize: 12, fontWeight: 800, flexShrink: 0
+                      fontSize: 12, fontWeight: 700, flexShrink: 0
                     }}
                   >
                     {done ? "✓" : i + 1}

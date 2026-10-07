@@ -107,7 +107,7 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
                 {done ? "✓" : fail ? "✕" : i + 1}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 800 }}>{it.name}</div>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>{it.name}</div>
                 <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
                   {ROLES.CIVIL?.name || "CIVIL"}{nestedChk ? " · ✅ " + nestedChk.name : ""}
                 </div>
@@ -191,7 +191,7 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
                 {done ? "✓" : fail ? "✕" : idx + 1}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 800 }}>{s.name}</div>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>{s.name}</div>
                 <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
                   {ROLES[s.role]?.name || s.role}{s.dwg ? " · 📐 " + s.dwg : ""}{chk ? " · ✅ " + chk.name : ""}
                 </div>
@@ -272,7 +272,7 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
         <div className="drawer-header">
           <div style={{ minWidth: 0 }}>
             <div className="micro-label">RCC STRUCTURE TRACK</div>
-            <div style={{ fontSize: 16, fontWeight: 800 }}>{rec.name}</div>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>{rec.name}</div>
           </div>
           <button className="btn-icon" onClick={closeDrawer}>✕</button>
         </div>
@@ -314,7 +314,7 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
       <div className="drawer-header">
         <div style={{ minWidth: 0 }}>
           <div className="micro-label">{floorName} · {unit.type || "Unit"}</div>
-          <div style={{ fontSize: 16, fontWeight: 800 }}>{unit.name}</div>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>{unit.name}</div>
         </div>
         <button className="btn-icon" onClick={closeDrawer}>✕</button>
       </div>
@@ -359,7 +359,7 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
                 return (
                   <div key={x.stage.id} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", fontSize: 12.5 }}>
                     <span>{x.stage.name}</span>
-                    <span style={{ color, fontWeight: 800 }}>{icon}</span>
+                    <span style={{ color, fontWeight: 700 }}>{icon}</span>
                   </div>
                 );
               })}
@@ -412,7 +412,7 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
               if (idx === -1) {
                 return (
                   <div key={label} className="card card-pad" style={{ marginBottom: 14 }}>
-                    <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 4 }}>{label}</div>
+                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>{label}</div>
                     <div className="empty">Not mapped for this project yet.</div>
                   </div>
                 );
@@ -435,7 +435,7 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
               return (
                 <div key={label} className="card card-pad" style={{ marginBottom: 14 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                    <div style={{ fontWeight: 800, fontSize: 13 }}>{label}</div>
+                    <div style={{ fontWeight: 700, fontSize: 13 }}>{label}</div>
                     {done && <span className="badge-tag pass">Completed</span>}
                     {fail && <span className="badge-tag fail">Failed</span>}
                   </div>
@@ -514,7 +514,7 @@ function SnagDrawer({ id }: { id: string }) {
           </div>
           <div style={{ minWidth: 0 }}>
             <div className="micro-label">SNAG {s.id}</div>
-            <div style={{ fontSize: 16, fontWeight: 800 }}>{s.title}</div>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>{s.title}</div>
           </div>
         </div>
         <button
@@ -613,7 +613,7 @@ function UserDrawer({ id }: { id: string }) {
       <div className="drawer-header">
         <div style={{ minWidth: 0 }}>
           <div className="micro-label">{ROLES[u.role]?.name?.toUpperCase() || u.role}</div>
-          <div style={{ fontSize: 16, fontWeight: 800 }}>{u.name}</div>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>{u.name}</div>
         </div>
         <button className="btn-icon" onClick={closeDrawer}>✕</button>
       </div>

@@ -119,7 +119,7 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
             </div>
             {!collapsed && (
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 800, fontSize: 13.5, color: "var(--nx-sidebar-brand-color)", lineHeight: 1.2, whiteSpace: "nowrap" }}>
+                <div style={{ fontWeight: 700, fontSize: 13.5, color: "var(--nx-sidebar-brand-color)", lineHeight: 1.2, whiteSpace: "nowrap" }}>
                   NEOTERIC GROUP
                 </div>
                 <div style={{ fontSize: 10.5, color: "var(--nx-sidebar-sub-color)", marginTop: 2, lineHeight: 1.2, whiteSpace: "nowrap" }}>

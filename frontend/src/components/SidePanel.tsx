@@ -64,7 +64,7 @@ export default function SidePanel({
           <div style={{ display: "flex", gap: 12, alignItems: "flex-start", minWidth: 0 }}>
             <div className="page-icon" style={{ width: 38, height: 38, fontSize: 17 }}>{icon}</div>
             <div style={{ minWidth: 0 }}>
-              <div id={titleId} style={{ fontSize: 15, fontWeight: 800 }}>{title}</div>
+              <div id={titleId} style={{ fontSize: 15, fontWeight: 700 }}>{title}</div>
               <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>{desc}</div>
             </div>
           </div>
