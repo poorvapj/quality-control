@@ -125,7 +125,14 @@ export default function DailyProgressReportPage() {
   if (isDri) rows = rows.filter((r) => r.submittedByUserId === currentUserId);
   if (fProject) rows = rows.filter((r) => r.projectId === fProject);
   if (fUser) rows = rows.filter((r) => r.submittedByUserId === fUser);
-  if (bounds) rows = rows.filter((r) => r.date >= bounds.from && r.date <= bounds.to);
+  // r.date is inconsistent in shape — new submissions store plain
+  // "YYYY-MM-DD", but records migrated from VMS carry a full ISO datetime
+  // ("2026-10-06T00:00:00.000Z"). Comparing that against a bare bound
+  // string makes the ISO string sort as "greater" (it has extra trailing
+  // characters), so the exact end-of-range day was silently excluded from
+  // every filter — Today/Yesterday (a single-day range) always showed 0.
+  // Normalize to just the date portion before comparing.
+  if (bounds) rows = rows.filter((r) => { const d = r.date.slice(0, 10); return d >= bounds.from && d <= bounds.to; });
   rows.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
   const viewReport = viewReportId ? allDpr.find((r) => r.id === viewReportId) || null : null;
 
@@ -134,7 +141,7 @@ export default function DailyProgressReportPage() {
 
     const contractorsActive = new Set(rows.map((r) => r.vendorCode).filter(Boolean)).size;
     const workTypesLogged = new Set(rows.flatMap((r) => r.workEntries.map((we) => we.category))).size;
-    const reportingDays = new Set(rows.map((r) => r.date).filter(Boolean)).size;
+    const reportingDays = new Set(rows.map((r) => r.date?.slice(0, 10)).filter(Boolean)).size;
     const reportedProjectIds = new Set(rows.map((r) => r.projectId));
 
     const categoryEntryCounts = new Map<string, number>();
@@ -164,7 +171,8 @@ export default function DailyProgressReportPage() {
           if (isDri && r.submittedByUserId !== currentUserId) return false;
           if (fProject && r.projectId !== fProject) return false;
           if (fUser && r.submittedByUserId !== fUser) return false;
-          return r.date >= prevBounds.from && r.date <= prevBounds.to;
+          const d = r.date.slice(0, 10);
+          return d >= prevBounds.from && d <= prevBounds.to;
         })
       : [];
 
