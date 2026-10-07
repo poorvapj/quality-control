@@ -119,7 +119,7 @@ export default function Dashboard() {
   // the explicit "Mark complete" action on its gate stage, same as always.
   const snagBlockedUnits = unitEntries.filter((e) => !e.s.complete && e.s.snags > 0).length;
   const openSnags = (viewAllProjects
-    ? coll(data, "snags").filter((s) => s.status !== "Closed")
+    ? coll(data, "snags").filter((s) => s.status !== "Closed" && projectIds.includes(s.projectId))
     : coll(data, "snags").filter((s) => s.status !== "Closed" && s.projectId === currentProjectId)
   ).filter((s) => tsInBounds(s.raisedAt, bounds));
   const critical = openSnags.filter((s) => s.severity === "Critical").length;

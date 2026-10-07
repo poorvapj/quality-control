@@ -36,7 +36,8 @@ export default function Snags() {
     toast("Deleted " + s.id);
   }
 
-  let list = coll(data, "snags");
+  const myPids = new Set(allProjects.map((p) => p.id));
+  let list = coll(data, "snags").filter((s) => myPids.has(s.projectId));
   if (fp !== ALL_PROJECTS) list = list.filter((s) => s.projectId === fp);
   if (fs) list = list.filter((s) => s.status === fs);
   if (fv) list = list.filter((s) => s.severity === fv);
@@ -50,7 +51,7 @@ export default function Snags() {
     (a, b) => (b.status === "Closed" ? -1 : 1) - (a.status === "Closed" ? -1 : 1) || (b.raisedAt || 0) - (a.raisedAt || 0)
   );
 
-  const all = fp === ALL_PROJECTS ? coll(data, "snags") : coll(data, "snags").filter((s) => s.projectId === fp);
+  const all = fp === ALL_PROJECTS ? coll(data, "snags").filter((s) => myPids.has(s.projectId)) : coll(data, "snags").filter((s) => s.projectId === fp);
   const open = all.filter((s) => s.status !== "Closed");
   const overdue = open.filter((s) => s.dueAt && s.dueAt < Date.now());
   // Escalation is deliberately computed on read, not a cron job or persisted
