@@ -110,6 +110,15 @@ export default function DailyProgressReportPage() {
     ? isoWeekBounds(weekYear, weekNum)
     : dateRangeBounds(fRange);
 
+  // Real resolved dates, not just the preset's name — matches VMS showing
+  // "01 Oct 2026 – 31 Oct 2026" instead of a bare "This Month" everywhere
+  // the range is displayed (stat cards, table subtitles, PDF period line).
+  const rangeLabel = bounds
+    ? bounds.from === bounds.to
+      ? fmtDate(new Date(bounds.from).getTime())
+      : `${fmtDate(new Date(bounds.from).getTime())} – ${fmtDate(new Date(bounds.to).getTime())}`
+    : "All Time";
+
   let rows = allDpr.slice();
   // A DRI isn't a reviewer here — see shared/permissions.ts — so this page
   // only shows the reports they personally submitted, not every DRI's.
@@ -190,7 +199,7 @@ export default function DailyProgressReportPage() {
       };
     }).filter((w) => w.planned > 0).sort((a, b) => b.planned - a.planned).slice(0, 15);
 
-    const periodLabel = DATE_RANGES.find((r) => r.key === fRange)?.label || "All Time";
+    const periodLabel = rangeLabel;
     const OVERDUE_DAYS = 3;
     const overdueDrawingReqs = allDrawingRequests.filter(
       (r) => r.reviewStatus !== "approved" && r.reviewStatus !== "returned" && daysSince(r.createdAt) > OVERDUE_DAYS
@@ -243,7 +252,11 @@ export default function DailyProgressReportPage() {
   // separate global currentProjectId — so "All Projects" in the dropdown
   // above genuinely means every project's data, not one hardcoded project.
   const totalLabour = rows.reduce((a, r) => a + (r.labourCount || 0), 0);
-  const allDrawingRequests = coll(data, "drawingRequests").filter((r) => !fProject || r.projectId === fProject);
+  // Same DRI scoping as the Drawing Requests page itself (DrawingRequests.tsx)
+  // and this page's own DPR rows above — a DRI sees only requests they
+  // personally raised, not every DRI's.
+  let allDrawingRequests = coll(data, "drawingRequests").filter((r) => !fProject || r.projectId === fProject);
+  if (isDri) allDrawingRequests = allDrawingRequests.filter((r) => r.submittedByUserId === currentUserId);
   const pendingDrawingRequests = allDrawingRequests.filter((r) => r.reviewStatus !== "approved" && r.reviewStatus !== "returned").length;
   const activeProjects = projects.length;
 
@@ -319,34 +332,29 @@ export default function DailyProgressReportPage() {
       </div>
 
       <div className="filter-bar">
-        <div className="field" style={{ minWidth: 150 }}>
+        <div className="field" style={{ minWidth: 150, position: "relative" }} ref={calendarWrapRef}>
           <label>Date Range</label>
           <SearchDropdown
             icon="calendar"
             searchable={false}
             scrollable={false}
             value={fRange}
-            onChange={(v) => setFRange(v as DateRange)}
+            onChange={(v) => { setFRange(v as DateRange); if (v === "custom") setCalendarOpen(true); }}
             options={DATE_RANGES.map((r) => ({ value: r.key, label: r.label }))}
             neutralActive
           />
+          {fRange === "custom" && customFrom && customTo && (
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>{customFrom} → {customTo}</div>
+          )}
+          {fRange === "custom" && calendarOpen && (
+            <CalendarRangePicker
+              from={customFrom}
+              to={customTo}
+              onCancel={() => setCalendarOpen(false)}
+              onApply={(from, to) => { setCustomFrom(from); setCustomTo(to); setCalendarOpen(false); }}
+            />
+          )}
         </div>
-        {fRange === "custom" && (
-          <div className="field" style={{ minWidth: 190, position: "relative" }} ref={calendarWrapRef}>
-            <label>Range</label>
-            <button type="button" className="select" style={{ textAlign: "left" }} onClick={() => setCalendarOpen((o) => !o)}>
-              {customFrom && customTo ? customFrom + "  →  " + customTo : "Pick dates"}
-            </button>
-            {calendarOpen && (
-              <CalendarRangePicker
-                from={customFrom}
-                to={customTo}
-                onCancel={() => setCalendarOpen(false)}
-                onApply={(from, to) => { setCustomFrom(from); setCustomTo(to); setCalendarOpen(false); }}
-              />
-            )}
-          </div>
-        )}
         {fRange === "weekNumber" && (
           <>
             <div className="field" style={{ minWidth: 90 }}>
@@ -387,7 +395,7 @@ export default function DailyProgressReportPage() {
             logged in the current filters), deliberately unrelated to Tower
             Board's stage-completion progress. */}
         <div className="stat-card" style={{ cursor: "pointer" }} onClick={() => setTab("work")}>
-          <div className="stat-label">Total Labour (All Time)</div>
+          <div className="stat-label">Total Labour ({rangeLabel})</div>
           <div className="stat-val">{totalLabour}</div>
           <div className="stat-icon"><NavIcon name="team" size={15} /></div>
         </div>
@@ -402,7 +410,7 @@ export default function DailyProgressReportPage() {
           <div className="stat-icon"><NavIcon name="drawing" size={15} /></div>
         </div>
         <div className="stat-card" style={{ cursor: "pointer" }} onClick={() => setTab("work")}>
-          <div className="stat-label">Active Projects (All Time)</div>
+          <div className="stat-label">Active Projects ({rangeLabel})</div>
           <div className="stat-val">{activeProjects}</div>
           <div className="stat-icon"><NavIcon name="board" size={15} /></div>
         </div>
@@ -422,7 +430,7 @@ export default function DailyProgressReportPage() {
                 <div>
                   <div className="card-title">Work Progress{fProject ? "" : " (Site-wide)"}</div>
                   <div className="card-subtitle">
-                    {fProject ? projects.find((p) => p.id === fProject)?.name : "All projects"} · {DATE_RANGES.find((r) => r.key === fRange)?.label || "All Time"} — planned vs. completed by work item
+                    {fProject ? projects.find((p) => p.id === fProject)?.name : "All projects"} · {rangeLabel} — planned vs. completed by work item
                   </div>
                 </div>
               </div>
@@ -467,7 +475,7 @@ export default function DailyProgressReportPage() {
               <div className="card-title-row wp-head">
                 <div>
                   <div className="card-title">Labour Count by Project</div>
-                  <div className="card-subtitle">{DATE_RANGES.find((r) => r.key === fRange)?.label || "All Time"}</div>
+                  <div className="card-subtitle">{rangeLabel}</div>
                 </div>
               </div>
               <div className="wp-body">
