@@ -10,10 +10,10 @@ import { hasModuleGrant } from "../shared/permissionMatrix";
 import type { DrawingRequest } from "../types";
 
 const STAGE_LABEL: Record<string, string> = {
-  "stage-1-screen": "Stage 1 · Screening",
-  "stage-2-produce": "Stage 2 · Producing",
-  "stage-3-crosscheck": "Stage 3 · Cross-check",
-  "stage-4-final-approve": "Stage 4 · Final approval",
+  "stage-1-screen": "GM Screening (L1)",
+  "stage-2-produce": "Architect Drawing (L2)",
+  "stage-3-crosscheck": "Cross-check",
+  "stage-4-final-approve": "Final approval",
   approved: "Approved",
   returned: "Returned"
 };

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { ROLES } from "../services/config";
 import { coll, myProjects } from "../shared/rules";
@@ -8,6 +8,7 @@ import NavIcon from "../components/NavIcon";
 export default function Team() {
   const { data, currentUserId, openAssignModal, openDrawer } = useApp();
   const isAdmin = currentUserId === "U-ADMIN";
+  const [search, setSearch] = useState("");
   const allActiveUsers = coll(data, "users").filter((u) => u.active !== false);
   const myTeam = coll(data, "teams").find((t) => t.leaderId === currentUserId) || null;
   // Admin, or anyone additively granted the full board via the Permission
@@ -34,6 +35,15 @@ export default function Team() {
     })
     .sort((x, y) => y.load - x.load);
   const max = Math.max(1, ...rows.map((r) => r.load));
+  const q = search.trim().toLowerCase();
+  const filteredRows = q
+    ? rows.filter((r) =>
+        r.u.name.toLowerCase().includes(q) ||
+        (ROLES[r.u.role]?.name || r.u.role).toLowerCase().includes(q) ||
+        (r.u.company || "").toLowerCase().includes(q) ||
+        (r.u.phone || "").toLowerCase().includes(q)
+      )
+    : rows;
 
   return (
     <div>
@@ -49,9 +59,19 @@ export default function Team() {
           <button className="btn btn-primary btn-sm" onClick={() => openAssignModal({ targetType: "unit", targetId: "", stageId: "" })}>＋ Assign work</button>
         </div>
       </div>
-      <div className="card">
-        {rows.length === 0 && <div className="empty">No team workload to show.</div>}
-        {rows.map((r) => (
+      <div style={{ marginBottom: 12 }}>
+        <input
+          type="text"
+          className="input"
+          placeholder="Search by name, role, company or phone…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ maxWidth: 360 }}
+        />
+      </div>
+      <div className="card" style={{ maxHeight: 560, overflowY: "auto" }}>
+        {filteredRows.length === 0 && <div className="empty">{q ? "No one matches your search." : "No team workload to show."}</div>}
+        {filteredRows.map((r) => (
           <div key={r.u.id} className={"qitem" + (r.overdue ? " warn" : "")} onClick={() => openDrawer({ kind: "user", id: r.u.id })}>
             <div className="qitem-main">
               <div className="qitem-title">{r.u.name} <span style={{ color: "var(--text-sub)", fontWeight: 600 }}>· {ROLES[r.u.role]?.name || r.u.role}</span></div>

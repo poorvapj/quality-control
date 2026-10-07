@@ -14,12 +14,20 @@ import DrawingRequestForm from "../components/DrawingRequestForm";
 type DprTab = "work" | "drawing" | "summary";
 
 const STAGE_LABEL: Record<string, string> = {
-  "stage-1-screen": "Screening (L1)",
-  "stage-2-produce": "Producing drawing",
+  "stage-1-screen": "GM Screening (L1)",
+  "stage-2-produce": "Architect Drawing (L2)",
   "stage-3-crosscheck": "Cross-check",
   "stage-4-final-approve": "Final approval",
   approved: "Approved",
   returned: "Returned"
+};
+const STAGE_BADGE_CLASS: Record<string, string> = {
+  "stage-1-screen": "gate",
+  "stage-2-produce": "wip",
+  "stage-3-crosscheck": "wip",
+  "stage-4-final-approve": "wip",
+  approved: "pass",
+  returned: "fail"
 };
 
 function daysSince(ts: number): number {
@@ -488,7 +496,7 @@ export default function DailyProgressReportPage() {
                         <td>{r.description}</td>
                         <td>{r.projectName || refLabel(data, "projects", r.projectId)}</td>
                         <td>{r.requesterName}</td>
-                        <td>{r.reviewStatus !== "approved" && r.reviewStatus !== "returned" && <span className="badge-tag gate">{STAGE_LABEL[r.reviewStatus]}</span>}</td>
+                        <td><span className={"badge-tag " + (STAGE_BADGE_CLASS[r.reviewStatus] || "mute")}>{STAGE_LABEL[r.reviewStatus]}</span></td>
                         <td>{fmtDate(r.createdAt)}</td>
                         <td className="num">{daysSince(r.createdAt)}</td>
                       </tr>
