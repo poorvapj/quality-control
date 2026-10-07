@@ -52,23 +52,26 @@ export default function DprForm({ isPublic, onDone }: { isPublic: boolean; onDon
     return workTargets.find((t) => t.projectId === projectId && t.category === cat && t.active !== false);
   }
 
-  // Known contractors — derived from every vendorCode/vendorName pair seen
-  // across past submissions (including the 762 reports migrated from VMS),
-  // not a separate master list QC doesn't have. "Other" reveals a free-text
-  // field for a contractor that hasn't submitted a report here before.
-  const vendorOptions = Array.from(
-    new Map(coll(data, "dpr").filter((r) => r.vendorCode).map((r) => [r.vendorCode, r])).values()
-  )
+  // Known contractors — the full VMS vendor master (migrated into the
+  // "vendors" collection) merged with any vendorCode/vendorName pair seen
+  // across past DPR submissions here that isn't in that master yet (e.g. a
+  // contractor added via "Other" below). "Other" reveals a free-text field
+  // for a contractor that isn't in either list.
+  const vendorByCode = new Map<string, { vendorCode: string; vendorName: string }>();
+  for (const v of coll(data, "vendors")) {
+    if (v.vendorCode) vendorByCode.set(v.vendorCode, { vendorCode: v.vendorCode, vendorName: v.vendorName });
+  }
+  for (const r of coll(data, "dpr")) {
+    if (r.vendorCode && !vendorByCode.has(r.vendorCode)) {
+      vendorByCode.set(r.vendorCode, { vendorCode: r.vendorCode, vendorName: r.vendorName });
+    }
+  }
+  const vendorOptions = Array.from(vendorByCode.values())
     .sort((a, b) => a.vendorName.localeCompare(b.vendorName))
     .map((r) => ({ value: r.vendorCode, label: `${r.vendorCode} — ${r.vendorName}` }));
   const resolvedVendor = vendorChoice === OTHER_VENDOR
     ? { vendorCode: slugCode(vendorNameOther), vendorName: vendorNameOther.trim() }
-    : (() => {
-        const match = vendorOptions.find((o) => o.value === vendorChoice);
-        if (!match) return null;
-        const rec = coll(data, "dpr").find((r) => r.vendorCode === vendorChoice);
-        return rec ? { vendorCode: rec.vendorCode, vendorName: rec.vendorName } : null;
-      })();
+    : vendorByCode.get(vendorChoice) || null;
 
   async function submit() {
     if (!projectId) { toast("Pick a project"); return; }

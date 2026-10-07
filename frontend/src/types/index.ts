@@ -149,6 +149,19 @@ export interface Team extends BaseRecord {
   active?: boolean;
 }
 
+/** Vendor/Contractor master, migrated from VMS — code/name/work types
+ *  only, no financial or KYC fields (those stay in VMS). Backs DprForm's
+ *  contractor dropdown so every VMS contractor shows up here even before
+ *  their first DPR. */
+export interface Vendor extends BaseRecord {
+  vendorCode: string;
+  vendorName: string;
+  shortCode?: string;
+  workTypes?: string[];
+  status?: "active" | "inactive";
+  source?: string;
+}
+
 export interface Photo {
   url: string;
   publicId?: string | null;
@@ -400,6 +413,7 @@ export interface BoardData {
   workTargets: WorkTarget[];
   moduleGrants: ModuleGrant[];
   teams: Team[];
+  vendors: Vendor[];
   progress: Record<string, ProgressPatch>;
   events: EventLog[];
   [key: string]: unknown;
