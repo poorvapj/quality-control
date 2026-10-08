@@ -316,6 +316,7 @@ export default function HandoverChecklist({ initialTab }: { initialTab?: "intern
               columns={tab === "internal" ? ["Unit", "Internal Possession"] : ["Unit", "Owner Possession"]}
               colWidths={["25%", "75%"]}
               empty="No units match these filters."
+              maxHeight="560px"
             >
               {units.map((u) => {
                 const floorName = refLabel(data, "floors", u.floorId);

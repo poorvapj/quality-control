@@ -171,7 +171,7 @@ export default function AuditLog() {
             {shown.length === 0 ? (
               <div className="py-6 text-center text-[var(--text-muted)] text-[13px]">No events match these filters.</div>
             ) : (
-              <Table columns={["Date & Time", "User", "Action", "Details"]}>
+              <Table columns={["Date & Time", "User", "Action", "Details"]} maxHeight="560px">
                 {shown.map((e, i) => (
                   <TableRow key={i}>
                     <TableCell muted className="whitespace-nowrap" >

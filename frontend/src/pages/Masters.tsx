@@ -121,7 +121,7 @@ export default function Masters() {
         </div>
 
         {bulkImportOpen && <WorkTargetBulkImport onClose={() => setBulkImportOpen(false)} />}
-        <div className="table-scroll">
+        <div className="table-scroll" style={{ maxHeight: 560, overflowY: "auto" }}>
           {rows.length === 0 ? (
             <div className="empty">No {master.label.toLowerCase()} records yet.</div>
           ) : (
