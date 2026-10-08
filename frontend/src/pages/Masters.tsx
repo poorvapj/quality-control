@@ -7,6 +7,7 @@ import { downloadCsv } from "../shared/csv";
 import { buildEventOp } from "../shared/eventLog";
 import { hasModuleGrant } from "../shared/permissionMatrix";
 import NavIcon from "../components/NavIcon";
+import WorkTargetBulkImport from "../components/WorkTargetBulkImport";
 import type { MasterKey } from "../types";
 
 export default function Masters() {
@@ -15,6 +16,7 @@ export default function Masters() {
     openRecordModal, apply, toast, setActiveTab
   } = useApp();
   const [q, setQ] = useState("");
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const isAdmin = currentUserId === "U-ADMIN";
   const editable = myRole() === "ADMIN" || myRole() === "DRI" || hasModuleGrant(data, currentUserId, "masters", "edit");
   // User Master exposes every account's contact/role data — Admin only.
@@ -102,6 +104,9 @@ export default function Masters() {
         <div className="toolbar">
           <input className="input grow" placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} />
           <button className="btn btn-secondary btn-sm" onClick={exportMasterCsv}>⬇ Export CSV</button>
+          {editable && activeMaster === "workTargets" && (
+            <button className="btn btn-secondary btn-sm" onClick={() => setBulkImportOpen(true)}>📋 Bulk Import</button>
+          )}
           {editable && (
             <button
               className="btn btn-primary btn-sm"
@@ -114,6 +119,8 @@ export default function Masters() {
             </button>
           )}
         </div>
+
+        {bulkImportOpen && <WorkTargetBulkImport onClose={() => setBulkImportOpen(false)} />}
         <div className="table-scroll">
           {rows.length === 0 ? (
             <div className="empty">No {master.label.toLowerCase()} records yet.</div>
