@@ -1419,6 +1419,25 @@ connectMongo()
       for (const ip of lanAddresses()) console.log(`  Network: http://${ip}:${PORT}`);
       console.log(`\n  Shared store: MongoDB   ·   Ctrl+C to stop.\n`);
     });
+
+    // Pull in any new VMS daily progress reports periodically — additive
+    // only, never touches existing records. No-ops entirely when
+    // SOURCE_MONGO_URI isn't configured (e.g. local dev without VMS access).
+    if (process.env.SOURCE_MONGO_URI) {
+      const { syncVmsDpr } = require("./syncVmsDpr.js");
+      const runSync = () => {
+        syncVmsDpr(mongoDb)
+          .then((result) => {
+            if (result.inserted > 0) {
+              console.log(`  [vms-sync] pulled in ${result.inserted} new report(s)`);
+              return bumpRev();
+            }
+          })
+          .catch((e) => console.error("  [vms-sync] failed:", e && e.message ? e.message : e));
+      };
+      runSync();
+      setInterval(runSync, 30 * 60 * 1000); // every 30 minutes
+    }
   })
   .catch((e) => {
     console.error("  ! failed to connect to MongoDB:", e && e.stack ? e.stack : e);
