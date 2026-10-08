@@ -831,8 +831,16 @@
       margin-bottom: 20px;
       display: flex;
       gap: 14px;
-      align-items: flex-end;
+      align-items: flex-start;
       flex-wrap: wrap;
+    }
+
+    /* A bare action button (no .field wrapper/label above it, e.g.
+       "Generate Report") would otherwise sit flush with the field labels'
+       top edge under flex-start — nudge it down by a label's height so it
+       still lines up with the dropdowns/inputs beside it. */
+    .filter-bar > .btn {
+      margin-top: 19px;
     }
 
     .filter-bar .field label {
