@@ -1425,7 +1425,10 @@ connectMongo()
     // SOURCE_MONGO_URI isn't configured (e.g. local dev without VMS access).
     if (process.env.SOURCE_MONGO_URI) {
       const { syncVmsDpr } = require("./syncVmsDpr.js");
+      let syncInFlight = false;
       const runSync = () => {
+        if (syncInFlight) return; // a run already in progress — don't double up if one took longer than the interval
+        syncInFlight = true;
         syncVmsDpr(mongoDb)
           .then((result) => {
             if (result.inserted > 0) {
@@ -1433,9 +1436,10 @@ connectMongo()
               return bumpRev();
             }
           })
-          .catch((e) => console.error("  [vms-sync] failed:", e && e.message ? e.message : e));
+          .catch((e) => console.error("  [vms-sync] failed:", e && e.message ? e.message : e))
+          .finally(() => { syncInFlight = false; });
       };
-      runSync();
+      setTimeout(runSync, 10 * 1000); // give the first requests a head start instead of competing at boot
       setInterval(runSync, 30 * 60 * 1000); // every 30 minutes
     }
   })

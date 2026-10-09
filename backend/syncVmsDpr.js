@@ -16,19 +16,23 @@ async function getSourceDb() {
   return cachedSourceClient.db("vbp");
 }
 
+const norm = (s) => String(s || "").trim().toLowerCase();
+
 async function syncVmsDpr(mongoDb) {
   const sourceDb = await getSourceDb();
   if (!sourceDb) return { skipped: true };
 
   const [vmsReports, qcProjects, qcUsers, existingIds] = await Promise.all([
-    sourceDb.collection("dailyprogressreports").find({}).toArray(),
+    sourceDb.collection("dailyprogressreports").find({}, {
+      projection: { projectName: 1, date: 1, vendorCode: 1, vendorName: 1, shiftType: 1, labourCount: 1, workEntries: 1, driName: 1, isPublicSubmission: 1 }
+    }).toArray(),
     mongoDb.collection("projects").find({}, { projection: { id: 1, name: 1 } }).toArray(),
     mongoDb.collection("users").find({}, { projection: { id: 1, name: 1 } }).toArray(),
     mongoDb.collection("dpr").find({}, { projection: { id: 1 } }).toArray()
   ]);
   const existing = new Set(existingIds.map((d) => d.id));
-  const projectByName = new Map(qcProjects.map((p) => [String(p.name || "").trim().toLowerCase(), p.id]));
-  const userByName = new Map(qcUsers.map((u) => [String(u.name || "").trim().toLowerCase(), u.id]));
+  const projectByName = new Map(qcProjects.map((p) => [norm(p.name), p.id]));
+  const userByName = new Map(qcUsers.map((u) => [norm(u.name), u.id]));
 
   const toInsert = [];
   const unmatchedProjects = new Set();
@@ -36,9 +40,9 @@ async function syncVmsDpr(mongoDb) {
     const id = "DPR-VMS-" + r._id;
     if (existing.has(id)) continue;
 
-    const projectId = projectByName.get(String(r.projectName || "").trim().toLowerCase());
+    const projectId = projectByName.get(norm(r.projectName));
     if (!projectId) { unmatchedProjects.add(r.projectName); continue; }
-    const submittedByUserId = userByName.get(String(r.driName || "").trim().toLowerCase()) || null;
+    const submittedByUserId = userByName.get(norm(r.driName)) || null;
 
     toInsert.push({
       id,

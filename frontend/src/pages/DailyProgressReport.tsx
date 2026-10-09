@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, refLabel, myProjects, byId } from "../shared/rules";
-import { type DateRange, DATE_RANGES, isoWeekBounds, dateRangeBounds, ymd } from "../shared/dateRange";
+import { type DateRange, DATE_RANGES, isoWeekBounds, dateRangeBounds, ymd, parseYmd } from "../shared/dateRange";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
 import CalendarRangePicker from "../components/CalendarRangePicker";
@@ -115,8 +115,8 @@ export default function DailyProgressReportPage() {
   // the range is displayed (stat cards, table subtitles, PDF period line).
   const rangeLabel = bounds
     ? bounds.from === bounds.to
-      ? fmtDate(new Date(bounds.from).getTime())
-      : `${fmtDate(new Date(bounds.from).getTime())} – ${fmtDate(new Date(bounds.to).getTime())}`
+      ? fmtDate(parseYmd(bounds.from).getTime())
+      : `${fmtDate(parseYmd(bounds.from).getTime())} – ${fmtDate(parseYmd(bounds.to).getTime())}`
     : "All Time";
 
   let rows = allDpr.slice();
@@ -153,13 +153,9 @@ export default function DailyProgressReportPage() {
     // the on-screen labour table deliberately doesn't show this.
     const prevBounds = bounds
       ? (() => {
-          const spanDays = Math.round((new Date(bounds.to).getTime() - new Date(bounds.from).getTime()) / 86400000) + 1;
-          // Parse as a local calendar date (new Date(string) parses a bare
-          // "YYYY-MM-DD" as UTC midnight, which can land on the wrong local
-          // day) and format back the same way — same fix as ymd() itself.
+          const spanDays = Math.round((parseYmd(bounds.to).getTime() - parseYmd(bounds.from).getTime()) / 86400000) + 1;
           const shift = (d: string) => {
-            const [y, m, day] = d.split("-").map(Number);
-            const dt = new Date(y, m - 1, day);
+            const dt = parseYmd(d);
             dt.setDate(dt.getDate() - spanDays);
             return ymd(dt);
           };

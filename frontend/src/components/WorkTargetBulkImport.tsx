@@ -5,6 +5,7 @@ import { nextId } from "../shared/helpers";
 import { buildEventOp } from "../shared/eventLog";
 import { WORK_CATEGORIES } from "../services/config";
 import Modal from "./Modal";
+import Table, { TableRow, TableCell } from "../ui/tw/Table";
 import type { Op, Project, WorkTarget } from "../types";
 
 interface ParsedRow {
@@ -17,6 +18,8 @@ interface ParsedRow {
   category: string | null;
   error: string | null;
 }
+
+const CATEGORY_BY_NAME = new Map(WORK_CATEGORIES.map((c) => [c.toLowerCase(), c]));
 
 function splitRow(line: string): string[] {
   const delim = line.includes("\t") ? "\t" : ",";
@@ -34,11 +37,11 @@ export default function WorkTargetBulkImport({ onClose }: { onClose: () => void 
   const [saving, setSaving] = useState(false);
 
   const projects = coll(data, "projects") as Project[];
-  const projectByName = new Map(projects.map((p) => [p.name.trim().toLowerCase(), p]));
-  const projectById = new Map(projects.map((p) => [p.id, p]));
-  const categoryByName = new Map(WORK_CATEGORIES.map((c) => [c.trim().toLowerCase(), c]));
 
   const parsed = useMemo((): ParsedRow[] => {
+    const projectByName = new Map(projects.map((p) => [p.name.toLowerCase(), p]));
+    const projectById = new Map(projects.map((p) => [p.id, p]));
+
     const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
     const out: ParsedRow[] = [];
     lines.forEach((line, i) => {
@@ -47,8 +50,8 @@ export default function WorkTargetBulkImport({ onClose }: { onClose: () => void 
       const [projectRaw = "", categoryRaw = "", unit = "", plannedQty = ""] = cells;
       if (!projectRaw && !categoryRaw && !plannedQty) return;
 
-      const project = projectById.get(projectRaw) || projectByName.get(projectRaw.trim().toLowerCase());
-      const category = categoryByName.get(categoryRaw.trim().toLowerCase());
+      const project = projectById.get(projectRaw) || projectByName.get(projectRaw.toLowerCase());
+      const category = CATEGORY_BY_NAME.get(categoryRaw.toLowerCase());
       const qtyNum = Number(plannedQty);
 
       let error: string | null = null;
@@ -57,7 +60,7 @@ export default function WorkTargetBulkImport({ onClose }: { onClose: () => void 
       else if (!categoryRaw) error = "Missing category";
       else if (!category) error = `Unknown category "${categoryRaw}" — must be one of: ${WORK_CATEGORIES.join(", ")}`;
       else if (!unit) error = "Missing unit";
-      else if (!plannedQty || !Number.isFinite(qtyNum) || qtyNum <= 0) error = "Planned quantity must be a positive number";
+      else if (!Number.isFinite(qtyNum) || qtyNum <= 0) error = "Planned quantity must be a positive number";
 
       out.push({
         line: i + 1,
@@ -68,15 +71,19 @@ export default function WorkTargetBulkImport({ onClose }: { onClose: () => void 
       });
     });
     return out;
-  }, [raw, data]);
+  }, [raw, projects]);
 
-  const validRows = parsed.filter((r) => !r.error);
-  const errorRows = parsed.filter((r) => r.error);
+  const { validRows, errorRows } = useMemo(() => {
+    const valid: ParsedRow[] = [], errors: ParsedRow[] = [];
+    for (const r of parsed) (r.error ? errors : valid).push(r);
+    return { validRows: valid, errorRows: errors };
+  }, [parsed]);
 
   async function importRows() {
     if (validRows.length === 0) { toast("Nothing valid to import"); return; }
     setSaving(true);
     const existing = coll(data, "workTargets") as WorkTarget[];
+    const existingByKey = new Map(existing.filter((t) => t.active !== false).map((t) => [`${t.projectId}::${t.category}`, t]));
     const ops: Op[] = [];
     let created = 0, updated = 0;
 
@@ -85,10 +92,22 @@ export default function WorkTargetBulkImport({ onClose }: { onClose: () => void 
     const byKey = new Map<string, ParsedRow>();
     for (const r of validRows) byKey.set(`${r.projectId}::${r.category}`, r);
 
+    // nextId() scans `existing` for the current max each call — calling it
+    // once per new row inside the loop would hand out the same id to every
+    // one of them, since `existing` never grows. Compute the running id
+    // ourselves instead, seeded from the one real scan.
+    let nextNewId = nextId("WTG", existing);
+    function takeNextId(): string {
+      const id = nextNewId;
+      const n = parseInt(id.split("-")[1], 10);
+      nextNewId = "WTG-" + String(n + 1).padStart(4, "0");
+      return id;
+    }
+
     for (const r of byKey.values()) {
-      const match = existing.find((t) => t.active !== false && t.projectId === r.projectId && t.category === r.category);
+      const match = existingByKey.get(`${r.projectId}::${r.category}`);
       const rec: WorkTarget = {
-        id: match ? match.id : nextId("WTG", existing),
+        id: match ? match.id : takeNextId(),
         projectId: r.projectId!,
         category: r.category!,
         unit: r.unit,
@@ -143,29 +162,22 @@ export default function WorkTargetBulkImport({ onClose }: { onClose: () => void 
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
             {validRows.length} valid · {errorRows.length} with errors
           </div>
-          <div className="table-scroll" style={{ maxHeight: 280, overflowY: "auto" }}>
-            <table className="data">
-              <thead>
-                <tr><th>Line</th><th>Project</th><th>Category</th><th>Unit</th><th>Planned Qty</th><th>Status</th></tr>
-              </thead>
-              <tbody>
-                {parsed.map((r) => (
-                  <tr key={r.line}>
-                    <td className="num">{r.line}</td>
-                    <td>{r.projectRaw}</td>
-                    <td>{r.categoryRaw}</td>
-                    <td>{r.unit}</td>
-                    <td className="num">{r.plannedQty}</td>
-                    <td>
-                      {r.error
-                        ? <span className="badge-tag fail">{r.error}</span>
-                        : <span className="badge-tag pass">OK</span>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table columns={["Line", "Project", "Category", "Unit", "Planned Qty", "Status"]} maxHeight="280px">
+            {parsed.map((r) => (
+              <TableRow key={r.line}>
+                <TableCell>{r.line}</TableCell>
+                <TableCell>{r.projectRaw}</TableCell>
+                <TableCell>{r.categoryRaw}</TableCell>
+                <TableCell>{r.unit}</TableCell>
+                <TableCell>{r.plannedQty}</TableCell>
+                <TableCell>
+                  {r.error
+                    ? <span className="badge-tag fail">{r.error}</span>
+                    : <span className="badge-tag pass">OK</span>}
+                </TableCell>
+              </TableRow>
+            ))}
+          </Table>
         </div>
       )}
     </Modal>

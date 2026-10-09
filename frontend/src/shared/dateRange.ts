@@ -28,6 +28,16 @@ export function ymd(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+/** Inverse of ymd() — parses a bare "YYYY-MM-DD" as a LOCAL calendar date,
+ *  not new Date(string)'s UTC-midnight parsing (which shifts the day back
+ *  by one in any positive-UTC-offset timezone once formatted back out —
+ *  the same bug class ymd() itself exists to avoid). Use this wherever a
+ *  stored "YYYY-MM-DD" bound needs arithmetic or re-formatting. */
+export function parseYmd(s: string): Date {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
 /** Monday..Sunday bounds for ISO week `week` of `year`. */
 export function isoWeekBounds(year: number, week: number): { from: string; to: string } {
   const jan4 = new Date(year, 0, 4);

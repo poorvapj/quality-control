@@ -136,8 +136,7 @@ export interface DprPdfData {
   actionItems: { level: "critical" | "warning" | "good"; text: string }[];
 }
 
-export function DprDocument({ data }: { data: DprPdfData }) {
-  const s = data;
+function DprDocument({ data: s }: { data: DprPdfData }) {
   return (
     <Document title={`Daily Progress Report - ${s.periodLabel}`} author="Neoteric Properties">
       <Page size="A4" style={S.page}>
