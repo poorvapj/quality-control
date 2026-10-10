@@ -4,7 +4,17 @@
    changes the wire format, it just names it.
    =========================================================================== */
 
-export type Role = "DRI" | "CRM" | "CIVIL" | "ADMIN" | "SUPERVISOR";
+// The 5 built-in roles are still the ones with real baked-in behavior
+// (default Permission Matrix grants, Drawing-Request/DPR bypasses, etc.
+// — see shared/permissionMatrix.ts and shared/rules.ts). Widened from a
+// fixed union to `string` so Masters ▸ Role Master can add further roles
+// (e.g. "GM", "Architect") — a custom role starts with zero default
+// module access, same as any user with no explicit grant, and is
+// assigned access entirely through the Permission Matrix / per-user
+// Drawing Request permissions, same system every role already goes
+// through for anything beyond its built-in bypasses.
+export type Role = string;
+export const BUILT_IN_ROLES = ["DRI", "CRM", "CIVIL", "ADMIN", "SUPERVISOR"] as const;
 export type Track = "unit" | "floor";
 export type Severity = "Critical" | "Major" | "Minor";
 export type SnagStatus = "Open" | "In Progress" | "Closed";
@@ -396,6 +406,26 @@ export interface ModuleGrant extends BaseRecord {
   grants: Record<string, Partial<Record<ModuleAction, boolean>>>; // keyed by MATRIX_MODULES[].key
 }
 
+/** Custom role, created via Masters ▸ Role Master — the 5 built-in roles
+ *  (BUILT_IN_ROLES above) aren't stored here; this collection only holds
+ *  ones an Admin added beyond those. `id` doubles as the role's name/value
+ *  stored on User.role (e.g. "GM"), since this app has no separate
+ *  role-code vs. role-label concept anywhere else. */
+export interface RoleDef extends BaseRecord {
+  name: string;
+  active?: boolean;
+  // Role-wide default grants — every user with this custom role gets these
+  // unless a per-user ModuleGrant record overrides a specific module+action
+  // (same additive precedence as DEFAULT_ROLE_GRANTS for the 5 built-in
+  // roles, see shared/permissionMatrix.ts's hasModuleGrant()).
+  grants?: Record<string, Partial<Record<ModuleAction, boolean>>>;
+  // true = this record only stores a Permission Matrix ▸ Role-wise override
+  // for one of the 5 BUILT_IN_ROLES (keyed by `name`), not a real selectable
+  // custom role — kept out of Masters ▸ Role Master's list and AddUser's
+  // role dropdown.
+  builtin?: boolean;
+}
+
 export interface BoardData {
   projects: Project[];
   floors: Floor[];
@@ -414,6 +444,7 @@ export interface BoardData {
   moduleGrants: ModuleGrant[];
   teams: Team[];
   vendors: Vendor[];
+  roles: RoleDef[];
   progress: Record<string, ProgressPatch>;
   events: EventLog[];
   [key: string]: unknown;
@@ -428,9 +459,9 @@ export type Op =
   | { op: "event"; ev: EventLog };
 
 export type TabKey = "dash" | "misDashboard" | "work" | "board" | "handoverChecklist" | "handoverInternal" | "handoverOwner" | "snags" | "team" | "masters" | "addUser" | "dpr" | "drawingRequests" | "backups" | "auditLog" | "permissionMatrix";
-export type MasterKey = "projects" | "floors" | "units" | "stages" | "qparams" | "checklists" | "stagemap" | "users" | "permissions" | "workTargets" | "teams";
+export type MasterKey = "projects" | "floors" | "units" | "stages" | "qparams" | "checklists" | "stagemap" | "users" | "permissions" | "workTargets" | "teams" | "roles";
 
-export type FieldType = "text" | "number" | "date" | "color" | "select" | "ref" | "bool" | "textarea" | "items" | "password";
+export type FieldType = "text" | "number" | "date" | "color" | "select" | "ref" | "bool" | "textarea" | "items" | "password" | "permissionGrid";
 
 export interface MasterField {
   k: string;

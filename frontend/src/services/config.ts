@@ -200,5 +200,15 @@ export const MASTERS: Record<MasterKey, MasterDef> = {
       { k: "plannedQty", label: "Planned quantity", type: "number", required: true },
       { k: "active", label: "Active", type: "bool" }
     ]
+  },
+  roles: {
+    label: "Role", icon: "🏷️", prefix: "ROLE",
+    desc: "Custom roles beyond the 5 built-in ones (Site In-charge, CRM, Civil Engineer, Owner/Admin, Site Supervisor). Set this role's default module access below — every user assigned this role gets it automatically; a per-user override in Permission Matrix always wins over this default.",
+    cols: ["name", "active"],
+    fields: [
+      { k: "name", label: "Role name", type: "text", required: true, hint: "e.g. GM, Architect — this exact text is what gets assigned to a user as their role" },
+      { k: "active", label: "Active", type: "bool" },
+      { k: "grants", label: "Default permissions for this role", type: "permissionGrid" }
+    ]
   }
 };

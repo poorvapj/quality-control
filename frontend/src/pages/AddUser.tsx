@@ -21,6 +21,14 @@ import Switch from "../ui/tw/Switch";
    too, since both are just added to MASTERS.users.fields). */
 export default function AddUser() {
   const { data, apply, currentUserId, toast, setActiveTab, setActiveMaster } = useApp();
+  // Built-in roles (with their real display names) plus any custom role
+  // added via Masters ▸ Role Master — a custom role has no display-name
+  // mapping in ROLES, so it just shows its own name as typed there.
+  const customRoles = coll(data, "roles").filter((r: any) => r.active !== false && !r.builtin);
+  const roleOptions = [
+    ...Object.keys(ROLES).map((r) => ({ value: r, label: ROLES[r as Role].name })),
+    ...customRoles.map((r) => ({ value: r.name, label: r.name }))
+  ];
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -115,7 +123,7 @@ export default function AddUser() {
           <div>
             <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Role *</div>
             <select className="select w-full" value={role} onChange={(e) => setRole(e.target.value as Role)}>
-              {Object.keys(ROLES).map((r) => <option key={r} value={r}>{ROLES[r as Role].name}</option>)}
+              {roleOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
           <div>

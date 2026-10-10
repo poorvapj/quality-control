@@ -28,6 +28,10 @@ export default function Masters() {
   if (master.fields.some((f) => f.k === "projectId")) {
     rows = rows.filter((r: any) => !r.projectId || r.projectId === currentProjectId);
   }
+  // Built-in role default-permission overrides (saved from Permission
+  // Matrix ▸ Role-wise) are stored in this same "roles" collection but
+  // aren't real custom roles — don't list them in Role Master.
+  if (activeMaster === "roles") rows = rows.filter((r: any) => !r.builtin);
   if (q) {
     const ql = q.toLowerCase();
     rows = rows.filter((r) => JSON.stringify(r).toLowerCase().includes(ql));

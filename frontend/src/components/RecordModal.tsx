@@ -5,7 +5,8 @@ import { byId, coll, refLabel } from "../shared/rules";
 import { nextId } from "../shared/helpers";
 import { buildEventOp } from "../shared/eventLog";
 import Modal from "./Modal";
-import type { ChecklistItem, MasterField } from "../types";
+import type { ChecklistItem, MasterField, ModuleAction } from "../types";
+import PermissionGrid from "./PermissionGrid";
 
 export default function RecordModal() {
   const { recordModal, closeRecordModal, data, currentProjectId, currentUserId, apply, toast } = useApp();
@@ -25,6 +26,7 @@ export default function RecordModal() {
     const base: Record<string, any> = {};
     for (const f of master.fields) {
       if (f.type === "items") continue;
+      if (f.type === "permissionGrid") { base[f.k] = (rec as any)?.[f.k] || {}; continue; }
       base[f.k] = rec ? (rec as any)[f.k] : (f.type === "bool" ? (f.default ?? true) : "");
     }
     setValues(base);
@@ -53,10 +55,16 @@ export default function RecordModal() {
 
     let inner: React.ReactNode;
     if (f.type === "select") {
+      // The Users master's "role" field is the one select whose real
+      // option list isn't static — merge in any custom role from
+      // Masters ▸ Role Master alongside the 5 built-in ones.
+      const options = recordModal!.master === "users" && f.k === "role"
+        ? [...(f.options || []), ...coll(data, "roles").filter((r: any) => r.active !== false && !r.builtin).map((r: any) => r.name)]
+        : (f.options || []);
       inner = (
         <select className="select" value={v ?? ""} onChange={(e) => setV(f.k, e.target.value)}>
           {!f.required && <option value="">—</option>}
-          {(f.options || []).map((o) => <option key={o} value={o}>{o}</option>)}
+          {options.map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
       );
     } else if (f.type === "ref") {
@@ -79,6 +87,18 @@ export default function RecordModal() {
       );
     } else if (f.type === "textarea") {
       inner = <textarea className="textarea" value={v ?? ""} onChange={(e) => setV(f.k, e.target.value)} />;
+    } else if (f.type === "permissionGrid") {
+      const grants = v || {};
+      const toggle = (moduleKey: string, action: ModuleAction, val: boolean) =>
+        setV(f.k, { ...grants, [moduleKey]: { ...grants[moduleKey], [action]: val } });
+      return (
+        <div className="field full" key={f.k}>
+          <label>{f.label}</label>
+          <div style={{ marginTop: 8 }}>
+            <PermissionGrid grants={grants} onToggle={toggle} />
+          </div>
+        </div>
+      );
     } else if (f.type === "items") {
       return (
         <div className="field full" key={f.k}>
@@ -141,7 +161,7 @@ export default function RecordModal() {
   return (
     <Modal
       open
-      wide={master.fields.some((f) => f.type === "items")}
+      wide={master.fields.some((f) => f.type === "items" || f.type === "permissionGrid")}
       sub={(recordModal.id ? "EDIT " : "NEW ") + master.label.toUpperCase() + " RECORD"}
       title={recordModal.id ? ((rec as any)?.name || (rec as any)?.code || recordModal.id) : "New " + master.label}
       onClose={closeRecordModal}

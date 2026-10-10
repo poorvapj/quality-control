@@ -92,8 +92,35 @@ export function hasModuleGrant(
   const g = getModuleGrant(data, userId, moduleKey);
   if (g && action in g) return !!g[action];
   const user = byId(coll(data, "users"), userId);
-  const def = user ? DEFAULT_ROLE_GRANTS[user.role]?.[moduleKey] : undefined;
+  if (!user) return false;
+  // An explicit Permission Matrix ▸ Role-wise save (for either a built-in
+  // role's override, or a custom role's own grants) always wins over the
+  // hardcoded DEFAULT_ROLE_GRANTS baseline for that exact module+action.
+  const roleRec = coll(data, "roles").find((r) => r.name === user.role);
+  const roleAction = roleRec?.grants?.[moduleKey];
+  if (roleAction && action in roleAction) return !!roleAction[action];
+  const def = DEFAULT_ROLE_GRANTS[user.role]?.[moduleKey];
   return !!def?.includes(action);
+}
+
+/* Full module×action grid for one role, with every cell resolved to its
+   actual current value (explicit role-record override, else the built-in
+   DEFAULT_ROLE_GRANTS baseline, else off) — used by Permission Matrix's
+   Role-wise tab so built-in roles show their real current state pre-marked,
+   not just whatever's been explicitly saved. */
+export function effectiveRoleGrants(
+  data: BoardData | null, roleName: string
+): Record<string, Partial<Record<ModuleAction, boolean>>> {
+  const roleRec = coll(data, "roles").find((r) => r.name === roleName);
+  const out: Record<string, Partial<Record<ModuleAction, boolean>>> = {};
+  for (const m of MATRIX_MODULES) {
+    out[m.key] = {};
+    for (const a of m.actions) {
+      const explicit = roleRec?.grants?.[m.key]?.[a];
+      out[m.key]![a] = explicit !== undefined ? explicit : !!DEFAULT_ROLE_GRANTS[roleName as Role]?.[m.key]?.includes(a);
+    }
+  }
+  return out;
 }
 
 export function countGrantedActions(grants: Record<string, Partial<Record<ModuleAction, boolean>>>): number {

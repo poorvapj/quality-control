@@ -257,7 +257,7 @@ const PROJECT_SCOPED_COLLECTIONS = ["floors", "units", "snags", "assignments", "
 // controls when `myRole() === "ADMIN"`, but that was UI-only: any other
 // signed-in session could still upsert/delete these directly via
 // /api/ops. Mirrored here server-side (see assertOpAllowed).
-const MASTER_ROLE_GATED_COLLECTIONS = ["projects", "floors", "units", "stages", "qparams", "checklists", "stagemap", "permissions", "workTargets", "teams"];
+const MASTER_ROLE_GATED_COLLECTIONS = ["projects", "floors", "units", "stages", "qparams", "checklists", "stagemap", "permissions", "workTargets", "teams", "roles"];
 
 const roleCache = new Map(); // userId -> role, cleared per request is overkill; a stale role for a few seconds is an acceptable tradeoff for not hitting Mongo on every single op in a batch
 async function getUserRole(userId) {

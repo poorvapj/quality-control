@@ -25,7 +25,8 @@ const COLLECTIONS = [
   "workTargets",       // Per project+category planned quantity DPR qty entries roll up against
   "moduleGrants",      // Admin-managed per-user, per-module View/Create/Edit/Delete grants (additive on top of Role)
   "teams",             // Groups of users under one Team Leader — starts empty, Admin creates via Masters ▸ Teams
-  "vendors"            // Vendor/Contractor master (migrated from VMS) — code/name/work types only, no financial/KYC fields
+  "vendors",           // Vendor/Contractor master (migrated from VMS) — code/name/work types only, no financial/KYC fields
+  "roles"              // Custom roles beyond the 5 built-in ones (DRI/CRM/CIVIL/ADMIN/SUPERVISOR) — Masters ▸ Role Master
 ];
 
 function blankData() {
