@@ -5,7 +5,7 @@
     :root {
       --theme-primary: #f97316;
       --theme-primary-hover: #ea580c;
-      --theme-primary-light: rgba(249, 115, 22, 0.12);
+      --theme-primary-light: rgba(255, 122, 0, 0.12);
 
       --bg-page: #f8fafc;
       --bg-card: #ffffff;
@@ -21,7 +21,7 @@
       --color-mep: #3b82f6;
       --color-plaster: #eab308;
       --color-finishes: #a855f7;
-      --color-gate: #f97316;
+      --color-gate: var(--theme-primary);
       --color-pass: #22c55e;
       --color-fail: #ef4444;
       --color-locked: #cbd5e1;
@@ -60,7 +60,7 @@
         box-sizing: border-box;
         margin: 0;
         padding: 0;
-        font-family: 'Inter', system-ui, sans-serif;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         -webkit-tap-highlight-color: transparent;
       }
     }
@@ -72,60 +72,49 @@
       transition: background-color 0.25s ease, color 0.25s ease;
     }
 
+    /* Matches VMS's own scrollbar exactly (its index.css: always-visible,
+       12px, plain track/thumb, no arrow-button carets) — this used to be a
+       custom "single arrow at each end" style that VMS doesn't actually have. */
+    * {
+      scrollbar-width: auto;
+      scrollbar-color: #b0b0b0 #f1f1f1;
+    }
+
     ::-webkit-scrollbar {
-      width: 14px;
-      height: 14px;
+      width: 12px !important;
+      height: 12px !important;
     }
 
     ::-webkit-scrollbar-track {
-      background: var(--bg-subtle);
+      background: #f1f1f1 !important;
+      border-radius: 8px;
     }
 
     ::-webkit-scrollbar-thumb {
-      background: var(--border-strong);
-      border-radius: 3px;
-      border: 3px solid var(--bg-subtle);
+      background: #b0b0b0 !important;
+      border-radius: 8px;
+      border: 2px solid #f1f1f1;
     }
 
     ::-webkit-scrollbar-thumb:hover {
-      background: #9ca3af;
+      background: #8a8a8a !important;
     }
 
-    /* Classic up/down arrow caps at each end of the track — the "single
-       arrow at each end" style, drawn with the border-triangle trick since
-       that's the only way Chromium/Edge let you customize scrollbar-button
-       content. Firefox has no button-customization API at all, so it just
-       gets the plain thumb/track above (scrollbar-width/-color, set per
-       element where needed) with no arrows — an unavoidable gap, not a bug. */
-    ::-webkit-scrollbar-button:single-button {
-      background-color: var(--bg-subtle);
-      display: block;
-      width: 14px;
-      height: 14px;
+    html.dark * {
+      scrollbar-color: #475569 #1e293b;
     }
 
-    ::-webkit-scrollbar-button:single-button:vertical:decrement {
-      border-style: solid;
-      border-width: 0 6px 7px 6px;
-      border-color: transparent transparent var(--text-muted) transparent;
+    html.dark ::-webkit-scrollbar-track {
+      background: #1e293b !important;
     }
 
-    ::-webkit-scrollbar-button:single-button:vertical:increment {
-      border-style: solid;
-      border-width: 7px 6px 0 6px;
-      border-color: var(--text-muted) transparent transparent transparent;
+    html.dark ::-webkit-scrollbar-thumb {
+      background: #475569 !important;
+      border-color: #1e293b;
     }
 
-    ::-webkit-scrollbar-button:single-button:horizontal:decrement {
-      border-style: solid;
-      border-width: 6px 7px 6px 0;
-      border-color: transparent var(--text-muted) transparent transparent;
-    }
-
-    ::-webkit-scrollbar-button:single-button:horizontal:increment {
-      border-style: solid;
-      border-width: 6px 0 6px 7px;
-      border-color: transparent transparent transparent var(--text-muted);
+    html.dark ::-webkit-scrollbar-thumb:hover {
+      background: #64748b !important;
     }
 
     .wrap {
@@ -181,7 +170,7 @@
       width: 36px;
       height: 36px;
       flex-shrink: 0;
-      background: linear-gradient(135deg, var(--theme-primary), #ea580c);
+      background: linear-gradient(135deg, var(--theme-primary), var(--theme-primary-hover));
       border-radius: var(--radius-md);
       display: flex;
       align-items: center;
@@ -189,7 +178,7 @@
       color: white;
       font-weight: 500;
       font-size: 16px;
-      box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3);
+      box-shadow: 0 4px 12px rgba(255, 122, 0, 0.3);
     }
 
     .brand-sub {
@@ -232,38 +221,6 @@
 
     .btn-icon:active {
       transform: scale(0.94);
-    }
-
-    /* sync indicator */
-    .sync-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 10px;
-      font-weight: 500;
-      letter-spacing: 0.04em;
-      padding: 5px 10px;
-      border-radius: 99px;
-      background: rgba(34, 197, 94, 0.15);
-      color: var(--color-pass);
-      white-space: nowrap;
-    }
-
-    .sync-pill .dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 99px;
-      background: currentColor;
-    }
-
-    .sync-pill.local {
-      background: rgba(249, 115, 22, 0.15);
-      color: var(--color-gate);
-    }
-
-    .sync-pill.off {
-      background: rgba(239, 68, 68, 0.15);
-      color: var(--color-fail);
     }
 
     /* ------------------------------------------------------------ login */
@@ -424,28 +381,6 @@
     }
 
     /* ------------------------------------------------------- user bar */
-    .role-bar {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      padding: 14px 16px;
-      margin-bottom: 20px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      box-shadow: var(--shadow-card);
-      flex-wrap: wrap;
-    }
-
-    .role-info {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex: 1;
-      min-width: 240px;
-    }
-
     .role-avatar {
       width: 40px;
       height: 40px;
@@ -458,7 +393,7 @@
       justify-content: center;
       font-weight: 700;
       font-size: 13px;
-      border: 1px solid rgba(249, 115, 22, 0.3);
+      border: 1px solid rgba(255, 122, 0, 0.3);
     }
 
     .micro-label {
@@ -470,58 +405,6 @@
       margin-bottom: 3px;
     }
 
-    /* ----------------------------------------------------------- tabs (sidebar nav) */
-    .nav-tabs {
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-    }
-
-    .tab-btn {
-      padding: 10px 12px;
-      border: none;
-      border-radius: var(--radius-md);
-      background: transparent;
-      color: var(--text-muted);
-      font-size: 13px;
-      font-weight: 700;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      cursor: pointer;
-      white-space: nowrap;
-      text-align: left;
-      width: 100%;
-      transition: all 0.15s ease;
-    }
-
-    .tab-btn:hover:not(.active) {
-      background: var(--bg-card-hover);
-      color: var(--text-main);
-    }
-
-    .tab-btn.active {
-      background: var(--theme-primary-light);
-      color: var(--theme-primary);
-    }
-
-    .tab-btn .tab-badge {
-      margin-left: auto;
-    }
-
-    .tab-badge {
-      background: var(--bg-subtle);
-      color: var(--text-muted);
-      font-size: 10px;
-      font-weight: 600;
-      padding: 1px 7px;
-      border-radius: 99px;
-    }
-
-    .tab-btn.active .tab-badge {
-      background: rgba(249, 115, 22, 0.2);
-      color: var(--theme-primary);
-    }
 
     /* sub navigation for masters */
     .sub-nav {
@@ -638,20 +521,6 @@
       margin-top: 2px;
     }
 
-    .progress-track {
-      width: 90px;
-      height: 6px;
-      border-radius: 99px;
-      background: var(--bg-subtle);
-      overflow: hidden;
-    }
-
-    .progress-fill {
-      height: 100%;
-      border-radius: 99px;
-      background: var(--theme-primary);
-    }
-
     /* Work Progress table (DPR) — inset bordered table, compact rows, mono
        figures, and an inline thin bar with the % beside it. */
     .card-title-row.wp-head {
@@ -668,13 +537,6 @@
       border-radius: var(--radius-md);
       overflow: auto;
       max-height: 340px;
-    }
-
-    /* Fixed-height, vertically scrolling table body for the DPR Work tab
-       cards — header stays pinned while the rows scroll. */
-    .wp-scroll {
-      max-height: 340px;
-      overflow: auto;
     }
 
     /* All four Work-tab cards share one fixed size: header on top, then a
@@ -709,35 +571,10 @@
       max-height: none;
     }
 
-    .wp-card .table-scroll.wp-scroll {
-      flex: 1;
-      min-height: 0;
-      max-height: none;
-      margin: 12px 18px 18px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-    }
-
-    .wp-scroll table.data {
-      min-width: 0;
-    }
-
-    .wp-scroll table.data th,
     .wp-table-wrap table.data th {
       position: sticky;
       top: 0;
       z-index: 1;
-    }
-
-    .wp-scroll table.data th {
-      padding: 10px 14px;
-      font-size: 10px;
-      letter-spacing: 0.08em;
-    }
-
-    .wp-scroll table.data td {
-      padding: 8px 14px;
-      font-size: 13px;
     }
 
     table.data.wp-table {
@@ -860,33 +697,7 @@
       height: 36px;
     }
 
-    .select-icon-wrap {
-      position: relative;
-    }
-
-    .select-icon-wrap .select {
-      padding-left: 30px;
-    }
-
-    .select-icon {
-      position: absolute;
-      left: 9px;
-      top: 50%;
-      transform: translateY(-50%);
-      font-size: 12px;
-      pointer-events: none;
-      filter: grayscale(1) opacity(.7);
-    }
-
-    /* Neutral, non-colorful glyph — for emoji used as plain inline icons
-       (section headers, etc.) so they read as flat icon marks rather than
-       loud colorful emoji. */
-    .icon-mono {
-      display: inline-block;
-      filter: grayscale(1) opacity(.7);
-    }
-
-    /* SearchDropdown.tsx and DropdownMenu.tsx are fully inline-styled —
+    /* SearchDropdown.tsx is fully inline-styled —
        no shared CSS classes to keep in sync here. */
 
     /* Calendar range picker (CalendarRangePicker.tsx) */
@@ -991,31 +802,6 @@
       border-top: 1px solid var(--border);
     }
 
-    /* -------------------------------------------------------- sections */
-    .section-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin: 22px 0 12px 0;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-
-    .section-title {
-      font-size: 15px;
-      font-weight: 600;
-      letter-spacing: -0.01em;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .section-sub {
-      font-size: 11px;
-      color: var(--text-muted);
-      font-weight: 500;
-    }
-
     /* ----------------------------------------------------- page header */
     .page-header {
       display: flex;
@@ -1048,13 +834,13 @@
 
     .page-title {
       font-size: 20px;
-      font-weight: 600;
+      font-weight: 700;
       letter-spacing: -0.01em;
       line-height: 1.3;
     }
 
     .page-desc {
-      font-size: 12.5px;
+      font-size: 13.5px;
       color: var(--text-muted);
       margin-top: 4px;
       line-height: 1.5;
@@ -1140,20 +926,24 @@
     }
 
 
+    /* Matches the reference's own stat card component exactly (ui/nexora/
+       StatCard.tsx: "value in font-medium (not bold)", text-lg/xl) — this
+       used to be 32px/700, much larger and bolder than the reference
+       anywhere a stat card appears. */
     .stat-val {
-      font-size: 32px;
-      font-weight: 700;
+      font-size: 20px;
+      font-weight: 500;
       color: var(--text-main);
       margin-top: 6px;
-      letter-spacing: -.5px;
+      letter-spacing: -.3px;
     }
 
     /* Plain sentence-case label — matches the reference's stat cards
        (regular weight, no uppercase/letter-spacing), used where a card
        doesn't need the tiny all-caps micro-label treatment. */
     .stat-label {
-      font-size: 14px;
-      font-weight: 500;
+      font-size: 13px;
+      font-weight: 400;
       color: var(--text-muted);
     }
 
@@ -1191,12 +981,6 @@
       padding-right: 40px;
     }
 
-    .stat-foot {
-      font-size: 10px;
-      color: var(--text-sub);
-      margin-top: 4px;
-      font-weight: 600;
-    }
 
     .card {
       background: var(--bg-card);
@@ -1249,7 +1033,7 @@
 
     .qitem.warn {
       border-left: 4px solid var(--color-gate);
-      background: rgba(249, 115, 22, 0.05);
+      background: rgba(255, 122, 0, 0.05);
     }
 
     .qitem-main {
@@ -1303,7 +1087,7 @@
     }
 
     .badge-tag.gate {
-      background: rgba(249, 115, 22, 0.15);
+      background: rgba(255, 122, 0, 0.15);
       color: var(--color-gate);
     }
 
@@ -1991,73 +1775,11 @@
       width: 100%;
     }
 
-    /* Values below match the reference app's own .nx-nav-item /.nx-nav-icon
-       rules exactly, including the fact that the active row carries NO
-       background fill — only the orange text + icon tint change. */
-    .nx-nav-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      width: 100%;
-      padding: 8px 12px;
-      margin: 2px 10px;
-      border-radius: 10px;
-      font-size: 14px;
-      font-weight: 500;
-      color: var(--nx-sidebar-text);
-      cursor: pointer;
-      transition: background .15s ease, color .15s ease;
-      outline: none;
-    }
-
-    /* Native <button> keeps a focus ring after a click, which read as a
-       stray black box around the active item. Keep it for keyboard nav
-       (:focus-visible) only. */
-    .nx-nav-item:focus-visible {
-      outline: 2px solid var(--theme-primary);
-      outline-offset: -2px;
-    }
-
-    .nx-nav-item:hover {
-      background: var(--bg-card-hover);
-      color: var(--text-main);
-    }
-
-    .nx-nav-item:hover .nx-nav-icon {
-      background: var(--border);
-    }
-
-    .nx-nav-item--active {
-      background: transparent;
-      color: var(--theme-primary);
-      font-weight: 650;
-    }
-
-    .nx-nav-item--active:hover {
-      background: var(--bg-card-hover);
-      color: var(--theme-primary-hover);
-    }
-
-    .nx-nav-icon {
-      width: 18px;
-      height: 18px;
-      flex-shrink: 0;
-      color: #98a2b3;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      transition: color .15s ease;
-    }
-
-    .nx-nav-item:hover .nx-nav-icon {
-      background: none;
-      color: var(--text-main);
-    }
-
-    .nx-nav-item--active .nx-nav-icon {
-      background: none;
-      color: var(--theme-primary);
-    }
+    /* .nx-nav-item/.nx-nav-icon's one real definition lives in
+       layouts/Sidebar/Sidebar.css — this used to be a stray duplicate
+       rule block (both defining the same selectors with different
+       values), which made any edit to one of them silently not show up
+       depending on which one the cascade picked. */
 
     /* App shell — pure white; separation from the boxed sidebar/header
        comes from their own border + shadow, not a page tint. */
@@ -2071,13 +1793,6 @@
        flush-layout block (and the legacy unused .sidebar-brand/.tab-btn/
        .nav-tabs/.nav-icon/.tab-badge classnames from before that split)
        used to actively conflict with those two files. */
-
-    .sync-pill {
-      border-radius: 999px;
-      font-size: 10px;
-      font-weight: 700;
-      padding: 6px 10px;
-    }
 
     .account-btn {
       min-height: 42px;
@@ -2110,23 +1825,6 @@
       width: 100%;
       margin: 0;
       padding: 28px 32px 60px;
-    }
-
-    /* Active project strip — kept compact, no min-height, so it doesn't
-       read as a big empty box when there's only a label + one dropdown. */
-    .role-bar {
-      padding: 12px 18px;
-      margin-bottom: 18px;
-      border: 1px solid #d8dee6;
-      border-radius: 14px;
-      background: #fff;
-      box-shadow: 0 4px 20px rgba(15, 23, 42, 0.06);
-    }
-
-    .role-bar .select {
-      margin-top: 5px;
-      min-width: 150px;
-      height: 38px;
     }
 
     /* Page headings */
@@ -2394,8 +2092,7 @@
         gap: 8px;
       }
 
-      .header-subtitle,
-      .sync-pill {
+      .header-subtitle {
         display: none;
       }
 
@@ -2452,11 +2149,6 @@
       border-color: var(--border);
     }
 
-    html.dark .sidebar-brand {
-      background: var(--bg-card);
-      border-bottom-color: var(--border);
-    }
-
     html.dark header {
       background-color: rgba(19, 26, 42, .92);
       border-bottom-color: var(--border);
@@ -2474,7 +2166,6 @@
     html.dark .panel-card,
     html.dark .card,
     html.dark .stat-card,
-    html.dark .role-bar,
     html.dark .account-menu,
     html.dark .modal-box,
     html.dark .drawer-sheet {
@@ -2539,8 +2230,7 @@
       background: #162032;
     }
 
-    html.dark .sub-btn,
-    html.dark .tab-btn:not(.active) {
+    html.dark .sub-btn {
       background: transparent;
     }
 
@@ -2548,34 +2238,6 @@
       background: var(--bg-subtle);
       border-color: var(--border);
       color: var(--text-main);
-    }
-
-    html.dark .nav-group-label {
-      color: var(--text-sub);
-    }
-
-    html.dark .tab-btn {
-      color: var(--text-muted);
-    }
-
-    html.dark .tab-btn:hover {
-      background: var(--bg-card-hover);
-      color: #ffb877;
-    }
-
-    html.dark .tab-btn.active {
-      background: rgba(255, 122, 0, .18);
-      color: #ff9d4d;
-    }
-
-    html.dark .tab-badge {
-      background: var(--bg-subtle);
-      color: var(--text-muted);
-    }
-
-    html.dark .tab-btn.active .tab-badge {
-      background: rgba(255, 122, 0, .28);
-      color: #ff9d4d;
     }
 
     html.dark .sub-btn {
@@ -2590,8 +2252,7 @@
     }
 
     html.dark .page-desc,
-    html.dark .micro-label,
-    html.dark .section-sub {
+    html.dark .micro-label {
       color: var(--text-muted);
     }
 

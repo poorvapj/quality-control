@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
-import { coll, myProjects, projectFloors, projectUnits, trackStages } from "../shared/rules";
+import { myProjects, projectFloors, projectUnits, trackStages } from "../shared/rules";
 import {
   buildUnitRows, computeTopKpis, computeProjectOverview, computeStageProgress,
   computeSnagAnalysis, computePossessionTracker, computeTradePerformance, computeManagementAlerts,
@@ -11,6 +11,7 @@ import Card from "../ui/tw/Card";
 import Badge from "../ui/tw/Badge";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
+import StatTile from "../components/StatTile";
 
 /* Management/CEO-facing MIS Dashboard — read-only aggregation over the
    existing BoardData via shared/misData.ts. No new endpoint, no change
@@ -22,11 +23,12 @@ const ACCENT = "#FF7A00";
 
 function Kpi({ label, value, sub, tone }: { label: string; value: string | number; sub?: string; tone?: "default" | "danger" }) {
   return (
-    <Card className="!p-4">
-      <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1.5">{label}</div>
-      <div className="text-2xl font-extrabold leading-tight" style={tone === "danger" ? { color: "#dc2626" } : undefined}>{value}</div>
-      {sub && <div className="text-[11px] text-[var(--text-muted)] mt-1">{sub}</div>}
-    </Card>
+    <StatTile
+      label={label}
+      value={value}
+      foot={sub}
+      valueClassName={tone === "danger" ? "text-[#dc2626]" : undefined}
+    />
   );
 }
 

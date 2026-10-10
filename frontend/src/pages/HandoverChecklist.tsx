@@ -9,6 +9,7 @@ import SearchDropdown from "../components/SearchDropdown";
 import PossessionForm, { type PossessionActiveForm } from "../components/PossessionForm";
 import Card from "../ui/tw/Card";
 import Btn from "../ui/tw/Btn";
+import StatTile from "../components/StatTile";
 import Table, { TableRow, TableCell } from "../ui/tw/Table";
 import StatusBadge from "../ui/tw/StatusBadge";
 import { hasModuleGrant } from "../shared/permissionMatrix";
@@ -251,64 +252,33 @@ export default function HandoverChecklist({ initialTab }: { initialTab?: "intern
       ) : (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-            <Card>
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Total Units</div>
-                  <div className="text-2xl font-extrabold leading-none">{units.length}</div>
-                  <div className="text-[10.5px] text-[var(--text-sub)] font-semibold mt-1.5">
-                    {fFloor === ALL_FLOORS ? "Across all floors" : "On selected floor"}
-                  </div>
-                </div>
-                <div className="w-7 h-7 rounded-radius-sm bg-[var(--bg-subtle)] text-[var(--text-muted)] flex items-center justify-center shrink-0">
-                  <NavIcon name="handover" size={13} />
-                </div>
-              </div>
-            </Card>
-            <Card>
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">
-                    {tab === "internal" ? "Internal Completed" : "Owner Completed"}
-                  </div>
-                  <div className="text-2xl font-extrabold leading-none">{activePassed}/{units.length}</div>
-                  <div className="text-[10.5px] text-[var(--text-sub)] font-semibold mt-1.5">
-                    {units.length ? Math.round((activePassed / units.length) * 100) : 0}% completed
-                  </div>
-                </div>
-                <div className="w-7 h-7 rounded-radius-sm bg-[rgba(34,197,94,0.12)] text-[var(--color-pass)] flex items-center justify-center shrink-0">
-                  <NavIcon name="check" size={13} />
-                </div>
-              </div>
-            </Card>
-            <Card>
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Failed</div>
-                  <div className="text-2xl font-extrabold leading-none">{activeFailed}/{units.length}</div>
-                  <div className="text-[10.5px] text-[var(--text-sub)] font-semibold mt-1.5">
-                    {units.length ? Math.round((activeFailed / units.length) * 100) : 0}% failed
-                  </div>
-                </div>
-                <div className="w-7 h-7 rounded-radius-sm bg-red-50 text-red-600 flex items-center justify-center shrink-0">
-                  <NavIcon name="snags" size={13} />
-                </div>
-              </div>
-            </Card>
-            <Card>
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Pending</div>
-                  <div className="text-2xl font-extrabold leading-none">{activePending}</div>
-                  <div className="text-[10.5px] text-[var(--text-sub)] font-semibold mt-1.5">
-                    {units.length ? Math.round((activePending / units.length) * 100) : 0}% pending
-                  </div>
-                </div>
-                <div className="w-7 h-7 rounded-radius-sm bg-primary-light text-primary flex items-center justify-center shrink-0">
-                  <NavIcon name="clock" size={13} />
-                </div>
-              </div>
-            </Card>
+            <StatTile
+              label="Total Units"
+              value={units.length}
+              foot={fFloor === ALL_FLOORS ? "Across all floors" : "On selected floor"}
+              icon="handover"
+            />
+            <StatTile
+              label={tab === "internal" ? "Internal Completed" : "Owner Completed"}
+              value={`${activePassed}/${units.length}`}
+              foot={`${units.length ? Math.round((activePassed / units.length) * 100) : 0}% completed`}
+              icon="check"
+              iconClassName="bg-[rgba(34,197,94,0.12)] text-[var(--color-pass)]"
+            />
+            <StatTile
+              label="Failed"
+              value={`${activeFailed}/${units.length}`}
+              foot={`${units.length ? Math.round((activeFailed / units.length) * 100) : 0}% failed`}
+              icon="snags"
+              iconClassName="bg-red-50 text-red-600"
+            />
+            <StatTile
+              label="Pending"
+              value={activePending}
+              foot={`${units.length ? Math.round((activePending / units.length) * 100) : 0}% pending`}
+              icon="clock"
+              iconClassName="bg-primary-light text-primary"
+            />
           </div>
 
           <Card padded={false} className="p-[18px]">

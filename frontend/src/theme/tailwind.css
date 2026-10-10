@@ -25,11 +25,16 @@
    it at the light-mode value and risk drifting to a slightly different
    color over time, which is exactly what this split avoids. */
 @theme {
-  --color-primary: #f97316;
-  --color-primary-hover: #ea580c;
-  --color-primary-light: rgba(249, 115, 22, 0.12);
+  --color-primary: #ff7a00;
+  --color-primary-hover: #e56e00;
+  /* rgba, not VMS's solid #fff4e8 — this token must stay theme-invariant
+     (same value in light/dark, per the comment above), and a transparent
+     tint reads correctly on both a white and a dark card background; a
+     solid light peach would look wrong over a dark card. VMS itself does
+     the same thing for its dark theme (--nx-orange-50 becomes an rgba). */
+  --color-primary-light: rgba(255, 122, 0, 0.12);
 
-  --radius-radius-sm: 6px;
+  --radius-radius-sm: 8px;
   --radius-radius-md: 10px;
-  --radius-radius-lg: 16px;
+  --radius-radius-lg: 14px;
 }

@@ -1,17 +1,28 @@
 import React from "react";
 import { useApp } from "../context/AppContext";
-import { coll, myAssignments, mySnags, myReleases, assignmentsByMe, snagsByMe, refLabel, snagTarget, myProjects } from "../shared/rules";
+import { myAssignments, mySnags, myReleases, assignmentsByMe, snagsByMe, refLabel, snagTarget, myProjects } from "../shared/rules";
 import { ago, dueLabel } from "../shared/helpers";
 import AssignRow from "../components/AssignRow";
 import SnagRow from "../components/SnagRow";
 import NavIcon from "../components/NavIcon";
+import Card from "../ui/tw/Card";
+import Btn from "../ui/tw/Btn";
+import Badge from "../ui/tw/Badge";
+
+function SectionLabel({ icon, children }: { icon: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-[var(--text-sub)] mb-2 mt-5 first:mt-0">
+      <NavIcon name={icon} size={13} /> {children}
+    </div>
+  );
+}
 
 export default function MyWork() {
-  const { data, currentProjectId, currentUserId, openAssignModal, openDrawer } = useApp();
+  const { data, currentUserId, openAssignModal, openDrawer } = useApp();
   const isAdmin = currentUserId === "U-ADMIN";
   // "My Work" is personal — whatever's assigned to me, on any project —
   // not scoped to whichever project happens to be selected elsewhere.
-  // `currentProjectId` defaults to projects[0] and this page has no project
+  // The global current-project selector defaults to projects[0] and this page has no project
   // switcher, so scoping to it silently hid work from other projects.
   const projectIds = myProjects(data, currentUserId).map((p) => p.id);
   const asg = projectIds.flatMap((pid) => myAssignments(data, pid, currentUserId));
@@ -34,101 +45,122 @@ export default function MyWork() {
 
   return (
     <div>
-      <div className="page-header">
-        <div className="page-header-left">
-          <div className="page-icon"><NavIcon name="work" size={20} /></div>
+      <div className="flex items-start justify-between gap-4 flex-wrap mt-0.5 mb-6">
+        <div className="flex gap-3.5 items-start min-w-0">
+          <div className="w-11 h-11 shrink-0 rounded-radius-md bg-primary-light text-primary flex items-center justify-center">
+            <NavIcon name="work" size={20} />
+          </div>
           <div>
-            <div className="page-title">My Work</div>
-            <div className="page-desc">
+            <div className="text-xl font-semibold tracking-tight leading-tight">My Work</div>
+            <div className="text-[12.5px] text-[var(--text-muted)] mt-1 leading-normal">
               {isAdmin
                 ? `${allAsg.length} open assignments · ${allSng.length} open snags across all projects`
                 : `${asg.length} assigned · ${rel.length} released to your role · ${sng.length} snags on you`}
             </div>
           </div>
         </div>
-        <div className="page-header-actions">
-          <button className="btn btn-primary btn-sm" onClick={() => openAssignModal({ targetType: "unit", targetId: "", stageId: "" })}>＋ Assign work</button>
-        </div>
+        <Btn label="＋ Assign work" size="sm" onClick={() => openAssignModal({ targetType: "unit", targetId: "", stageId: "" })} />
       </div>
 
       {isAdmin ? (
         <>
-          <div className="section-header"><div className="section-title"><span className="icon-mono"><NavIcon name="pin" size={14} /></span> ALL ASSIGNED WORK</div></div>
-          <div className="card">
-            {allAsg.length ? allAsg.map((a) => <AssignRow key={a.id} a={a} showAssignee />) : <div className="empty">No open assignments across any project.</div>}
-          </div>
+          <SectionLabel icon="pin">All Assigned Work</SectionLabel>
+          <Card padded={false}>
+            {allAsg.length ? allAsg.map((a) => <AssignRow key={a.id} a={a} showAssignee />) : <div className="py-7 text-center text-[var(--text-muted)] text-[13px]">No open assignments across any project.</div>}
+          </Card>
 
-          <div className="section-header"><div className="section-title"><span className="icon-mono"><NavIcon name="snags" size={14} /></span> ALL OPEN SNAGS</div></div>
-          <div className="card">
-            {allSng.length ? allSng.map((s) => <SnagRow key={s.id} s={s} showAssignee />) : <div className="empty">No open snags across any project.</div>}
-          </div>
+          <SectionLabel icon="snags">All Open Snags</SectionLabel>
+          <Card padded={false}>
+            {allSng.length ? allSng.map((s) => <SnagRow key={s.id} s={s} showAssignee />) : <div className="py-7 text-center text-[var(--text-muted)] text-[13px]">No open snags across any project.</div>}
+          </Card>
         </>
       ) : (
         <>
-          <div className="section-header"><div className="section-title"><span className="icon-mono"><NavIcon name="pin" size={14} /></span> ASSIGNED TO ME</div></div>
-          <div className="card">
-            {asg.length ? asg.map((a) => <AssignRow key={a.id} a={a} />) : <div className="empty">Nothing assigned to you.</div>}
-          </div>
+          <SectionLabel icon="pin">Assigned to Me</SectionLabel>
+          <Card padded={false}>
+            {asg.length ? asg.map((a) => <AssignRow key={a.id} a={a} />) : <div className="py-7 text-center text-[var(--text-muted)] text-[13px]">Nothing assigned to you.</div>}
+          </Card>
 
-          <div className="section-header"><div className="section-title"><span className="icon-mono"><NavIcon name="work" size={14} /></span> RELEASED TO MY ROLE</div></div>
-          <div className="card">
+          <SectionLabel icon="work">Released to My Role</SectionLabel>
+          <Card padded={false}>
             {rel.length ? rel.map((r, i) => {
               const name = r.targetType === "unit" ? refLabel(data, "units", r.targetId) : refLabel(data, "floors", r.targetId);
               const st = r.p.status;
               const label = st === "fail" ? "REWORK" : st === "wip" ? "IN PROGRESS" : st === "ack" ? "ACKNOWLEDGED" : "NEW RELEASE";
               return (
-                <div key={i} className={"qitem" + (st === "fail" ? " alert" : "")} onClick={() => openDrawer({ kind: r.targetType, id: r.targetId })}>
-                  <div className="qitem-main">
-                    <div className="qitem-title">{name} · {r.stage.name}</div>
-                    <div className="qitem-sub">Released {ago(r.p.rel)}{r.p.note ? " · " + r.p.note : ""}</div>
+                <div
+                  key={i}
+                  className={
+                    "flex items-center justify-between gap-3 py-3.5 px-4 border-b border-[var(--border)] cursor-pointer transition-colors last:border-b-0" +
+                    (st === "fail" ? " border-l-4 border-l-[var(--color-fail)] bg-[rgba(239,68,68,0.05)]" : "")
+                  }
+                  onClick={() => openDrawer({ kind: r.targetType, id: r.targetId })}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] font-bold">{name} · {r.stage.name}</div>
+                    <div className="text-[11px] text-[var(--text-muted)] mt-0.5 leading-normal">Released {ago(r.p.rel)}{r.p.note ? " · " + r.p.note : ""}</div>
                   </div>
-                  <span className={"badge-tag " + (st === "fail" ? "fail" : st === "wip" ? "wip" : "gate")}>{label}</span>
+                  <Badge color={st === "fail" ? "red" : st === "wip" ? "blue" : "amber"}>{label}</Badge>
                 </div>
               );
-            }) : <div className="empty">No stages released to your role.</div>}
-          </div>
+            }) : <div className="py-7 text-center text-[var(--text-muted)] text-[13px]">No stages released to your role.</div>}
+          </Card>
 
-          <div className="section-header"><div className="section-title"><span className="icon-mono"><NavIcon name="snags" size={14} /></span> SNAGS ON ME</div></div>
-          <div className="card">
-            {sng.length ? sng.map((s) => <SnagRow key={s.id} s={s} />) : <div className="empty">No open snags assigned to you.</div>}
-          </div>
+          <SectionLabel icon="snags">Snags on Me</SectionLabel>
+          <Card padded={false}>
+            {sng.length ? sng.map((s) => <SnagRow key={s.id} s={s} />) : <div className="py-7 text-center text-[var(--text-muted)] text-[13px]">No open snags assigned to you.</div>}
+          </Card>
         </>
       )}
 
-      <div className="section-header"><div className="section-title"><span className="icon-mono"><NavIcon name="pin" size={14} /></span> ASSIGNED BY ME</div></div>
-      <div className="card">
+      <SectionLabel icon="pin">Assigned by Me</SectionLabel>
+      <Card padded={false}>
         {outAsg.length === 0 && outSng.length === 0 ? (
-          <div className="empty">You haven't handed off any work.</div>
+          <div className="py-7 text-center text-[var(--text-muted)] text-[13px]">You haven't handed off any work.</div>
         ) : (
           <>
             {outAsg.map((a) => {
               const target = a.targetType === "unit" ? refLabel(data, "units", a.targetId) : refLabel(data, "floors", a.targetId);
               const d = dueLabel(a.dueAt);
               return (
-                <div key={a.id} className={"qitem" + (d.cls === "fail" ? " alert" : "")} onClick={() => openDrawer({ kind: a.targetType, id: a.targetId })}>
-                  <div className="qitem-main">
-                    <div className="qitem-title">📌 {target} · {refLabel(data, "stages", a.stageId)}</div>
-                    <div className="qitem-sub">Handed to {refLabel(data, "users", a.assignedTo)} {ago(a.assignedAt)}{a.note ? " · " + a.note : ""}</div>
+                <div
+                  key={a.id}
+                  className={
+                    "flex items-center justify-between gap-3 py-3.5 px-4 border-b border-[var(--border)] cursor-pointer transition-colors last:border-b-0" +
+                    (d.cls === "fail" ? " border-l-4 border-l-[var(--color-fail)] bg-[rgba(239,68,68,0.05)]" : "")
+                  }
+                  onClick={() => openDrawer({ kind: a.targetType, id: a.targetId })}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] font-bold">📌 {target} · {refLabel(data, "stages", a.stageId)}</div>
+                    <div className="text-[11px] text-[var(--text-muted)] mt-0.5 leading-normal">Handed to {refLabel(data, "users", a.assignedTo)} {ago(a.assignedAt)}{a.note ? " · " + a.note : ""}</div>
                   </div>
-                  <span className={"badge-tag " + d.cls}>{a.status}</span>
+                  <Badge color={d.cls === "fail" ? "red" : d.cls === "gate" ? "amber" : "gray"}>{a.status}</Badge>
                 </div>
               );
             })}
             {outSng.map((s) => {
               const d = dueLabel(s.dueAt);
               return (
-                <div key={s.id} className={"qitem" + (s.severity === "Critical" ? " alert" : "")} onClick={() => openDrawer({ kind: "snag", id: s.id })}>
-                  <div className="qitem-main">
-                    <div className="qitem-title">🐞 {s.title}</div>
-                    <div className="qitem-sub">{snagTarget(data, s)} · handed to {refLabel(data, "users", s.assignedTo)} {ago(s.lastReassignedAt)}</div>
+                <div
+                  key={s.id}
+                  className={
+                    "flex items-center justify-between gap-3 py-3.5 px-4 border-b border-[var(--border)] cursor-pointer transition-colors last:border-b-0" +
+                    (s.severity === "Critical" ? " border-l-4 border-l-[var(--color-fail)] bg-[rgba(239,68,68,0.05)]" : "")
+                  }
+                  onClick={() => openDrawer({ kind: "snag", id: s.id })}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] font-bold">🐞 {s.title}</div>
+                    <div className="text-[11px] text-[var(--text-muted)] mt-0.5 leading-normal">{snagTarget(data, s)} · handed to {refLabel(data, "users", s.assignedTo)} {ago(s.lastReassignedAt)}</div>
                   </div>
-                  <span className={"badge-tag " + d.cls}>{s.status}</span>
+                  <Badge color={d.cls === "fail" ? "red" : d.cls === "gate" ? "amber" : "gray"}>{s.status}</Badge>
                 </div>
               );
             })}
           </>
         )}
-      </div>
+      </Card>
     </div>
   );
 }

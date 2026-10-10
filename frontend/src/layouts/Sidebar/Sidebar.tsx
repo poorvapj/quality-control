@@ -177,7 +177,7 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
                         justifyContent: collapsed ? "center" : "flex-start",
                       }}
                     >
-                      <span className="nx-nav-icon"><NavIcon name={it.icon} size={collapsed ? 20 : 17} /></span>
+                      <span className="nx-nav-icon"><NavIcon name={it.icon} size={collapsed ? 16 : 14} /></span>
                       {!collapsed && (
                         <span style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6 }}>
                           <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.label}</span>
@@ -229,10 +229,10 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
                                 cursor: "pointer",
                                 textAlign: "left",
                                 font: "inherit",
-                                paddingLeft: 44,
+                                paddingLeft: 40,
                               }}
                             >
-                              <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 13 }}>
+                              <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12.5 }}>
                                 {c.label}
                               </span>
                               {cActive && (

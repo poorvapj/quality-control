@@ -83,7 +83,7 @@ export default function PermissionMatrix() {
         </div>
         <div className="ml-auto text-right">
           <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Assigned authorizations</div>
-          <div className="text-xl font-extrabold leading-tight">{assignedCount}</div>
+          <div className="text-xl font-medium leading-tight">{assignedCount}</div>
         </div>
       </Card>
 

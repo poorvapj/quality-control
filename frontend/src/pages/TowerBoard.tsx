@@ -37,12 +37,12 @@ export default function TowerBoard() {
     <div>
       <div className="flex items-start justify-between gap-4 flex-wrap mt-0.5 mb-5">
         <div className="flex gap-3 items-center min-w-0">
-          <div className="w-9 h-9 shrink-0 rounded-radius-md bg-primary-light text-primary flex items-center justify-center">
-            <NavIcon name="board" size={17} />
+          <div className="w-11 h-11 shrink-0 rounded-radius-md bg-primary-light text-primary flex items-center justify-center">
+            <NavIcon name="board" size={20} />
           </div>
           <div>
-            <div className="text-[17px] font-semibold tracking-tight leading-tight">Tower Quality Matrix</div>
-            <div className="text-[12px] text-[var(--text-muted)] mt-0.5 leading-normal">
+            <div className="text-xl font-semibold tracking-tight leading-tight">Tower Quality Matrix</div>
+            <div className="text-[12.5px] text-[var(--text-muted)] mt-1 leading-normal">
               Tap a unit for its trade timeline · tap the floor label for the RCC structure track.
             </div>
           </div>

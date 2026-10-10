@@ -129,8 +129,6 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
   const effChecklistId = stageJoined?.map.checklistId || "";
   const effUnit = byId(coll(data, "units"), selUnitId);
   const effUnitName = effUnit?.name || "";
-  const effFloorName = refLabel(data, "floors", selFloorId);
-  const effProjectName = refLabel(data, "projects", selProjectId);
   const effStageName = stageJoined?.stage.name || (selStageKey === "internal" ? "Internal Handover Checklist" : "Owner Handover Sign-off");
   const effStageDesc = selStageKey === "internal"
     ? "Civil / QC internal inspection before owner possession."

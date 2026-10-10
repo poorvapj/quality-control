@@ -16,6 +16,7 @@ import Card from "../ui/tw/Card";
 import Btn from "../ui/tw/Btn";
 import Badge from "../ui/tw/Badge";
 import Field from "../ui/tw/Field";
+import StatTile from "../components/StatTile";
 import type { BoardData, Floor, TabKey } from "../types";
 
 const FLOOR_LIST_CAP = 15;
@@ -208,12 +209,12 @@ export default function Dashboard() {
     <div>
       <div className="flex items-start justify-between gap-4 flex-wrap mt-0.5 mb-5">
         <div className="flex gap-3 items-center min-w-0">
-          <div className="w-9 h-9 shrink-0 rounded-radius-md bg-primary-light text-primary flex items-center justify-center">
-            <NavIcon name="dashboard" size={17} />
+          <div className="w-11 h-11 shrink-0 rounded-radius-md bg-primary-light text-primary flex items-center justify-center">
+            <NavIcon name="dashboard" size={20} />
           </div>
           <div>
-            <div className="text-[17px] font-semibold tracking-tight leading-tight">Dashboard</div>
-            <div className="text-[12px] text-[var(--text-muted)] mt-0.5 leading-normal">
+            <div className="text-xl font-semibold tracking-tight leading-tight">Dashboard</div>
+            <div className="text-[12.5px] text-[var(--text-muted)] mt-1 leading-normal">
               {viewAllProjects
                 ? "Combined KPIs, what needs you, and floor-by-floor progress across all projects."
                 : "Site-wide KPIs, what needs you, and floor-by-floor progress."}
@@ -289,18 +290,15 @@ export default function Dashboard() {
       <div className="text-[9px] font-semibold uppercase tracking-[0.1em] text-[var(--text-sub)] mb-2">KPI OVERVIEW</div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         {stats.map((s) => (
-          <Card
+          <StatTile
             key={s.label}
-            className={"relative transition-shadow" + (s.onClick ? " cursor-pointer" : "")}
+            label={s.label}
+            value={s.val}
+            foot={s.foot}
+            icon={s.icon}
+            valueClassName={s.tone ? STAT_VAL_CLS[s.tone] : undefined}
             onClick={s.onClick}
-          >
-            <div className="text-[9px] font-semibold uppercase tracking-[0.1em] text-[var(--text-sub)] mb-1 pr-8">{s.label}</div>
-            <div className={`text-[28px] font-extrabold mt-1 tracking-tight leading-none ${s.tone ? STAT_VAL_CLS[s.tone] : "text-[var(--text-main)]"}`}>{s.val}</div>
-            <div className="text-[10px] text-[var(--text-sub)] mt-1.5 font-semibold leading-snug">{s.foot}</div>
-            <div className="absolute top-3 right-3 w-7 h-7 rounded-radius-sm bg-[var(--bg-subtle)] text-[var(--text-muted)] flex items-center justify-center">
-              <NavIcon name={s.icon} size={13} />
-            </div>
-          </Card>
+          />
         ))}
       </div>
 
@@ -330,7 +328,7 @@ export default function Dashboard() {
               return (
                 <div
                   key={i}
-                  className="flex items-center justify-between gap-3 py-3.5 px-4 border-b border-[var(--border)] cursor-pointer transition-colors border-l-4 border-l-[var(--color-gate)] bg-[rgba(249,115,22,0.05)]"
+                  className="flex items-center justify-between gap-3 py-3.5 px-4 border-b border-[var(--border)] cursor-pointer transition-colors border-l-4 border-l-[var(--color-gate)] bg-[rgba(255,122,0,0.05)]"
                   onClick={() => openDrawer({ kind: s.targetType, id: s.targetId })}
                 >
                   <div className="min-w-0 flex-1">
