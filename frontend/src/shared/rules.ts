@@ -5,7 +5,7 @@
    =========================================================================== */
 
 import type {
-  BoardData, CollectionName, Track, Stage, StageMap, Unit, Floor, Role, User, Snag, Assignment, Project
+  BoardData, CollectionName, Track, Stage, StageMap, Unit, Floor, Role, Snag, Assignment, Project
 } from "../types";
 import { HOUR } from "../services/config";
 

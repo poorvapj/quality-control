@@ -22,7 +22,7 @@ const UNIT_TABS: { key: UnitTab; label: string }[] = [
 ];
 
 export default function Drawer() {
-  const { drawer, closeDrawer, data, currentProjectId, myRole } = useApp();
+  const { drawer, closeDrawer } = useApp();
   if (!drawer) return null;
   return (
     <>
@@ -485,7 +485,7 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
 }
 
 function SnagDrawer({ id }: { id: string }) {
-  const { data, closeDrawer, currentProjectId } = useApp();
+  const { data, closeDrawer } = useApp();
   const { setSnagStatus, saveSnagAssignee, capturePhoto } = useActions();
   const fileRef = useRef<HTMLInputElement>(null);
   const s = byId(coll(data, "snags"), id);

@@ -7,7 +7,7 @@ import { buildEventOp } from "../shared/eventLog";
 import { watermarkPhoto } from "../shared/watermark";
 
 export function useActions() {
-  const { data, apply, toast, currentUserId, currentProjectId, closeDrawer, drawer, openDrawer, openSnagModal } = useApp();
+  const { data, apply, toast, currentUserId, currentProjectId, drawer, openDrawer, openSnagModal } = useApp();
 
   function logEvent(action: string, targetId: string, stageId: string, detail: string): Op {
     return buildEventOp(currentUserId, action, targetId, stageId, detail);

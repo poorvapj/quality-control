@@ -40,8 +40,6 @@ export const WORK_CATEGORIES = [
 ];
 
 export const SEVERITIES: Severity[] = ["Critical", "Major", "Minor"];
-export const SNAG_STATUS = ["Open", "In Progress", "Closed"] as const;
-export const ASSIGN_STATUS = ["Assigned", "Accepted", "Done"] as const;
 export const HOUR = 3600000;
 
 /** An open snag overdue by this many days shows up in the Snags page's

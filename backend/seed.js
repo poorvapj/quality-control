@@ -28,18 +28,6 @@ const COLLECTIONS = [
   "vendors"            // Vendor/Contractor master (migrated from VMS) — code/name/work types only, no financial/KYC fields
 ];
 
-/* Roles are a fixed vocabulary — users and stages both point at these. */
-const ROLES = {
-  DRI:  { name: "Site In-charge (DRI)",              note: "Owns the board. Runs the morning quality huddle, clears slow handoffs." },
-  EXE:  { name: "Engineer — Structure & Wet Trades", note: "Columns, slab, masonry, plaster, waterproofing. Needs QC pour permits." },
-  MEP:  { name: "Engineer — MEP",                    note: "AC conduits, plumbing and electrical before pour permits close." },
-  FIN:  { name: "Engineer — Finishes",               note: "Putty, tiling, windows. Locked until the pre-tiling gate passes." },
-  QC:   { name: "QC Engineer",                       note: "Passes/fails gates, issues pour permits. Fails need a written reason." },
-  MEAS: { name: "Measurement DET (eMB)",             note: "Measures and photographs hidden work before QC gates." }
-};
-
-const TRACKS = { unit: "Unit / Flat trades", floor: "Floor / RCC structure" };
-
 function blankData() {
   const d = { rev: 1, progress: {}, events: [], createdAt: new Date().toISOString() };
   for (const c of COLLECTIONS) d[c] = [];
@@ -689,4 +677,4 @@ function seedData() {
   return d;
 }
 
-module.exports = { COLLECTIONS, ROLES, TRACKS, seedData, blankData };
+module.exports = { COLLECTIONS, seedData, blankData };

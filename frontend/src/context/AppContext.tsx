@@ -80,7 +80,6 @@ interface AppContextValue {
   logout: () => void;
   toast: (msg: string) => void;
   apply: (ops: Op[]) => Promise<void>;
-  reset: (mode: "demo" | "blank") => Promise<void>;
 
   me: () => User | null;
   myRole: () => Role;
@@ -165,19 +164,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toast("Offline — change kept on this device only");
     }
   }, [persistLocal, toast]);
-
-  const reset = useCallback(async (mode: "demo" | "blank") => {
-    if (modeRef.current !== "live") { toast("Reset needs the server"); return; }
-    const r = await fetch(API_BASE + "/api/reset", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
-      body: JSON.stringify({ mode })
-    });
-    const j = await r.json();
-    if (!r.ok) { toast(j.error || "Reset isn't allowed"); return; }
-    setData(j.data); dataRef.current = j.data; setRev(j.rev);
-    toast(mode === "blank" ? "Blank board created" : "Demo data reloaded");
-  }, [toast]);
 
   /* Initial load + poll */
   useEffect(() => {
@@ -327,7 +313,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setCurrentUserId, setCurrentProjectId, setActiveTab, setActiveMaster, openDrawer, closeDrawer,
     openAssignModal, closeAssignModal, openSnagModal, closeSnagModal,
     openChecklistModal, closeChecklistModal, openRecordModal, closeRecordModal,
-    login, logout, toast, apply, reset, me, myRole
+    login, logout, toast, apply, me, myRole
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

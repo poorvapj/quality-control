@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { myProjects, projectFloors, projectUnits, trackStages } from "../shared/rules";
 import {
-  buildUnitRows, computeTopKpis, computeProjectOverview, computeStageProgress,
+  computeTopKpis, computeProjectOverview, computeStageProgress,
   computeSnagAnalysis, computePossessionTracker, computeTradePerformance, computeManagementAlerts,
   type MisFilters
 } from "../shared/misData";
@@ -64,7 +64,7 @@ function StatusPill({ status }: { status: "On Track" | "Needs Attention" | "At R
 }
 
 export default function MISDashboard() {
-  const { data, currentUserId, currentProjectId, openDrawer } = useApp();
+  const { data, currentUserId, openDrawer } = useApp();
   const allProjects = myProjects(data, currentUserId);
 
   const [projectId, setProjectId] = useState("");

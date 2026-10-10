@@ -11,3 +11,7 @@ node_modules/
 data.json
 data.json.tmp
 data.json.bak-*
+
+# One-off local DB scripts (migrations, audits, backfills) — kept locally
+# for re-use, deliberately never committed/pushed.
+backend/scripts/

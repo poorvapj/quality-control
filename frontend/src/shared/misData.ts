@@ -6,7 +6,7 @@
    from the same data the rest of the app already renders.
    =========================================================================== */
 
-import type { BoardData, Snag, Project } from "../types";
+import type { BoardData, Snag } from "../types";
 import {
   coll, byId, myProjects, projectUnits, projectFloors, trackStages, prog,
   unitSummary, openSnagsFor, rccChecklistItems, refLabel

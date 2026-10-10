@@ -31,7 +31,7 @@ type ActiveForm = PossessionActiveForm;
    drawer, the same visual pattern as AssignModal.tsx's "Assign Work"
    form — not a popup, not a plain card. */
 export default function HandoverChecklist({ initialTab }: { initialTab?: "internal" | "owner" }) {
-  const { data, currentProjectId, setCurrentProjectId, myRole, currentUserId } = useApp();
+  const { data, setCurrentProjectId, myRole, currentUserId } = useApp();
   // This page owns its own Project filter and starts unset ("Choose") —
   // never silently defaulting to whatever project happens to be globally
   // selected elsewhere (Dashboard/Tower Board), same reasoning as Raise

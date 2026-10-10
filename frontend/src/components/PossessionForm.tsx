@@ -297,7 +297,7 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
   // (filled from what the customer says) and never requires a per-item
   // photo — only the owner's own photo at the end (missingOwnerPhoto).
   const missingEvidence = selStageKey === "internal"
-    ? items.map((it, i) => ({ it, row: rows[i] })).find(({ it, row }) => row && aggregateResult(row) !== "na" && !row.photo)
+    ? items.map((it, i) => ({ it, row: rows[i] })).find(({ row }) => row && aggregateResult(row) !== "na" && !row.photo)
     : undefined;
 
 
