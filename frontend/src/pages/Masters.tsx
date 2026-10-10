@@ -5,10 +5,12 @@ import { coll, byId, refLabel } from "../shared/rules";
 import { exportSnagCsv } from "../shared/exportSnagCsv";
 import { downloadCsv } from "../shared/csv";
 import { buildEventOp } from "../shared/eventLog";
-import { hasModuleGrant } from "../shared/permissionMatrix";
+import { hasModuleGrant, effectiveRoleGrants } from "../shared/permissionMatrix";
+import { ROLES } from "../services/config";
 import NavIcon from "../components/NavIcon";
 import WorkTargetBulkImport from "../components/WorkTargetBulkImport";
 import type { MasterKey } from "../types";
+import { BUILT_IN_ROLES } from "../types";
 
 export default function Masters() {
   const {
@@ -28,10 +30,21 @@ export default function Masters() {
   if (master.fields.some((f) => f.k === "projectId")) {
     rows = rows.filter((r: any) => !r.projectId || r.projectId === currentProjectId);
   }
-  // Built-in role default-permission overrides (saved from Permission
-  // Matrix ▸ Role-wise) are stored in this same "roles" collection but
-  // aren't real custom roles — don't list them in Role Master.
-  if (activeMaster === "roles") rows = rows.filter((r: any) => !r.builtin);
+  if (activeMaster === "roles") {
+    // Built-in role default-permission overrides (saved from Permission
+    // Matrix ▸ Role-wise) are stored in this same "roles" collection but
+    // aren't real custom roles — don't list the raw override record;
+    // instead show one synthetic row per built-in role so DRI/CRM/Civil
+    // Engineer/Admin/Supervisor are visible here too, editing the same
+    // override record underneath (created on first save if none exists
+    // yet).
+    const overrides = rows;
+    const builtinRows = BUILT_IN_ROLES.map((r) => {
+      const existing = overrides.find((o: any) => o.name === r);
+      return existing || { id: "ROLE-OVERRIDE-" + r, name: r, active: true, builtin: true };
+    });
+    rows = [...builtinRows, ...overrides.filter((o: any) => !o.builtin)];
+  }
   if (q) {
     const ql = q.toLowerCase();
     rows = rows.filter((r) => JSON.stringify(r).toLowerCase().includes(ql));
@@ -47,6 +60,8 @@ export default function Masters() {
     if (key === "severity") return <span className={"badge-tag " + (v === "Critical" ? "crit" : v === "Major" ? "gate" : "mute")}>{v}</span>;
     if (key === "track") return <span className={"badge-tag " + (v === "unit" ? "wip" : "mute")}>{v === "unit" ? "Unit" : "Floor"}</span>;
     if (key === "role") return <span className="badge-tag mute">{v}</span>;
+    if (activeMaster === "roles" && rec.builtin && key === "name") return (ROLES as any)[v]?.name || v;
+    if (activeMaster === "roles" && key === "active" && rec.builtin) return <span className="badge-tag wip">Built-in</span>;
     if (v == null || v === "") return <span style={{ color: "var(--text-sub)" }}>—</span>;
     return String(v);
   }
@@ -68,6 +83,18 @@ export default function Masters() {
       buildEventOp(currentUserId, "MASTER_DELETE", id, "", `${master.label} · deleted · ${identity}`)
     ]);
     toast("Deleted " + id);
+  }
+
+  // Opening Edit on a built-in role that has never been overridden yet
+  // (synthetic row, no real "roles" record) — write through a real record
+  // first, pre-filled with its actual current defaults, so RecordModal has
+  // something genuine to load instead of blank fields.
+  async function openRoleEdit(r: any) {
+    if (r.builtin && !coll(data, "roles").some((x) => x.id === r.id)) {
+      const roleCode = r.id.replace("ROLE-OVERRIDE-", "");
+      await apply([{ op: "upsert", coll: "roles", rec: { id: r.id, name: roleCode, active: true, builtin: true, grants: effectiveRoleGrants(data, roleCode) } }]);
+    }
+    openRecordModal({ master: activeMaster, id: r.id });
   }
 
   function exportMasterCsv() {
@@ -143,8 +170,10 @@ export default function Masters() {
                     {editable && (
                       <td>
                         <div className="row-actions">
-                          <button className="btn btn-secondary btn-sm" title="Edit" onClick={() => openRecordModal({ master: activeMaster, id: r.id })}><NavIcon name="edit" size={13} /></button>
-                          <button className="btn btn-secondary btn-sm" title="Delete" onClick={() => deleteRecord(r.id)}><NavIcon name="trash" size={13} /></button>
+                          <button className="btn btn-secondary btn-sm" title="Edit" onClick={() => (activeMaster === "roles" ? openRoleEdit(r) : openRecordModal({ master: activeMaster, id: r.id }))}><NavIcon name="edit" size={13} /></button>
+                          {!(activeMaster === "roles" && r.builtin) && (
+                            <button className="btn btn-secondary btn-sm" title="Delete" onClick={() => deleteRecord(r.id)}><NavIcon name="trash" size={13} /></button>
+                          )}
                         </div>
                       </td>
                     )}

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useApp } from "../context/AppContext";
-import { MASTERS } from "../services/config";
+import { MASTERS, ROLES } from "../services/config";
 import { byId, coll, refLabel } from "../shared/rules";
 import { nextId } from "../shared/helpers";
 import { buildEventOp } from "../shared/eventLog";
@@ -49,9 +49,25 @@ export default function RecordModal() {
 
   const setV = (k: string, v: any) => setValues((s) => ({ ...s, [k]: v }));
 
+  const isBuiltinRole = recordModal!.master === "roles" && !!(rec as any)?.builtin;
+
   function renderField(f: MasterField) {
     const v = values[f.k];
     const full = f.type === "items" || f.type === "textarea" || f.k === "name";
+
+    // Built-in roles (DRI/CRM/CIVIL/ADMIN/SUPERVISOR) can't be renamed or
+    // deactivated here — this record only exists to hold a Permission
+    // Matrix ▸ Role-wise override on top of their hardcoded baseline.
+    if (isBuiltinRole && f.k === "name") {
+      return (
+        <div className="field full" key={f.k}>
+          <label>{f.label}</label>
+          <input className="input" value={(ROLES as any)[v]?.name || v} disabled />
+          <div className="hint">Built-in role — name is fixed.</div>
+        </div>
+      );
+    }
+    if (isBuiltinRole && f.k === "active") return null;
 
     let inner: React.ReactNode;
     if (f.type === "select") {
@@ -163,7 +179,7 @@ export default function RecordModal() {
       open
       wide={master.fields.some((f) => f.type === "items" || f.type === "permissionGrid")}
       sub={(recordModal.id ? "EDIT " : "NEW ") + master.label.toUpperCase() + " RECORD"}
-      title={recordModal.id ? ((rec as any)?.name || (rec as any)?.code || recordModal.id) : "New " + master.label}
+      title={recordModal.id ? (isBuiltinRole ? ((ROLES as any)[(rec as any)?.name]?.name || (rec as any)?.name) : (rec as any)?.name || (rec as any)?.code || recordModal.id) : "New " + master.label}
       onClose={closeRecordModal}
       footer={
         <>
