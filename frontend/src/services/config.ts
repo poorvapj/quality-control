@@ -208,11 +208,11 @@ export const MASTERS: Record<MasterKey, MasterDef> = {
     fields: [
       { k: "name", label: "Role name", type: "text", required: true, hint: "e.g. GM, Architect — this exact text is what gets assigned to a user as their role" },
       { k: "active", label: "Active", type: "bool" },
-      { k: "grants", label: "Default permissions for this role", type: "permissionGrid" },
       { k: "canScreenStage1", label: "Drawing Requests — can screen at Stage 1", type: "bool", default: false },
       { k: "canProduceStage2", label: "Drawing Requests — can produce at Stage 2", type: "bool", default: false },
       { k: "canCrosscheckStage3", label: "Drawing Requests — can cross-check at Stage 3", type: "bool", default: false },
-      { k: "canFinalApproveStage4", label: "Drawing Requests — can give final approval at Stage 4", type: "bool", default: false }
+      { k: "canFinalApproveStage4", label: "Drawing Requests — can give final approval at Stage 4", type: "bool", default: false },
+      { k: "grants", label: "Default permissions for this role", type: "permissionGrid" }
     ]
   }
 };

@@ -13,16 +13,8 @@ import SearchDropdown from "../components/SearchDropdown";
 import PermissionGrid from "../components/PermissionGrid";
 import Card from "../ui/tw/Card";
 import Btn from "../ui/tw/Btn";
-import Switch from "../ui/tw/Switch";
 
 type Mode = "user" | "role";
-
-const STAGE_FIELDS: { k: StageKey; label: string }[] = [
-  { k: "canScreenStage1", label: "Stage 1 — Screen" },
-  { k: "canProduceStage2", label: "Stage 2 — Produce" },
-  { k: "canCrosscheckStage3", label: "Stage 3 — Cross-check" },
-  { k: "canFinalApproveStage4", label: "Stage 4 — Final Approval" }
-];
 
 export default function PermissionMatrix() {
   const { data, apply, currentUserId, toast } = useApp();
@@ -187,25 +179,9 @@ export default function PermissionMatrix() {
           {!userId ? (
             <Card className="text-center text-[13px] text-[var(--text-muted)]">No users to grant permissions to.</Card>
           ) : (
-            <>
-              <div className="mb-5">
-                <PermissionGrid grants={grants} onToggle={toggle} />
-              </div>
-              <Card className="mb-5">
-                <div className="text-[13.5px] font-bold mb-1">Drawing Requests — Stage Approvals</div>
-                <div className="text-[11px] text-[var(--text-muted)] mb-3">
-                  Level-wise review chain rights — not tied to role. Admin always has all 4.
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {STAGE_FIELDS.map((s) => (
-                    <div key={s.k} className="flex items-center justify-between">
-                      <span className="text-[12.5px] font-semibold">{s.label}</span>
-                      <Switch on={!!stageGrants[s.k]} onChange={(v) => toggleStage(s.k, v)} />
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            </>
+            <div className="mb-5">
+              <PermissionGrid grants={grants} onToggle={toggle} stageGrants={stageGrants} onToggleStage={toggleStage} />
+            </div>
           )}
 
           {userId && (
@@ -238,23 +214,8 @@ export default function PermissionMatrix() {
           </Card>
 
           <div className="mb-5">
-            <PermissionGrid grants={roleGrants} onToggle={toggleRole} />
+            <PermissionGrid grants={roleGrants} onToggle={toggleRole} stageGrants={roleStageGrants} onToggleStage={toggleRoleStage} />
           </div>
-
-          <Card className="mb-5">
-            <div className="text-[13.5px] font-bold mb-1">Drawing Requests — Stage Approvals (role default)</div>
-            <div className="text-[11px] text-[var(--text-muted)] mb-3">
-              Every user with this role gets these stages automatically, unless a per-user grant (User-wise tab) overrides it.
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {STAGE_FIELDS.map((s) => (
-                <div key={s.k} className="flex items-center justify-between">
-                  <span className="text-[12.5px] font-semibold">{s.label}</span>
-                  <Switch on={!!roleStageGrants[s.k]} onChange={(v) => toggleRoleStage(s.k, v)} />
-                </div>
-              ))}
-            </div>
-          </Card>
 
           {!!roleName && (
             <div className="flex justify-end">
