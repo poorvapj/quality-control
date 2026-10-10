@@ -419,6 +419,15 @@ export interface RoleDef extends BaseRecord {
   // (same additive precedence as DEFAULT_ROLE_GRANTS for the 5 built-in
   // roles, see shared/permissionMatrix.ts's hasModuleGrant()).
   grants?: Record<string, Partial<Record<ModuleAction, boolean>>>;
+  // Role-wide defaults for the Drawing Requests review chain — same 4
+  // stage flags as the per-user `permissions` collection (see
+  // shared/permissions.ts's canActOnStage), checked as a fallback when the
+  // user has no explicit per-user grant for that stage. Additive only,
+  // same as module grants — never a role-based bypass like DRI's.
+  canScreenStage1?: boolean;
+  canProduceStage2?: boolean;
+  canCrosscheckStage3?: boolean;
+  canFinalApproveStage4?: boolean;
   // true = this record only stores a Permission Matrix ▸ Role-wise override
   // for one of the 5 BUILT_IN_ROLES (keyed by `name`), not a real selectable
   // custom role — kept out of Masters ▸ Role Master's list and AddUser's

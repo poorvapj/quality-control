@@ -1,18 +1,28 @@
 import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, byId } from "../shared/rules";
+import { nextId } from "../shared/helpers";
 import { buildEventOp } from "../shared/eventLog";
 import { countGrantedActions, defaultGrantsForRole, effectiveRoleGrants } from "../shared/permissionMatrix";
 import { ROLES } from "../services/config";
 import { BUILT_IN_ROLES } from "../types";
 import type { ModuleAction, ModuleGrant } from "../types";
+import type { StageKey } from "../shared/permissions";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
 import PermissionGrid from "../components/PermissionGrid";
 import Card from "../ui/tw/Card";
 import Btn from "../ui/tw/Btn";
+import Switch from "../ui/tw/Switch";
 
 type Mode = "user" | "role";
+
+const STAGE_FIELDS: { k: StageKey; label: string }[] = [
+  { k: "canScreenStage1", label: "Stage 1 — Screen" },
+  { k: "canProduceStage2", label: "Stage 2 — Produce" },
+  { k: "canCrosscheckStage3", label: "Stage 3 — Cross-check" },
+  { k: "canFinalApproveStage4", label: "Stage 4 — Final Approval" }
+];
 
 export default function PermissionMatrix() {
   const { data, apply, currentUserId, toast } = useApp();
@@ -40,6 +50,17 @@ export default function PermissionMatrix() {
     setLoadedFor(userId);
   }
 
+  // Drawing Request stage approvals — same 4 flags as the dedicated
+  // Drawing Request Permission Master, exposed here too so level-wise
+  // approval rights can be set in one place alongside module access.
+  const existingStageGrants = coll(data, "permissions").find((p) => p.userId === userId) || null;
+  const [stageGrants, setStageGrants] = useState<Partial<Record<StageKey, boolean>>>(existingStageGrants || {});
+  const [stageLoadedFor, setStageLoadedFor] = useState(userId);
+  if (stageLoadedFor !== userId) {
+    setStageGrants(coll(data, "permissions").find((p) => p.userId === userId) || {});
+    setStageLoadedFor(userId);
+  }
+
   // Role-wise mode: same grid, but editing one role's default grants —
   // either a custom role's own grants (Masters ▸ Role Master's "roles"
   // collection), or an explicit override on top of a built-in role's
@@ -52,9 +73,13 @@ export default function PermissionMatrix() {
   ];
   const [roleName, setRoleName] = useState(roleOptions[0]?.value || "");
   const [roleGrants, setRoleGrants] = useState<Record<string, Partial<Record<ModuleAction, boolean>>>>(effectiveRoleGrants(data, roleName));
+  const [roleStageGrants, setRoleStageGrants] = useState<Partial<Record<StageKey, boolean>>>(
+    coll(data, "roles").find((r) => r.name === roleOptions[0]?.value) || {}
+  );
   const [roleLoadedFor, setRoleLoadedFor] = useState(roleName);
   if (roleLoadedFor !== roleName) {
     setRoleGrants(effectiveRoleGrants(data, roleName));
+    setRoleStageGrants(coll(data, "roles").find((r) => r.name === roleName) || {});
     setRoleLoadedFor(roleName);
   }
 
@@ -71,11 +96,21 @@ export default function PermissionMatrix() {
     setRoleGrants((prev) => ({ ...prev, [moduleKey]: { ...prev[moduleKey], [action]: v } }));
   }
 
+  function toggleStage(k: StageKey, v: boolean) {
+    setStageGrants((prev) => ({ ...prev, [k]: v }));
+  }
+
+  function toggleRoleStage(k: StageKey, v: boolean) {
+    setRoleStageGrants((prev) => ({ ...prev, [k]: v }));
+  }
+
   async function save() {
     if (!userId) return;
     const rec: ModuleGrant = { id: "MG-" + userId, userId, roleLabel: roleLabel.trim() || undefined, grants };
+    const stageRec = { id: existingStageGrants?.id || nextId("PRM", coll(data, "permissions")), userId, ...stageGrants };
     await apply([
       { op: "upsert", coll: "moduleGrants", rec },
+      { op: "upsert", coll: "permissions", rec: stageRec },
       buildEventOp(currentUserId, "PERMISSION_UPDATE", userId, "", `Updated module grants for ${user?.name || userId}`)
     ]);
     toast("Permissions saved");
@@ -84,8 +119,8 @@ export default function PermissionMatrix() {
   async function saveRole() {
     if (!roleName) return;
     const rec = existingRoleRec
-      ? { ...existingRoleRec, grants: roleGrants }
-      : { id: "ROLE-OVERRIDE-" + roleName.toUpperCase(), name: roleName, builtin: true, grants: roleGrants };
+      ? { ...existingRoleRec, grants: roleGrants, ...roleStageGrants }
+      : { id: "ROLE-OVERRIDE-" + roleName.toUpperCase(), name: roleName, builtin: true, grants: roleGrants, ...roleStageGrants };
     await apply([
       { op: "upsert", coll: "roles", rec },
       buildEventOp(currentUserId, "PERMISSION_UPDATE", rec.id, "", `Updated default permissions for role ${roleName}`)
@@ -152,9 +187,25 @@ export default function PermissionMatrix() {
           {!userId ? (
             <Card className="text-center text-[13px] text-[var(--text-muted)]">No users to grant permissions to.</Card>
           ) : (
-            <div className="mb-5">
-              <PermissionGrid grants={grants} onToggle={toggle} />
-            </div>
+            <>
+              <div className="mb-5">
+                <PermissionGrid grants={grants} onToggle={toggle} />
+              </div>
+              <Card className="mb-5">
+                <div className="text-[13.5px] font-bold mb-1">Drawing Requests — Stage Approvals</div>
+                <div className="text-[11px] text-[var(--text-muted)] mb-3">
+                  Level-wise review chain rights — not tied to role. Admin always has all 4.
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {STAGE_FIELDS.map((s) => (
+                    <div key={s.k} className="flex items-center justify-between">
+                      <span className="text-[12.5px] font-semibold">{s.label}</span>
+                      <Switch on={!!stageGrants[s.k]} onChange={(v) => toggleStage(s.k, v)} />
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </>
           )}
 
           {userId && (
@@ -189,6 +240,21 @@ export default function PermissionMatrix() {
           <div className="mb-5">
             <PermissionGrid grants={roleGrants} onToggle={toggleRole} />
           </div>
+
+          <Card className="mb-5">
+            <div className="text-[13.5px] font-bold mb-1">Drawing Requests — Stage Approvals (role default)</div>
+            <div className="text-[11px] text-[var(--text-muted)] mb-3">
+              Every user with this role gets these stages automatically, unless a per-user grant (User-wise tab) overrides it.
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {STAGE_FIELDS.map((s) => (
+                <div key={s.k} className="flex items-center justify-between">
+                  <span className="text-[12.5px] font-semibold">{s.label}</span>
+                  <Switch on={!!roleStageGrants[s.k]} onChange={(v) => toggleRoleStage(s.k, v)} />
+                </div>
+              ))}
+            </div>
+          </Card>
 
           {!!roleName && (
             <div className="flex justify-end">

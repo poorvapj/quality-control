@@ -14,7 +14,7 @@
    =========================================================================== */
 
 import type { BoardData, Role, UserPermission } from "../types";
-import { coll } from "./rules";
+import { coll, byId } from "./rules";
 
 export type StageKey = "canScreenStage1" | "canProduceStage2" | "canCrosscheckStage3" | "canFinalApproveStage4";
 
@@ -26,5 +26,11 @@ export function getUserPermission(data: BoardData | null, userId: string | null)
 export function canActOnStage(data: BoardData | null, userId: string | null, role: Role, stageKey: StageKey): boolean {
   if (userId === "U-ADMIN") return true; // Admin account bypass
   const p = getUserPermission(data, userId);
-  return !!p && !!p[stageKey];
+  if (p && p[stageKey]) return true;
+  // No explicit per-user grant — fall back to this user's role's own
+  // default stage grants (Masters ▸ Role Master / Permission Matrix ▸
+  // Role-wise), additive only, same as hasModuleGrant()'s role fallback.
+  const user = byId(coll(data, "users"), userId);
+  const roleRec = user ? coll(data, "roles").find((r) => r.name === user.role) : null;
+  return !!roleRec?.[stageKey];
 }
