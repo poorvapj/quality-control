@@ -22,15 +22,25 @@ async function syncVmsDpr(mongoDb) {
   const sourceDb = await getSourceDb();
   if (!sourceDb) return { skipped: true };
 
-  const [vmsReports, qcProjects, qcUsers, existingIds] = await Promise.all([
+  const [vmsReports, vmsProjects, qcProjects, qcUsers, existingIds] = await Promise.all([
     sourceDb.collection("dailyprogressreports").find({}, {
-      projection: { projectName: 1, date: 1, vendorCode: 1, vendorName: 1, shiftType: 1, labourCount: 1, workEntries: 1, driName: 1, isPublicSubmission: 1 }
+      projection: { projectId: 1, projectName: 1, date: 1, vendorCode: 1, vendorName: 1, shiftType: 1, labourCount: 1, workEntries: 1, driName: 1, isPublicSubmission: 1 }
     }).toArray(),
-    mongoDb.collection("projects").find({}, { projection: { id: 1, name: 1 } }).toArray(),
+    sourceDb.collection("projects").find({}, { projection: { id: 1, code: 1 } }).toArray(),
+    mongoDb.collection("projects").find({}, { projection: { id: 1, name: 1, code: 1 } }).toArray(),
     mongoDb.collection("users").find({}, { projection: { id: 1, name: 1 } }).toArray(),
     mongoDb.collection("dpr").find({}, { projection: { id: 1 } }).toArray()
   ]);
   const existing = new Set(existingIds.map((d) => d.id));
+  // Projects are matched by `code` (PRJ-xxx) first — the one field VMS and
+  // QC's project records reliably share even when a project's display name
+  // has diverged between the two apps (e.g. VMS's "Regal Garden Villa -
+  // West Gate" vs QC's "West Gate", both code PRJ-011) — name-matching
+  // alone silently and permanently dropped every report for any such
+  // project. Name match stays as a fallback for anything with no VMS
+  // project record or no code set on either side.
+  const vmsProjectIdToCode = new Map(vmsProjects.map((p) => [String(p._id), norm(p.code)]));
+  const qcProjectByCode = new Map(qcProjects.filter((p) => p.code).map((p) => [norm(p.code), p.id]));
   const projectByName = new Map(qcProjects.map((p) => [norm(p.name), p.id]));
   const userByName = new Map(qcUsers.map((u) => [norm(u.name), u.id]));
 
@@ -40,7 +50,8 @@ async function syncVmsDpr(mongoDb) {
     const id = "DPR-VMS-" + r._id;
     if (existing.has(id)) continue;
 
-    const projectId = projectByName.get(norm(r.projectName));
+    const vmsCode = r.projectId ? vmsProjectIdToCode.get(String(r.projectId)) : null;
+    const projectId = (vmsCode && qcProjectByCode.get(vmsCode)) || projectByName.get(norm(r.projectName));
     if (!projectId) { unmatchedProjects.add(r.projectName); continue; }
     const submittedByUserId = userByName.get(norm(r.driName)) || null;
 
