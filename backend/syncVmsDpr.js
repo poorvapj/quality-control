@@ -33,6 +33,54 @@ async function getSourceDb() {
 
 const norm = (s) => String(s || "").trim().toLowerCase();
 
+// Phase 3 — persistent failure visibility for this poller, mirroring the
+// shape/pattern VMS's own QcSyncFailure model already uses (type, sourceId,
+// reason, attempts, lastAttemptAt, resolvedAt) — but kept entirely on QC's
+// own side (a new collection in QC's own database, not VMS's), since this
+// is QC's own operational record of "did my reconciliation cycle run
+// cleanly", not a per-VMS-record retry queue the way VMS's push failures
+// are. One shared document per failure type (upsert, never a fresh insert
+// per attempt) so a poller that fails every cycle for an hour produces one
+// updated record with a growing `attempts` count, not dozens of rows.
+// Deliberately NOT added to seed.js's COLLECTIONS — this is an internal
+// ops log, not board data, so it has no business being exposed through the
+// generic /api/state dump or /api/ops write path.
+const POLLER_FAILURE_TYPE = "vms-dpr-poller";
+const POLLER_FAILURE_SOURCE_ID = "cycle";
+
+async function logPollerFailure(mongoDb, reason) {
+  try {
+    await mongoDb.collection("pollerSyncFailures").updateOne(
+      { type: POLLER_FAILURE_TYPE, sourceId: POLLER_FAILURE_SOURCE_ID },
+      {
+        $set: { reason: String(reason || "").slice(0, 500), lastAttemptAt: new Date(), resolvedAt: null },
+        $inc: { attempts: 1 },
+        $setOnInsert: { type: POLLER_FAILURE_TYPE, sourceId: POLLER_FAILURE_SOURCE_ID, createdAt: new Date() }
+      },
+      { upsert: true }
+    );
+  } catch (err) {
+    // Best-effort, same convention as VMS's own logFailure/clearFailure —
+    // this must never be the thing that makes the poller itself crash.
+    console.error("  [vms-sync] failed to log poller failure:", err.message);
+  }
+}
+
+// Only touches the record if one is actually open (resolvedAt: null) — a
+// cycle that never failed has nothing to clear, so this never performs a
+// needless write; a cycle recovering after N failed attempts marks that
+// same document resolved rather than creating a new one.
+async function clearPollerFailure(mongoDb) {
+  try {
+    await mongoDb.collection("pollerSyncFailures").updateOne(
+      { type: POLLER_FAILURE_TYPE, sourceId: POLLER_FAILURE_SOURCE_ID, resolvedAt: null },
+      { $set: { resolvedAt: new Date() } }
+    );
+  } catch (err) {
+    console.error("  [vms-sync] failed to clear poller failure:", err.message);
+  }
+}
+
 // Extracted as its own pure function so it's unit-testable without a real
 // Mongo connection (see syncVmsDpr.test.js) — exact same mapping syncToQc.js
 // (the VMS-side live push) uses.
@@ -47,13 +95,46 @@ function mapWorkEntry(we) {
   };
 }
 
+// Project matching is shared with the new POST /api/integrations/vms/dpr
+// endpoint (server.js) so a third copy of this logic never has the chance
+// to drift from this one — same code-first/name-fallback rule either way.
+// `qcProjects` is {id, name, code}[] (from QC's own "projects" collection).
+function buildProjectMaps(qcProjects) {
+  return {
+    qcProjectByCode: new Map(qcProjects.filter((p) => p.code).map((p) => [norm(p.code), p.id])),
+    projectByName: new Map(qcProjects.map((p) => [norm(p.name), p.id]))
+  };
+}
+
+// `projectCode` here is already a QC-comparable code (either VMS's own
+// project code, matched 1:1 by convention, or whatever the caller already
+// resolved) — this function does the code-first/name-fallback lookup only,
+// it never talks to Mongo itself.
+function resolveProjectId({ projectCode, projectName }, maps) {
+  return (projectCode && maps.qcProjectByCode.get(norm(projectCode))) || maps.projectByName.get(norm(projectName)) || null;
+}
+
 // `sourceDbOverride` is test-only dependency injection (see
 // syncVmsDpr.test.js) so the full matching/dedup pipeline is verifiable
 // without a real VMS Mongo connection — production callers never pass it.
 async function syncVmsDpr(mongoDb, sourceDbOverride) {
+  // If getSourceDb() itself throws (VMS configured but unreachable), there's
+  // nothing here to persist a failure record about it into — this function
+  // only ever writes to QC's own `mongoDb`, which this early-return path
+  // never even reaches. That case still surfaces via server.js's own
+  // console.error on the rejected promise, same as before Phase 3.
   const sourceDb = sourceDbOverride || await getSourceDb();
   if (!sourceDb) return { skipped: true };
 
+  try {
+    return await syncVmsDprCycle(mongoDb, sourceDb);
+  } catch (err) {
+    await logPollerFailure(mongoDb, err && err.message ? err.message : String(err));
+    throw err; // preserve existing behavior — server.js's own runSync().catch still logs to console
+  }
+}
+
+async function syncVmsDprCycle(mongoDb, sourceDb) {
   const [vmsReports, vmsProjects, qcProjects, qcUsers, existingIds] = await Promise.all([
     sourceDb.collection("dailyprogressreports").find({}, {
       projection: { projectId: 1, projectName: 1, date: 1, vendorCode: 1, vendorName: 1, shiftType: 1, labourCount: 1, workEntries: 1, driName: 1, isPublicSubmission: 1 }
@@ -72,8 +153,7 @@ async function syncVmsDpr(mongoDb, sourceDbOverride) {
   // project. Name match stays as a fallback for anything with no VMS
   // project record or no code set on either side.
   const vmsProjectIdToCode = new Map(vmsProjects.map((p) => [String(p._id), norm(p.code)]));
-  const qcProjectByCode = new Map(qcProjects.filter((p) => p.code).map((p) => [norm(p.code), p.id]));
-  const projectByName = new Map(qcProjects.map((p) => [norm(p.name), p.id]));
+  const projectMaps = buildProjectMaps(qcProjects);
   const userByName = new Map(qcUsers.map((u) => [norm(u.name), u.id]));
 
   const toInsert = [];
@@ -83,7 +163,7 @@ async function syncVmsDpr(mongoDb, sourceDbOverride) {
     if (existing.has(id)) continue;
 
     const vmsCode = r.projectId ? vmsProjectIdToCode.get(String(r.projectId)) : null;
-    const projectId = (vmsCode && qcProjectByCode.get(vmsCode)) || projectByName.get(norm(r.projectName));
+    const projectId = resolveProjectId({ projectCode: vmsCode, projectName: r.projectName }, projectMaps);
     if (!projectId) { unmatchedProjects.add(r.projectName); continue; }
     const submittedByUserId = userByName.get(norm(r.driName)) || null;
 
@@ -123,10 +203,21 @@ async function syncVmsDpr(mongoDb, sourceDbOverride) {
       insertedCount = toInsert.length - duplicates;
     }
   }
+  // Reaching here means the cycle completed without throwing — including
+  // when some individual reports were skipped for an unmapped project,
+  // which is normal per-record behavior, not a cycle failure. Clears any
+  // previously-open poller failure (e.g. a transient error on an earlier
+  // cycle that has since recovered).
+  await clearPollerFailure(mongoDb);
   return {
     inserted: insertedCount,
     skippedUnmatchedProjects: unmatchedProjects.size ? Array.from(unmatchedProjects) : undefined
   };
 }
 
-module.exports = { syncVmsDpr, mapWorkEntry };
+module.exports = {
+  syncVmsDpr, mapWorkEntry, buildProjectMaps, resolveProjectId,
+  // Exported for syncVmsDpr.test.js only — same "pure helpers, no behavior
+  // change" convention already used for the others above.
+  logPollerFailure, clearPollerFailure, POLLER_FAILURE_TYPE, POLLER_FAILURE_SOURCE_ID
+};

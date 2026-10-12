@@ -5,7 +5,31 @@
    duplicate-id skipping (idempotency), unmatched-project reporting, and
    the "VMS unreachable/unconfigured" safe no-op path. */
 const assert = require("assert");
-const { mapWorkEntry, syncVmsDpr } = require("./syncVmsDpr.js");
+const { mapWorkEntry, syncVmsDpr, POLLER_FAILURE_TYPE, POLLER_FAILURE_SOURCE_ID } = require("./syncVmsDpr.js");
+
+// Minimal in-memory fake of the one Mongo op logPollerFailure/clearPollerFailure
+// actually use (updateOne with $set/$inc/$setOnInsert/upsert) — enough to
+// verify upsert-not-duplicate and resolvedAt-clearing behavior without a
+// real Mongo connection.
+function makeFakePollerFailuresCollection() {
+  const docs = [];
+  return {
+    _docs: docs,
+    updateOne: async (filter, update, opts) => {
+      let doc = docs.find((d) => Object.keys(filter).every((k) => d[k] === filter[k]));
+      if (!doc && opts && opts.upsert) {
+        doc = { ...(update.$setOnInsert || {}) };
+        docs.push(doc);
+      }
+      if (doc) {
+        if (update.$set) Object.assign(doc, update.$set);
+        if (update.$inc) for (const k of Object.keys(update.$inc)) doc[k] = (doc[k] || 0) + update.$inc[k];
+        return { matchedCount: 1 };
+      }
+      return { matchedCount: 0 };
+    }
+  };
+}
 
 let passed = 0;
 function test(name, fn) {
@@ -76,6 +100,7 @@ async function main() {
   const qcUsers = [{ id: "U-01", name: "Dinesh" }];
   const existingDprIds = [{ id: "DPR-VMS-r1" }];
   const insertedDocs = [];
+  const pollerFailures = makeFakePollerFailuresCollection();
 
   function arr(rows) { return { find: () => ({ toArray: async () => rows }) }; }
   const fakeSourceDb = {
@@ -90,6 +115,7 @@ async function main() {
       if (name === "projects") return arr(qcProjects);
       if (name === "users") return arr(qcUsers);
       if (name === "dpr") return { find: () => ({ toArray: async () => existingDprIds }), insertMany: async (docs) => { insertedDocs.push(...docs); } };
+      if (name === "pollerSyncFailures") return pollerFailures;
       throw new Error("unexpected QC collection: " + name);
     }
   };
@@ -112,6 +138,55 @@ async function main() {
     const result = await syncVmsDpr(fakeMongoDb, fakeSourceDb);
     assert.strictEqual(insertedDocs.length, 0);
     assert.strictEqual(result.inserted, 0);
+  });
+
+  await test("a successful cycle with nothing to do never writes a poller-failure record (no needless write)", () => {
+    assert.strictEqual(pollerFailures._docs.length, 0, "no prior failure existed, so clearPollerFailure must be a no-op, not a write");
+  });
+
+  // --- Phase 3: persistent poller-failure tracking -----------------------
+  await test("a thrown cycle error is recorded as a poller failure (category, timestamp, safe message)", async () => {
+    const brokenMongoDb = {
+      collection(name) {
+        if (name === "projects") return arr(qcProjects);
+        if (name === "users") return arr(qcUsers);
+        if (name === "dpr") return { find: () => { throw new Error("connection reset by peer"); } };
+        if (name === "pollerSyncFailures") return pollerFailures;
+        throw new Error("unexpected QC collection: " + name);
+      }
+    };
+    await assert.rejects(() => syncVmsDpr(brokenMongoDb, fakeSourceDb), /connection reset by peer/);
+    const doc = pollerFailures._docs.find((d) => d.type === POLLER_FAILURE_TYPE && d.sourceId === POLLER_FAILURE_SOURCE_ID);
+    assert.ok(doc, "a failure record must exist");
+    assert.strictEqual(doc.attempts, 1);
+    assert.ok(doc.lastAttemptAt instanceof Date);
+    assert.strictEqual(doc.resolvedAt, null);
+    assert.ok(doc.reason.includes("connection reset by peer"));
+    // never a credential/connection-string leak into the stored reason
+    assert.ok(!doc.reason.includes("mongodb+srv://") && !doc.reason.includes("mongodb://"));
+  });
+
+  await test("a second consecutive failure updates the same record (attempts increments), never a duplicate", async () => {
+    const brokenMongoDb = {
+      collection(name) {
+        if (name === "projects") return arr(qcProjects);
+        if (name === "users") return arr(qcUsers);
+        if (name === "dpr") return { find: () => { throw new Error("connection reset by peer"); } };
+        if (name === "pollerSyncFailures") return pollerFailures;
+        throw new Error("unexpected QC collection: " + name);
+      }
+    };
+    await assert.rejects(() => syncVmsDpr(brokenMongoDb, fakeSourceDb));
+    const matching = pollerFailures._docs.filter((d) => d.type === POLLER_FAILURE_TYPE && d.sourceId === POLLER_FAILURE_SOURCE_ID);
+    assert.strictEqual(matching.length, 1, "still exactly one record, not a second row");
+    assert.strictEqual(matching[0].attempts, 2, "attempts incremented, not reset");
+  });
+
+  await test("a later successful cycle clears the previously-logged poller failure (recovery)", async () => {
+    const result = await syncVmsDpr(fakeMongoDb, fakeSourceDb);
+    assert.ok(!result.skipped);
+    const doc = pollerFailures._docs.find((d) => d.type === POLLER_FAILURE_TYPE && d.sourceId === POLLER_FAILURE_SOURCE_ID);
+    assert.ok(doc.resolvedAt instanceof Date, "the earlier failure is now marked resolved");
   });
 
   // --- race against VMS's own live push (syncToQc.js) inserting the same
@@ -147,6 +222,7 @@ async function main() {
             }
           };
         }
+        if (name === "pollerSyncFailures") return makeFakePollerFailuresCollection();
         throw new Error("unexpected QC collection: " + name);
       }
     };
