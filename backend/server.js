@@ -1443,7 +1443,17 @@ connectMongo()
     // Pull in any new VMS daily progress reports periodically — additive
     // only, never touches existing records. No-ops entirely when
     // SOURCE_MONGO_URI isn't configured (e.g. local dev without VMS access).
-    if (process.env.SOURCE_MONGO_URI) {
+    //
+    // This is now a RECONCILIATION / RETRY safety net, not the primary
+    // sync path — VMS pushes each DPR into QC live at submission time
+    // (VENDOR-BILLING-PORTAL-NEW/Backend/src/utils/syncToQc.js). Both
+    // paths write the same idempotent "DPR-VMS-<id>" id with an
+    // existing-id check, so running both is safe; this one just catches
+    // anything the live push missed. DISABLE_VMS_DPR_POLL is an explicit,
+    // reversible kill switch for once the push path alone has been
+    // verified sufficient — unset (the default) keeps today's behavior
+    // unchanged.
+    if (process.env.SOURCE_MONGO_URI && !process.env.DISABLE_VMS_DPR_POLL) {
       const { syncVmsDpr } = require("./syncVmsDpr.js");
       let syncInFlight = false;
       const runSync = () => {
@@ -1451,6 +1461,9 @@ connectMongo()
         syncInFlight = true;
         syncVmsDpr(mongoDb)
           .then((result) => {
+            if (result.skippedUnmatchedProjects) {
+              console.warn(`  [vms-sync] unmapped project(s), skipped: ${result.skippedUnmatchedProjects.join(", ")}`);
+            }
             if (result.inserted > 0) {
               console.log(`  [vms-sync] pulled in ${result.inserted} new report(s)`);
               return bumpRev();
