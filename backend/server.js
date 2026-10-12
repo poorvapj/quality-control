@@ -60,6 +60,7 @@ const crypto = require("crypto");
 const { MongoClient } = require("mongodb");
 const cloudinary = require("cloudinary").v2;
 const { seedData, blankData, COLLECTIONS } = require("./seed.js");
+const { handleVmsDprSync } = require("./vmsDprApiHandler.js");
 
 /* ------------------------------------------------------------- passwords
    Node's built-in scrypt is our own hashing scheme going forward. Plaintext
@@ -136,6 +137,10 @@ const STAGE_TO_PERMISSION_KEY = {
 
 const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || "";
 const AUTOMATION_SECRET = process.env.AUTOMATION_SECRET || "";
+// Phase 2 VMS->QC API sync — same shared-secret convention as
+// AUTOMATION_SECRET/BACKUP_CRON_SECRET above (no user session; VMS is an
+// unattended server-to-server caller, not a logged-in person).
+const VMS_SYNC_SECRET = process.env.VMS_SYNC_SECRET || "";
 
 /* ------------------------------------------------------- Slack (no n8n)
    Talks to Slack's Web API directly with a bot token — no middleman
@@ -1261,6 +1266,20 @@ async function handleApi(req, res, urlPath) {
       if (e.status) return sendJson(res, e.status, { error: e.message });
       throw e;
     }
+  }
+  if (req.method === "POST" && urlPath === "/api/integrations/vms/dpr") {
+    // Phase 2 — VMS's syncDprToQcViaApi() posts here instead of writing
+    // straight into this Mongo cluster. No user session (VMS is an
+    // unattended server-to-server caller), authorized the same way
+    // /api/automation/.../decision and /api/backup/scheduled already are:
+    // a shared secret header, timing-safe compared.
+    if (!VMS_SYNC_SECRET) return sendJson(res, 501, { error: "VMS_SYNC_SECRET is not configured" });
+    if (!timingSafeStringEqual(req.headers["x-vms-sync-secret"], VMS_SYNC_SECRET)) {
+      return sendJson(res, 401, { error: "Invalid VMS sync secret" });
+    }
+    const body = await readBody(req);
+    const result = await handleVmsDprSync(body, mongoDb);
+    return sendJson(res, result.status, result.body);
   }
   if (req.method === "POST" && urlPath === "/api/photo") {
     const body = await readBody(req);
