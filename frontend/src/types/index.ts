@@ -450,6 +450,10 @@ export interface CustomFormField {
   // Before/After photo upload groups for it (same pattern as the Daily
   // Progress Report's per-category evidence, components/PhotoGroupUploader).
   photoEvidence?: boolean;
+  // Only meaningful when photoEvidence is on — minimum total photos (across
+  // Work/Before/After combined) required per selected item before submit is
+  // allowed. 0 or unset = fully optional.
+  minPhotos?: number;
 }
 
 /* Admin-built custom form, created via Masters ▸ Form Master — a generic

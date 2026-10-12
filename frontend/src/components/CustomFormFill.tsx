@@ -32,6 +32,19 @@ export default function CustomFormFill({ form, onDone }: { form: CustomFormDef; 
         toast(f.label + " is required");
         return;
       }
+      if (f.type === "multiselect" && f.photoEvidence && (f.minPhotos || 0) > 0 && Array.isArray(v)) {
+        const min = f.minPhotos || 0;
+        const photosByOption: Record<string, OptionPhotos> = values[f.key + "__photos"] || {};
+        const missing = v.find((o: string) => {
+          const p = photosByOption[o];
+          const count = p ? p.work.length + p.before.length + p.after.length : 0;
+          return count < min;
+        });
+        if (missing) {
+          toast(`"${missing}" needs at least ${min} photo${min === 1 ? "" : "s"}`);
+          return;
+        }
+      }
     }
     setSaving(true);
     const id = nextId("SUB", coll(data, "formSubmissions"));
@@ -134,16 +147,16 @@ export default function CustomFormFill({ form, onDone }: { form: CustomFormDef; 
             {f.photoEvidence && selected.length > 0 && (
               <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                  {selected.length} item{selected.length === 1 ? "" : "s"} selected — photos optional
+                  {selected.length} item{selected.length === 1 ? "" : "s"} selected — {(f.minPhotos || 0) > 0 ? `at least ${f.minPhotos} photo${f.minPhotos === 1 ? "" : "s"} required per item` : "photos optional"}
                 </div>
                 {selected.map((o) => {
                   const p = photosByOption[o] || emptyOptionPhotos();
                   return (
                     <div key={o} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 12 }}>
                       <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>{o}</div>
-                      <PhotoGroupUploader label="Work Photos" photos={p.work} onChange={(ph) => setOptionPhotos(o, "work", ph)} optional />
-                      <PhotoGroupUploader label="Before Photo" photos={p.before} onChange={(ph) => setOptionPhotos(o, "before", ph)} optional />
-                      <PhotoGroupUploader label="After Photo" photos={p.after} onChange={(ph) => setOptionPhotos(o, "after", ph)} optional />
+                      <PhotoGroupUploader label="Work Photos" photos={p.work} onChange={(ph) => setOptionPhotos(o, "work", ph)} optional={!(f.minPhotos && f.minPhotos > 0)} />
+                      <PhotoGroupUploader label="Before Photo" photos={p.before} onChange={(ph) => setOptionPhotos(o, "before", ph)} optional={!(f.minPhotos && f.minPhotos > 0)} />
+                      <PhotoGroupUploader label="After Photo" photos={p.after} onChange={(ph) => setOptionPhotos(o, "after", ph)} optional={!(f.minPhotos && f.minPhotos > 0)} />
                     </div>
                   );
                 })}

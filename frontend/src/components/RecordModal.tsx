@@ -300,6 +300,17 @@ function FormFieldsEditor({ fields, setFields }: { fields: CustomFormField[]; se
               <input type="checkbox" checked={!!f.photoEvidence} onChange={(e) => update(i, { photoEvidence: e.target.checked })} /> Photo evidence per item
             </label>
           )}
+          {f.type === "multiselect" && f.photoEvidence && (
+            <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, whiteSpace: "nowrap", paddingTop: 9 }}>
+              Min photos
+              <input
+                className="input" type="number" min={0} style={{ width: 48, padding: "2px 6px" }}
+                value={f.minPhotos ?? 0}
+                onChange={(e) => update(i, { minPhotos: Math.max(0, Number(e.target.value) || 0) })}
+              />
+              <span style={{ color: "var(--text-sub)" }}>(0 = optional)</span>
+            </label>
+          )}
           <button className="btn btn-secondary btn-sm" style={{ marginTop: 6 }} onClick={() => setFields((fs) => fs.filter((_, fi) => fi !== i))}>✕</button>
         </div>
       ))}
