@@ -22,6 +22,17 @@ const STAGE_LABEL: Record<string, string> = {
   returned: "Returned"
 };
 
+// A handful of migrated-from-VMS tickets carry a raw Mongo ObjectId in
+// reviewHistory's `by` field that doesn't match any real QC user id —
+// refLabel() falls back to the raw id itself when nothing matches, which
+// just looks like a stray hash. Show something readable instead.
+function reviewerLabel(data: ReturnType<typeof useApp>["data"], h: { byName?: string; by?: string | null }): string {
+  if (h.byName) return h.byName;
+  if (!h.by) return "Public submitter";
+  const name = refLabel(data, "users", h.by);
+  return name === h.by ? "Unknown reviewer" : name;
+}
+
 const PRIORITIES: { value: DrawingPriority; label: string }[] = [
   { value: "low", label: "Low" }, { value: "medium", label: "Medium" }, { value: "high", label: "High" }, { value: "urgent", label: "Urgent" }
 ];
@@ -192,7 +203,7 @@ export default function DrawingRequestDetailModal({ dr, onClose }: { dr: Drawing
           <div key={i} className="qitem" style={{ cursor: "default" }}>
             <div className="qitem-main">
               <div className="qitem-title">{STAGE_LABEL[h.stage] || h.stage} · {h.action}</div>
-              <div className="qitem-sub">{h.byName || (h.by ? refLabel(data, "users", h.by) : "Public submitter")} · {fmtDT(h.at)}{h.remarks ? " · " + h.remarks : ""}</div>
+              <div className="qitem-sub">{reviewerLabel(data, h)} · {fmtDT(h.at)}{h.remarks ? " · " + h.remarks : ""}</div>
             </div>
           </div>
         ))}
@@ -453,7 +464,7 @@ export default function DrawingRequestDetailModal({ dr, onClose }: { dr: Drawing
           <div key={i} className="qitem" style={{ cursor: "default" }}>
             <div className="qitem-main">
               <div className="qitem-title">{STAGE_LABEL[h.stage] || h.stage} · {h.action}</div>
-              <div className="qitem-sub">{h.byName || (h.by ? refLabel(data, "users", h.by) : "Public submitter")} · {fmtDT(h.at)}{h.remarks ? " · " + h.remarks : ""}</div>
+              <div className="qitem-sub">{reviewerLabel(data, h)} · {fmtDT(h.at)}{h.remarks ? " · " + h.remarks : ""}</div>
             </div>
           </div>
         ))}

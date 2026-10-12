@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useApp } from "../context/AppContext";
-import { coll } from "../shared/rules";
+import { coll, byId } from "../shared/rules";
 import { fmtDate } from "../shared/helpers";
 import SidePanel from "../components/SidePanel";
 import DrawingRequestForm from "../components/DrawingRequestForm";
@@ -29,12 +29,21 @@ const TONE = {
 };
 
 export default function DrawingRequestsPage() {
-  const { data, myRole, currentUserId, apply, toast } = useApp();
+  const { data, myRole, currentUserId, apply, toast, openDrawingRequestId, setOpenDrawingRequestId } = useApp();
   const isAdmin = currentUserId === "U-ADMIN";
   const editable = myRole() === "ADMIN" || myRole() === "DRI" || hasModuleGrant(data, currentUserId, "drawingRequests", "edit");
   const [createOpen, setCreateOpen] = useState(false);
   const [detail, setDetail] = useState<DrawingRequest | null>(null);
   const [editing, setEditing] = useState<DrawingRequest | null>(null);
+
+  // A dashboard's "Waiting on you" row sets this before switching tabs, so
+  // the ticket opens directly instead of landing on the unfiltered list.
+  useEffect(() => {
+    if (!openDrawingRequestId) return;
+    const dr = byId(coll(data, "drawingRequests"), openDrawingRequestId);
+    if (dr) setDetail(dr);
+    setOpenDrawingRequestId(null);
+  }, [openDrawingRequestId, data, setOpenDrawingRequestId]);
   // Draft filter state (what the user is currently typing/selecting) is
   // kept separate from applied state (what actually filters `rows` below) —
   // the Search button commits draft → applied, matching the reference
@@ -243,7 +252,10 @@ export default function DrawingRequestsPage() {
                 const priorityTone = priorityVal === "urgent" || priorityVal === "high" ? TONE.red : priorityVal === "medium" ? TONE.amber : TONE.gray;
                 const trackingVal = r.trackingStatus || "pending";
                 const trackingTone = trackingVal === "completed" ? TONE.green : trackingVal === "delayed" ? TONE.red : trackingVal === "committed" ? TONE.blue : TONE.amber;
-                const reviewTone = r.reviewStatus === "approved" ? TONE.green : r.reviewStatus === "returned" ? TONE.red : TONE.amber;
+                const reviewTone = r.reviewStatus === "approved" ? TONE.green
+                  : r.reviewStatus === "returned" ? TONE.red
+                  : r.reviewStatus === "stage-2-produce" ? TONE.blue
+                  : TONE.amber;
                 // Matches ui/Table.tsx's Td: px-4 py-3 (16/12) align-middle.
                 const td: React.CSSProperties = { padding: "12px 16px", borderTop: i === 0 ? "none" : "1px solid #F3F4F6", verticalAlign: "middle", color: "#1A1A2E" };
                 const ellipsis = (max: number): React.CSSProperties => ({ ...td, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: max });
@@ -261,9 +273,10 @@ export default function DrawingRequestsPage() {
                 return (
                   <tr
                     key={r.id}
+                    onClick={() => setDetail(r)}
                     onMouseEnter={(e) => { e.currentTarget.style.background = "#F9FAFB"; }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-                    style={{ transition: "background-color .15s ease" }}
+                    style={{ transition: "background-color .15s ease", cursor: "pointer" }}
                   >
                     {/* Matches "font-mono font-bold text-purple-600" on the ticket number. */}
                     <td style={td}><strong style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontWeight: 700, color: "#9333EA" }}>{r.ticketNo}</strong></td>
@@ -279,7 +292,7 @@ export default function DrawingRequestsPage() {
                     <td style={td}><span style={{ color: r.planningVerified ? "#059669" : "#9CA3AF", fontWeight: r.planningVerified ? 600 : 400 }}>{r.planningVerified ? "Yes" : "No"}</span></td>
                     <td style={td}><span style={{ color: r.projectAcknowledged ? "#059669" : "#9CA3AF", fontWeight: r.projectAcknowledged ? 600 : 400 }}>{r.projectAcknowledged ? "Yes" : "No"}</span></td>
                     <td style={ellipsis(140)} title={r.remarks}>{r.remarks || <span style={{ color: "#D1D5DB" }}>—</span>}</td>
-                    <td style={td}>
+                    <td style={td} onClick={(e) => e.stopPropagation()}>
                       <div style={{ display: "flex", gap: 4 }}>
                         {/* Matches ui/Btn.tsx's `small outline`: h-8 (32px) px-3 (12px) text-[11px] rounded-md (6px) border-gray-200 bg-white text-gray-700. */}
                         <button

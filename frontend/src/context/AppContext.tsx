@@ -61,6 +61,11 @@ interface AppContextValue {
   snagModal: SnagModalState | null;
   checklistModal: ChecklistModalState | null;
   recordModal: RecordModalState | null;
+  // One-shot "open this exact Drawing Request's detail modal" request — set
+  // by a dashboard's "Waiting on you" row before switching to the Drawing
+  // Requests tab, consumed (and cleared) by that page on mount so a direct
+  // link from the dashboard doesn't just land on the unfiltered list.
+  openDrawingRequestId: string | null;
 
   setCurrentUserId: (id: string) => void;
   setCurrentProjectId: (id: string) => void;
@@ -76,6 +81,7 @@ interface AppContextValue {
   closeChecklistModal: () => void;
   openRecordModal: (s: RecordModalState) => void;
   closeRecordModal: () => void;
+  setOpenDrawingRequestId: (id: string | null) => void;
   login: (email: string, password: string) => Promise<string | null>;
   logout: () => void;
   toast: (msg: string) => void;
@@ -110,6 +116,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [snagModal, setSnagModal] = useState<SnagModalState | null>(null);
   const [checklistModal, setChecklistModal] = useState<ChecklistModalState | null>(null);
   const [recordModal, setRecordModal] = useState<RecordModalState | null>(null);
+  const [openDrawingRequestId, setOpenDrawingRequestId] = useState<string | null>(null);
 
   const dataRef = useRef<BoardData | null>(null);
   dataRef.current = data;
@@ -309,10 +316,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const value: AppContextValue = {
     data, rev, mode, loggedIn, currentUserId, currentProjectId, activeTab, activeMaster, drawer, toastMsg,
-    assignModal, snagModal, checklistModal, recordModal,
+    assignModal, snagModal, checklistModal, recordModal, openDrawingRequestId,
     setCurrentUserId, setCurrentProjectId, setActiveTab, setActiveMaster, openDrawer, closeDrawer,
     openAssignModal, closeAssignModal, openSnagModal, closeSnagModal,
-    openChecklistModal, closeChecklistModal, openRecordModal, closeRecordModal,
+    openChecklistModal, closeChecklistModal, openRecordModal, closeRecordModal, setOpenDrawingRequestId,
     login, logout, toast, apply, me, myRole
   };
 

@@ -23,7 +23,7 @@ const STAGE_LABEL: Record<string, string> = {
    ops-wide floor/handover KPIs on OpsDashboard aren't their day-to-day
    concern the way their own raised tickets are. */
 export default function DriDashboard() {
-  const { data, currentUserId, me, setActiveTab } = useApp();
+  const { data, currentUserId, me, setActiveTab, setOpenDrawingRequestId } = useApp();
   const projects = myProjects(data, currentUserId);
   const projectIds = projects.map((p) => p.id);
 
@@ -83,7 +83,7 @@ export default function DriDashboard() {
               <div
                 key={r.id}
                 className="flex items-center justify-between gap-3 py-3 px-4 border-b border-[var(--border)] last:border-b-0 cursor-pointer"
-                onClick={() => setActiveTab("drawingRequests" as TabKey)}
+                onClick={() => { setOpenDrawingRequestId(r.id); setActiveTab("drawingRequests" as TabKey); }}
               >
                 <div className="min-w-0 flex-1">
                   <div className="text-[13px] font-bold truncate">{r.ticketNo} · {r.description}</div>

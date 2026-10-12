@@ -19,7 +19,7 @@ const STAGES: { key: StageKey; reviewStage: ReviewStage; label: string }[] = [
    more stages (shared/permissions.ts's canActOnStage), not running a
    project. Shows exactly what's waiting on THEM, nothing else. */
 export default function ApprovalDashboard() {
-  const { data, currentUserId, myRole, setActiveTab } = useApp();
+  const { data, currentUserId, myRole, setActiveTab, setOpenDrawingRequestId } = useApp();
   const role = myRole();
   const myStages = STAGES.filter((s) => canActOnStage(data, currentUserId, role, s.key));
   const all = coll(data, "drawingRequests");
@@ -65,7 +65,7 @@ export default function ApprovalDashboard() {
               <div
                 key={r.id}
                 className="flex items-center justify-between gap-3 py-3 px-4 border-b border-[var(--border)] last:border-b-0 cursor-pointer"
-                onClick={() => setActiveTab("drawingRequests" as TabKey)}
+                onClick={() => { setOpenDrawingRequestId(r.id); setActiveTab("drawingRequests" as TabKey); }}
               >
                 <div className="min-w-0 flex-1">
                   <div className="text-[13px] font-bold truncate">{r.ticketNo} · {r.description}</div>

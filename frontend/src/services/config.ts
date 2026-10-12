@@ -214,5 +214,17 @@ export const MASTERS: Record<MasterKey, MasterDef> = {
       { k: "canFinalApproveStage4", label: "Drawing Requests — can give final approval at Stage 4", type: "bool", default: false },
       { k: "grants", label: "Default permissions for this role", type: "permissionGrid" }
     ]
+  },
+  forms: {
+    label: "Form", icon: "📝", prefix: "FORM",
+    desc: "Build a custom form with your own fields. Public forms get a no-login link (/forms/<id>); any logged-in user can also fill one from here via \"Fill form\".",
+    cols: ["name", "isPublic", "active"],
+    fields: [
+      { k: "name", label: "Form name", type: "text", required: true },
+      { k: "description", label: "Description (shown to whoever fills it)", type: "textarea" },
+      { k: "isPublic", label: "Public (no-login link)", type: "bool", default: false },
+      { k: "active", label: "Active", type: "bool" },
+      { k: "fields", label: "Fields", type: "formFields" }
+    ]
   }
 };

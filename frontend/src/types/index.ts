@@ -435,6 +435,49 @@ export interface RoleDef extends BaseRecord {
   builtin?: boolean;
 }
 
+export type CustomFormFieldType = "text" | "textarea" | "number" | "date" | "select" | "multiselect" | "bool";
+
+export interface CustomFormField {
+  key: string;
+  label: string;
+  type: CustomFormFieldType;
+  required?: boolean;
+  options?: string[]; // for type "select" / "multiselect"
+  // Custom labels for type "bool" — defaults to "Yes"/"No" when unset.
+  yesLabel?: string;
+  noLabel?: string;
+  // Only for type "multiselect" — once an option is checked, show Work/
+  // Before/After photo upload groups for it (same pattern as the Daily
+  // Progress Report's per-category evidence, components/PhotoGroupUploader).
+  photoEvidence?: boolean;
+}
+
+/* Admin-built custom form, created via Masters ▸ Form Master — a generic
+   "Google-Forms-style" definition, not tied to any specific module. Can be
+   reached both as a standalone no-login page (routes/publicRoutes.tsx,
+   /forms/<id>, when isPublic) and from inside the app by any logged-in
+   user (Masters ▸ Form Master ▸ Fill form) — the same field-rendering UI
+   either way, see components/CustomFormFill.tsx. */
+export interface CustomFormDef extends BaseRecord {
+  name: string;
+  description?: string;
+  active?: boolean;
+  isPublic?: boolean;
+  fields: CustomFormField[];
+}
+
+export interface CustomFormSubmission extends BaseRecord {
+  formId: string;
+  // Loose on purpose — a "select"/"bool" field's value is a plain string/
+  // boolean, a "multiselect" field's is a string[], and a "multiselect"
+  // field with photoEvidence stores its per-option photos under a sibling
+  // key (`${field.key}__photos`) as Record<option, {work,before,after}[]>.
+  values: Record<string, any>;
+  submittedAt: number;
+  submittedByUserId?: string | null;
+  isPublic?: boolean;
+}
+
 export interface BoardData {
   projects: Project[];
   floors: Floor[];
@@ -454,6 +497,8 @@ export interface BoardData {
   teams: Team[];
   vendors: Vendor[];
   roles: RoleDef[];
+  forms: CustomFormDef[];
+  formSubmissions: CustomFormSubmission[];
   progress: Record<string, ProgressPatch>;
   events: EventLog[];
   [key: string]: unknown;
@@ -468,9 +513,9 @@ export type Op =
   | { op: "event"; ev: EventLog };
 
 export type TabKey = "dash" | "misDashboard" | "work" | "board" | "handoverChecklist" | "handoverInternal" | "handoverOwner" | "snags" | "team" | "masters" | "addUser" | "dpr" | "drawingRequests" | "backups" | "auditLog" | "permissionMatrix";
-export type MasterKey = "projects" | "floors" | "units" | "stages" | "qparams" | "checklists" | "stagemap" | "users" | "permissions" | "workTargets" | "teams" | "roles";
+export type MasterKey = "projects" | "floors" | "units" | "stages" | "qparams" | "checklists" | "stagemap" | "users" | "permissions" | "workTargets" | "teams" | "roles" | "forms";
 
-export type FieldType = "text" | "number" | "date" | "color" | "select" | "ref" | "bool" | "textarea" | "items" | "password" | "permissionGrid";
+export type FieldType = "text" | "number" | "date" | "color" | "select" | "ref" | "bool" | "textarea" | "items" | "password" | "permissionGrid" | "formFields";
 
 export interface MasterField {
   k: string;

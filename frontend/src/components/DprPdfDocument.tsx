@@ -143,7 +143,7 @@ function DprDocument({ data: s }: { data: DprPdfData }) {
         <View style={S.headerRow}>
           <View>
             <Text style={S.logoName}>Neoteric Properties</Text>
-            <Text style={S.logoSub}>Project Cost Center</Text>
+            <Text style={S.logoSub}>Quality Control</Text>
           </View>
           <View style={S.docTitle}>
             <Text style={S.docMain}>DAILY PROGRESS REPORT</Text>

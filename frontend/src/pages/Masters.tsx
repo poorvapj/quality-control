@@ -9,6 +9,8 @@ import { hasModuleGrant, effectiveRoleGrants } from "../shared/permissionMatrix"
 import { ROLES } from "../services/config";
 import NavIcon from "../components/NavIcon";
 import WorkTargetBulkImport from "../components/WorkTargetBulkImport";
+import CustomFormFill from "../components/CustomFormFill";
+import SidePanel from "../components/SidePanel";
 import type { MasterKey } from "../types";
 import { BUILT_IN_ROLES } from "../types";
 
@@ -19,6 +21,8 @@ export default function Masters() {
   } = useApp();
   const [q, setQ] = useState("");
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
+  const [fillFormId, setFillFormId] = useState<string | null>(null);
+  const [viewSubmissionsFormId, setViewSubmissionsFormId] = useState<string | null>(null);
   const isAdmin = currentUserId === "U-ADMIN";
   const editable = myRole() === "ADMIN" || myRole() === "DRI" || hasModuleGrant(data, currentUserId, "masters", "edit");
   // User Master exposes every account's contact/role data — Admin only.
@@ -62,6 +66,18 @@ export default function Masters() {
     if (key === "role") return <span className="badge-tag mute">{v}</span>;
     if (activeMaster === "roles" && rec.builtin && key === "name") return (ROLES as any)[v]?.name || v;
     if (activeMaster === "roles" && key === "active" && rec.builtin) return <span className="badge-tag wip">Built-in</span>;
+    if (activeMaster === "forms" && key === "isPublic") {
+      if (!v) return <span className="badge-tag mute">Internal only</span>;
+      const link = window.location.origin + "/forms/" + rec.id;
+      return (
+        <span
+          className="badge-tag wip" style={{ cursor: "pointer" }} title="Click to copy"
+          onClick={() => { navigator.clipboard.writeText(link); toast("Copied: " + link); }}
+        >
+          🔗 {link}
+        </span>
+      );
+    }
     if (v == null || v === "") return <span style={{ color: "var(--text-sub)" }}>—</span>;
     return String(v);
   }
@@ -170,6 +186,26 @@ export default function Masters() {
                     {editable && (
                       <td>
                         <div className="row-actions">
+                          {activeMaster === "forms" && (
+                            <>
+                              <button className="btn btn-secondary btn-sm" title="Fill form" onClick={() => setFillFormId(r.id)}>Fill</button>
+                              <button className="btn btn-secondary btn-sm" title="View submissions" onClick={() => setViewSubmissionsFormId(r.id)}>
+                                {coll(data, "formSubmissions").filter((s: any) => s.formId === r.id).length} 📥
+                              </button>
+                              {r.isPublic && (
+                                <button
+                                  className="btn btn-secondary btn-sm" title="Copy public link"
+                                  onClick={() => {
+                                    const link = window.location.origin + "/forms/" + r.id;
+                                    navigator.clipboard.writeText(link);
+                                    toast("Copied: " + link);
+                                  }}
+                                >
+                                  🔗 Public link
+                                </button>
+                              )}
+                            </>
+                          )}
                           <button className="btn btn-secondary btn-sm" title="Edit" onClick={() => (activeMaster === "roles" ? openRoleEdit(r) : openRecordModal({ master: activeMaster, id: r.id }))}><NavIcon name="edit" size={13} /></button>
                           {!(activeMaster === "roles" && r.builtin) && (
                             <button className="btn btn-secondary btn-sm" title="Delete" onClick={() => deleteRecord(r.id)}><NavIcon name="trash" size={13} /></button>
@@ -190,6 +226,77 @@ export default function Masters() {
           <button className="btn btn-secondary btn-sm" onClick={() => exportSnagCsv(data, currentProjectId)}>⬇ Snag register CSV</button>
         </div>
       )}
+
+      {(() => {
+        const fillForm = fillFormId ? byId(coll(data, "forms"), fillFormId) : null;
+        return (
+          <SidePanel
+            open={!!fillForm}
+            wide
+            icon={<NavIcon name="masters" size={18} />}
+            title={fillForm?.name || "Fill form"}
+            desc="Submitting this from inside the app, same as the public link."
+            onClose={() => setFillFormId(null)}
+          >
+            {fillForm && <CustomFormFill form={fillForm} onDone={() => { setFillFormId(null); toast("Submitted"); }} />}
+          </SidePanel>
+        );
+      })()}
+
+      {(() => {
+        const subsForm = viewSubmissionsFormId ? byId(coll(data, "forms"), viewSubmissionsFormId) : null;
+        const subs = subsForm ? coll(data, "formSubmissions").filter((s: any) => s.formId === subsForm.id).sort((a: any, b: any) => b.submittedAt - a.submittedAt) : [];
+        return (
+          <SidePanel
+            open={!!subsForm}
+            wide
+            icon={<NavIcon name="masters" size={18} />}
+            title={(subsForm?.name || "Submissions") + " — Submissions"}
+            desc={subs.length + " response" + (subs.length === 1 ? "" : "s")}
+            onClose={() => setViewSubmissionsFormId(null)}
+          >
+            {subsForm && (
+              subs.length === 0 ? <div className="empty">No submissions yet.</div> : (
+                <div className="table-scroll" style={{ maxHeight: 560, overflowY: "auto" }}>
+                  <table className="data">
+                    <thead>
+                      <tr>
+                        <th>Submitted</th>
+                        {subsForm.fields.map((f: any) => <th key={f.key}>{f.label}</th>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {subs.map((s: any) => (
+                        <tr key={s.id}>
+                          <td>{new Date(s.submittedAt).toLocaleString("en-IN")}{s.isPublic ? " (public)" : ""}</td>
+                          {subsForm.fields.map((f: any) => (
+                            <td key={f.key}>
+                              {(() => {
+                                const val = s.values?.[f.key];
+                                if (val === true) return f.yesLabel || "Yes";
+                                if (val === false) return f.noLabel || "No";
+                                if (Array.isArray(val)) {
+                                  if (!val.length) return "—";
+                                  const photosByOption = f.photoEvidence ? (s.values?.[f.key + "__photos"] || {}) : null;
+                                  const photoCount = photosByOption
+                                    ? Object.values(photosByOption).reduce((a: number, p: any) => a + (p?.work?.length || 0) + (p?.before?.length || 0) + (p?.after?.length || 0), 0)
+                                    : 0;
+                                  return val.join(", ") + (photoCount > 0 ? ` (${photoCount} photo${photoCount === 1 ? "" : "s"})` : "");
+                                }
+                                return val ?? "—";
+                              })()}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            )}
+          </SidePanel>
+        );
+      })()}
     </div>
   );
 }

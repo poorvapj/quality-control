@@ -257,7 +257,7 @@ const PROJECT_SCOPED_COLLECTIONS = ["floors", "units", "snags", "assignments", "
 // controls when `myRole() === "ADMIN"`, but that was UI-only: any other
 // signed-in session could still upsert/delete these directly via
 // /api/ops. Mirrored here server-side (see assertOpAllowed).
-const MASTER_ROLE_GATED_COLLECTIONS = ["projects", "floors", "units", "stages", "qparams", "checklists", "stagemap", "permissions", "workTargets", "teams", "roles"];
+const MASTER_ROLE_GATED_COLLECTIONS = ["projects", "floors", "units", "stages", "qparams", "checklists", "stagemap", "permissions", "workTargets", "teams", "roles", "forms"];
 
 const roleCache = new Map(); // userId -> role, cleared per request is overkill; a stale role for a few seconds is an acceptable tradeoff for not hitting Mongo on every single op in a batch
 async function getUserRole(userId) {
@@ -694,6 +694,26 @@ async function assertOpAllowed(op, session) {
       op.rec.submittedByUserId = null;
       op.rec.isPublic = true;
     }
+    return;
+  }
+
+  if (op.op === "upsert" && op.coll === "formSubmissions" && op.rec) {
+    const existing = op.rec.id ? await mongoDb.collection("formSubmissions").findOne({ id: op.rec.id }) : null;
+    if (existing) { const e = new Error("Submissions can't be edited"); e.status = 403; throw e; }
+    const form = await mongoDb.collection("forms").findOne({ id: op.rec.formId });
+    if (!form || form.active === false) { const e = new Error("Form not found"); e.status = 404; throw e; }
+    if (!session) {
+      // Anonymous POST only ever legitimately comes from a form's own
+      // public link — never allow it to silently write into an
+      // internal-only form, no matter what formId the client sent.
+      if (!form.isPublic) { const e = new Error("Sign-in required"); e.status = 401; throw e; }
+      op.rec.submittedByUserId = null;
+      op.rec.isPublic = true;
+    } else {
+      op.rec.submittedByUserId = session.userId;
+      op.rec.isPublic = false;
+    }
+    op.rec.submittedAt = Date.now();
     return;
   }
 

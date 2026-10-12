@@ -5,8 +5,18 @@ import { byId, coll, refLabel } from "../shared/rules";
 import { nextId } from "../shared/helpers";
 import { buildEventOp } from "../shared/eventLog";
 import Modal from "./Modal";
-import type { ChecklistItem, MasterField, ModuleAction } from "../types";
+import type { ChecklistItem, CustomFormField, CustomFormFieldType, MasterField, ModuleAction } from "../types";
 import PermissionGrid from "./PermissionGrid";
+
+const FORM_FIELD_TYPES: { value: CustomFormFieldType; label: string }[] = [
+  { value: "text", label: "Text" },
+  { value: "textarea", label: "Long text" },
+  { value: "number", label: "Number" },
+  { value: "date", label: "Date" },
+  { value: "select", label: "Dropdown (pick one)" },
+  { value: "multiselect", label: "Checklist (pick multiple)" },
+  { value: "bool", label: "Yes/No" }
+];
 
 export default function RecordModal() {
   const { recordModal, closeRecordModal, data, currentProjectId, currentUserId, apply, toast } = useApp();
@@ -20,17 +30,19 @@ export default function RecordModal() {
 
   const [values, setValues] = useState<Record<string, any>>({});
   const [items, setItems] = useState<ChecklistItem[]>([]);
+  const [formFields, setFormFields] = useState<CustomFormField[]>([]);
 
   useEffect(() => {
     if (!recordModal || !master) return;
     const base: Record<string, any> = {};
     for (const f of master.fields) {
-      if (f.type === "items") continue;
+      if (f.type === "items" || f.type === "formFields") continue;
       if (f.type === "permissionGrid") { base[f.k] = (rec as any)?.[f.k] || {}; continue; }
       base[f.k] = rec ? (rec as any)[f.k] : (f.type === "bool" ? (f.default ?? true) : "");
     }
     setValues(base);
     setItems((rec as any)?.items || []);
+    setFormFields((rec as any)?.fields || []);
   }, [recordModal?.master, recordModal?.id]);
 
   if (!recordModal) return null;
@@ -128,6 +140,19 @@ export default function RecordModal() {
           </button>
         </div>
       );
+    } else if (f.type === "formFields") {
+      return (
+        <div className="field full" key={f.k}>
+          <label>{f.label}</label>
+          <FormFieldsEditor fields={formFields} setFields={setFormFields} />
+          <button
+            className="btn btn-secondary btn-sm" style={{ marginTop: 8 }}
+            onClick={() => setFormFields((fs) => [...fs, { key: "field_" + (fs.length + 1), label: "", type: "text", required: false }])}
+          >
+            ＋ Add field
+          </button>
+        </div>
+      );
     } else {
       const type = f.type === "number" ? "number" : f.type === "date" ? "date" : f.type === "color" ? "color" : f.type === "password" ? "password" : "text";
       inner = <input className="input" type={type} autoComplete={f.type === "password" ? "new-password" : undefined} value={v ?? ""} onChange={(e) => setV(f.k, e.target.value)} />;
@@ -146,6 +171,7 @@ export default function RecordModal() {
     const out: any = recordModal!.id ? Object.assign({}, rec) : { id: nextId(master!.prefix, coll(data, recordModal!.master)) };
     for (const f of master!.fields) {
       if (f.type === "items") { out.items = items; continue; }
+      if (f.type === "formFields") { out.fields = formFields; continue; }
       let v = values[f.k];
       if (f.type === "number") v = v === "" ? null : Number(v);
       if (f.required && (v === "" || v == null)) { toast(f.label + " is required"); return; }
@@ -177,7 +203,7 @@ export default function RecordModal() {
   return (
     <Modal
       open
-      wide={master.fields.some((f) => f.type === "items" || f.type === "permissionGrid")}
+      wide={master.fields.some((f) => f.type === "items" || f.type === "permissionGrid" || f.type === "formFields")}
       sub={(recordModal.id ? "EDIT " : "NEW ") + master.label.toUpperCase() + " RECORD"}
       title={recordModal.id ? (isBuiltinRole ? ((ROLES as any)[(rec as any)?.name]?.name || (rec as any)?.name) : (rec as any)?.name || (rec as any)?.code || recordModal.id) : "New " + master.label}
       onClose={closeRecordModal}
@@ -221,6 +247,60 @@ function ItemsEditor({ items, setItems }: { items: ChecklistItem[]; setItems: Re
             /> Photo
           </label>
           <button className="btn btn-secondary btn-sm" style={{ marginTop: 6 }} onClick={() => setItems((its) => its.filter((_, xi) => xi !== i))}>✕</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FormFieldsEditor({ fields, setFields }: { fields: CustomFormField[]; setFields: React.Dispatch<React.SetStateAction<CustomFormField[]>> }) {
+  function update(i: number, patch: Partial<CustomFormField>) {
+    setFields((fs) => fs.map((f, fi) => fi === i ? { ...f, ...patch } : f));
+  }
+  if (!fields.length) return <div className="empty" style={{ padding: 14 }}>No fields yet — add at least one.</div>;
+  return (
+    <div>
+      {fields.map((f, i) => (
+        <div key={i} className="check-row" style={{ gap: 8, alignItems: "flex-start", borderBottom: "1px solid var(--border)", padding: "9px 0", flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-sub)", width: 20, paddingTop: 9 }}>{i + 1}</span>
+          <input
+            className="input" style={{ flex: 2, minWidth: 140 }} placeholder="Field label (e.g. Vendor name)"
+            value={f.label} onChange={(e) => update(i, { label: e.target.value })}
+          />
+          <select
+            className="select" style={{ flex: 1, minWidth: 110 }} value={f.type}
+            onChange={(e) => update(i, { type: e.target.value as CustomFormFieldType })}
+          >
+            {FORM_FIELD_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+          {(f.type === "select" || f.type === "multiselect") && (
+            <input
+              className="input" style={{ flex: 2, minWidth: 160 }} placeholder="Options, comma separated"
+              value={(f.options || []).join(", ")}
+              onChange={(e) => update(i, { options: e.target.value.split(",").map((o) => o.trim()).filter(Boolean) })}
+            />
+          )}
+          {f.type === "bool" && (
+            <>
+              <input
+                className="input" style={{ flex: 1, minWidth: 90 }} placeholder="Yes label"
+                value={f.yesLabel ?? ""} onChange={(e) => update(i, { yesLabel: e.target.value })}
+              />
+              <input
+                className="input" style={{ flex: 1, minWidth: 90 }} placeholder="No label"
+                value={f.noLabel ?? ""} onChange={(e) => update(i, { noLabel: e.target.value })}
+              />
+            </>
+          )}
+          <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, whiteSpace: "nowrap", paddingTop: 9 }}>
+            <input type="checkbox" checked={!!f.required} onChange={(e) => update(i, { required: e.target.checked })} /> Required
+          </label>
+          {f.type === "multiselect" && (
+            <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, whiteSpace: "nowrap", paddingTop: 9 }}>
+              <input type="checkbox" checked={!!f.photoEvidence} onChange={(e) => update(i, { photoEvidence: e.target.checked })} /> Photo evidence per item
+            </label>
+          )}
+          <button className="btn btn-secondary btn-sm" style={{ marginTop: 6 }} onClick={() => setFields((fs) => fs.filter((_, fi) => fi !== i))}>✕</button>
         </div>
       ))}
     </div>
