@@ -1413,22 +1413,40 @@
     }
 
     /* Custom-form checkbox/radio option rows (components/CustomFormFill.tsx)
-       — a plain <span>, not <label>, so .field label's uppercase/micro-label
-       styling above never applies to these regardless of nesting. */
+       — a bordered tile, not a plain label, matching the VMS reference's
+       Work Type checklist look. Uses <label>, not nested inside .field, so
+       .field label's uppercase/micro-label styling above never applies. */
     .cf-option {
-      display: inline-flex;
+      display: flex;
       align-items: center;
-      gap: 7px;
+      gap: 9px;
       font-size: 13px;
       font-weight: 500;
       color: var(--text-main);
       cursor: pointer;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      transition: border-color .12s ease, background-color .12s ease;
+    }
+
+    .cf-option:hover {
+      border-color: var(--border-strong);
+    }
+
+    .cf-option:has(input:checked) {
+      border-color: var(--theme-primary);
+      background: var(--primary-light, rgba(255,122,0,0.06));
+    }
+
+    .cf-option input {
+      flex-shrink: 0;
     }
 
     .cf-option-grid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
-      gap: 10px 16px;
+      gap: 10px;
     }
 
     @media (max-width: 640px) {

@@ -4,6 +4,7 @@ import { coll } from "../shared/rules";
 import { nextId } from "../shared/helpers";
 import Card from "../ui/tw/Card";
 import PhotoGroupUploader from "./PhotoGroupUploader";
+import SearchDropdown from "./SearchDropdown";
 import type { CustomFormDef, Photo } from "../types";
 
 type OptionPhotos = { work: Photo[]; before: Photo[]; after: Photo[] };
@@ -85,11 +86,16 @@ export default function CustomFormFill({ form, onDone }: { form: CustomFormDef; 
         </div>
       );
     } else if (f.type === "select") {
+      // SearchDropdown instead of a plain native <select> — a long option
+      // list (e.g. all 164 contractors) otherwise dumps its entire native
+      // listbox on screen with no search and no cap; this keeps the panel
+      // to a fixed scrollable height and lets you type to filter.
       inner = (
-        <select className="select" value={v ?? ""} onChange={(e) => setV(f.key, e.target.value)}>
-          <option value="">—</option>
-          {(f.options || []).map((o) => <option key={o} value={o}>{o}</option>)}
-        </select>
+        <SearchDropdown
+          value={v ?? ""}
+          onChange={(val) => setV(f.key, val)}
+          options={(f.options || []).map((o) => ({ value: o, label: o }))}
+        />
       );
     } else if (f.type === "textarea") {
       inner = <textarea className="textarea" value={v ?? ""} onChange={(e) => setV(f.key, e.target.value)} />;
