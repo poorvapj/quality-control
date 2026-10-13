@@ -155,7 +155,7 @@ export function computeDriScores(
         points: score - before,
         scoreAfter: score,
         projectName: r.insp.projectName,
-        location: `${r.insp.floorName} / ${r.insp.unitName}`,
+        location: r.insp.unitName ? `${r.insp.floorName} / ${r.insp.unitName}` : r.insp.floorName,
         remarks: r.insp.remarks,
         resolved: r.kind === "recovery" ? undefined : resolvedIds.has(r.insp.id),
         recoveryOf: r.recoveryOf,

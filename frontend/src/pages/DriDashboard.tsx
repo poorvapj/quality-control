@@ -25,9 +25,22 @@ const STAGE_LABEL: Record<string, string> = {
    ops-wide floor/handover KPIs on OpsDashboard aren't their day-to-day
    concern the way their own raised tickets are. */
 export default function DriDashboard() {
-  const { data, currentUserId, me, setActiveTab, setOpenDrawingRequestId } = useApp();
+  const { data, currentUserId, me, setActiveTab, setOpenDrawingRequestId, openDrawer } = useApp();
   const projects = myProjects(data, currentUserId);
   const projectIds = projects.map((p) => p.id);
+
+  // If this DRI leads a Team (Masters ▸ Teams), their dashboard also shows
+  // each team member's own open work — same open-assignments/snags figures
+  // Team.tsx itself shows, just surfaced here too so a team leader doesn't
+  // have to leave their dashboard to see it.
+  const myTeam = coll(data, "teams").find((t) => t.leaderId === currentUserId) || null;
+  const teamMembers = myTeam ? coll(data, "users").filter((u) => u.teamId === myTeam.id && u.active !== false) : [];
+  const teamRows = teamMembers.map((u) => {
+    const a = coll(data, "assignments").filter((x) => x.assignedTo === u.id && x.status !== "Done" && projectIds.includes(x.projectId));
+    const s = coll(data, "snags").filter((x) => x.assignedTo === u.id && x.status !== "Closed" && projectIds.includes(x.projectId));
+    const overdue = a.filter((x) => x.dueAt && x.dueAt < Date.now()).length + s.filter((x) => x.dueAt && x.dueAt < Date.now()).length;
+    return { user: u, assignments: a.length, snags: s.length, overdue };
+  }).sort((a, b) => (b.assignments + b.snags) - (a.assignments + a.snags));
 
   const myTickets = coll(data, "drawingRequests").filter((r) => r.submittedByUserId === currentUserId);
   const pending = myTickets.filter((r) => r.reviewStatus !== "approved" && r.reviewStatus !== "returned");
@@ -119,6 +132,36 @@ export default function DriDashboard() {
           ? <div className="py-6 px-5 text-center text-[var(--text-muted)] text-[13px]">🎉 Nothing assigned to you right now.</div>
           : <>{asg.slice(0, 5).map((a) => <AssignRow key={a.id} a={a} />)}{sng.slice(0, 5).map((s) => <SnagRow key={s.id} s={s} />)}</>}
       </Card>
+
+      {myTeam && (
+        <>
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-2.5">
+            <div className="text-[13px] font-bold tracking-tight text-[var(--text-sub)] uppercase flex items-center gap-2">
+              <NavIcon name="team" size={13} /> {myTeam.name} — My Team's Work
+            </div>
+            <div className="text-[11px] text-[var(--text-muted)] font-medium">{teamRows.length} member{teamRows.length === 1 ? "" : "s"}</div>
+          </div>
+          <Card padded={false} className="mb-6">
+            {teamRows.length === 0 ? (
+              <div className="py-6 px-5 text-center text-[var(--text-muted)] text-[13px]">No one is assigned to {myTeam.name} yet.</div>
+            ) : (
+              teamRows.map((r) => (
+                <div
+                  key={r.user.id}
+                  className="flex items-center justify-between gap-3 py-3 px-4 border-b border-[var(--border)] last:border-b-0 cursor-pointer"
+                  onClick={() => openDrawer({ kind: "user", id: r.user.id })}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] font-bold truncate">{r.user.name}</div>
+                    <div className="text-[11px] text-[var(--text-muted)] mt-0.5">{r.assignments} assignment{r.assignments === 1 ? "" : "s"} · {r.snags} snag{r.snags === 1 ? "" : "s"}{r.overdue > 0 ? ` · ${r.overdue} overdue` : ""}</div>
+                  </div>
+                  {r.overdue > 0 && <span className="text-[11px] font-semibold shrink-0" style={{ color: "var(--color-fail)" }}>Overdue</span>}
+                </div>
+              ))
+            )}
+          </Card>
+        </>
+      )}
 
       <div className="text-[13px] font-bold tracking-tight text-[var(--text-sub)] uppercase flex items-center gap-2 mb-2.5">
         <NavIcon name="drawing" size={13} /> My Drawing Requests — pending
