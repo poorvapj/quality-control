@@ -10,7 +10,7 @@ import Badge from "../ui/tw/Badge";
 import Table, { TableRow, TableCell } from "../ui/tw/Table";
 import SidePanel from "../components/SidePanel";
 import SearchDropdown from "../components/SearchDropdown";
-import type { PurchaseOrder } from "../types";
+import type { PurchaseOrder, TabKey } from "../types";
 
 interface LocationRow {
   location: string; qty: number; billedQty: number; unbilledQty: number;
@@ -73,7 +73,7 @@ function projectStats(p: ProgressProject) {
    whose name didn't match any real QC project is flagged "Unmatched"
    rather than guessed into the wrong project. */
 export default function ProgressAnalysis() {
-  const { data: boardData } = useApp();
+  const { data: boardData, setActiveTab } = useApp();
   const purchaseOrders = coll(boardData, "purchaseOrders").filter((po) => !po.deleted);
   const [data, setData] = useState<ProgressResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -168,7 +168,7 @@ export default function ProgressAnalysis() {
       {data && !data.available && <Card><div className="empty">VMS progress data is unavailable right now ({data.reason}).</div></Card>}
 
       {data && data.available && (
-        <ProjectList projects={data.projects} purchaseOrders={purchaseOrders} onSelect={openProject} />
+        <ProjectList projects={data.projects} purchaseOrders={purchaseOrders} onSelect={openProject} onOpenPurchaseOrders={() => setActiveTab("purchaseOrders" as TabKey)} />
       )}
 
       <ProjectDetailPanel
@@ -191,7 +191,7 @@ export default function ProgressAnalysis() {
   );
 }
 
-function ProjectList({ projects, purchaseOrders, onSelect }: { projects: ProgressProject[]; purchaseOrders: PurchaseOrder[]; onSelect: (code: string) => void }) {
+function ProjectList({ projects, purchaseOrders, onSelect, onOpenPurchaseOrders }: { projects: ProgressProject[]; purchaseOrders: PurchaseOrder[]; onSelect: (code: string) => void; onOpenPurchaseOrders: () => void }) {
   const totals = projects.reduce((acc, p) => {
     const s = projectStats(p);
     acc.items += s.items; acc.variance += s.variance; acc.pendingSignOff += s.pendingSignOff; acc.unbilled += s.unbilled;
@@ -209,10 +209,11 @@ function ProjectList({ projects, purchaseOrders, onSelect }: { projects: Progres
       </div>
 
       {unmatchedPOs.length > 0 && (
-        <Card className="mb-5 !py-3">
+        <Card className="mb-5 !py-3 flex items-center justify-between gap-3 flex-wrap">
           <div className="text-[12px] text-[var(--text-muted)]">
-            <span className="font-semibold text-[var(--color-fail)]">{unmatchedPOs.length} Purchase Order{unmatchedPOs.length > 1 ? "s" : ""}</span> from IMS could not be matched to a project by name: {unmatchedPOs.map((po) => `"${po.projectNameRaw}"`).join(", ")}. Not shown under any project below.
+            <span className="font-semibold text-[var(--color-fail)]">{unmatchedPOs.length} Purchase Order{unmatchedPOs.length > 1 ? "s" : ""}</span> from IMS could not be matched to a project by name — not shown under any project below.
           </div>
+          <Btn label="View in Purchase Orders" color="secondary" size="sm" onClick={onOpenPurchaseOrders} />
         </Card>
       )}
 
