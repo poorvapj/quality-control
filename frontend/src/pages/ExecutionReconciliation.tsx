@@ -185,7 +185,7 @@ export default function ExecutionReconciliation() {
         <StatTile
           label="Total Execution Reported"
           value={"₹" + money(totals.executedValue)}
-          foot={Array.from(totals.byUnit.entries()).map(([u, v]) => `${qty(v.executedQty)} ${u || "unit"}`).join(" · ") || "No records"}
+          foot={totals.byUnit.size ? `across ${totals.byUnit.size} unit type${totals.byUnit.size === 1 ? "" : "s"} — see below` : "No records"}
           icon="trend"
         />
         <StatTile
@@ -207,6 +207,21 @@ export default function ExecutionReconciliation() {
           icon="clock"
         />
       </div>
+
+      {totals.byUnit.size > 0 && (
+        <Card className="mb-6">
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-2.5">Executed Qty by Unit</div>
+          <div className="flex flex-wrap gap-2">
+            {Array.from(totals.byUnit.entries())
+              .sort((a, b) => b[1].executedQty - a[1].executedQty)
+              .map(([u, v]) => (
+                <div key={u} className="text-[12px] border border-[var(--border)] rounded-radius-sm px-2.5 py-1.5 whitespace-nowrap">
+                  <span className="font-semibold">{qty(v.executedQty)}</span> <span className="text-[var(--text-muted)]">{u || "unit"}</span>
+                </div>
+              ))}
+          </div>
+        </Card>
+      )}
 
       <div className="text-[9px] font-semibold uppercase tracking-[0.1em] text-[var(--text-sub)] mb-2">QUALITY (NOT LINKED TO EXECUTION DATA)</div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
