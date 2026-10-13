@@ -29,6 +29,12 @@ interface MeasurementPrefill {
 const CUSTOM_ITEM = "__custom__";
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
+// Same fixed list + "Other" fallback as Measurement.tsx's Unit field — a
+// dropdown avoids typos/inconsistent spelling that would otherwise make
+// unit comparisons (e.g. against VMS) unreliable, while "Other" still
+// allows a value outside this list since VMS's own units aren't fixed.
+const MEASUREMENT_UNITS = ["sq.ft", "R.ft", "Rmt", "Cum", "Sqm", "Kg", "MT", "Nos", "Bag", "Ltr"];
+
 const qty = (n: number) => n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
 
 /* Measurement — record a measurement for a QC Project → Floor → Unit,
@@ -184,8 +190,10 @@ function MeasurementForm({
   const [customItem, setCustomItem] = useState("");
   const [measuredQty, setMeasuredQty] = useState("");
   const [measuredUnit, setMeasuredUnit] = useState("");
+  const [customMeasuredUnit, setCustomMeasuredUnit] = useState(false);
   const [materialConsumedQty, setMaterialConsumedQty] = useState("");
   const [materialUnit, setMaterialUnit] = useState("");
+  const [customMaterialUnit, setCustomMaterialUnit] = useState(false);
   const [unusedBalanceQty, setUnusedBalanceQty] = useState("");
   const [wastageQty, setWastageQty] = useState("");
   const [remarks, setRemarks] = useState("");
@@ -196,8 +204,8 @@ function MeasurementForm({
     setPProjectId(defaults.projectId); setPFloorId(defaults.floorId); setPUnitId(defaults.unitId);
     setMeasurementDate(todayStr());
     setItemId(""); setCustomItem("");
-    setMeasuredQty(""); setMeasuredUnit("");
-    setMaterialConsumedQty(""); setMaterialUnit("");
+    setMeasuredQty(""); setMeasuredUnit(""); setCustomMeasuredUnit(false);
+    setMaterialConsumedQty(""); setMaterialUnit(""); setCustomMaterialUnit(false);
     setUnusedBalanceQty(""); setWastageQty(""); setRemarks("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -366,7 +374,25 @@ function MeasurementForm({
         </div>
         <div className="field">
           <label>Measured Unit *</label>
-          <input className="input" value={measuredUnit} onChange={(e) => setMeasuredUnit(e.target.value)} />
+          {!customMeasuredUnit ? (
+            <select
+              className="select"
+              value={MEASUREMENT_UNITS.includes(measuredUnit) ? measuredUnit : ""}
+              onChange={(e) => {
+                if (e.target.value === "__other__") { setCustomMeasuredUnit(true); setMeasuredUnit(""); }
+                else setMeasuredUnit(e.target.value);
+              }}
+            >
+              <option value="">Select unit…</option>
+              {MEASUREMENT_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+              <option value="__other__">Other…</option>
+            </select>
+          ) : (
+            <div className="flex gap-1.5">
+              <input className="input" value={measuredUnit} onChange={(e) => setMeasuredUnit(e.target.value)} placeholder="Type unit" autoFocus />
+              <button type="button" className="btn btn-secondary" style={{ flexShrink: 0 }} onClick={() => { setCustomMeasuredUnit(false); setMeasuredUnit(""); }}>List</button>
+            </div>
+          )}
         </div>
 
         <div className="field">
@@ -375,7 +401,25 @@ function MeasurementForm({
         </div>
         <div className="field">
           <label>Material Unit *</label>
-          <input className="input" value={materialUnit} onChange={(e) => setMaterialUnit(e.target.value)} />
+          {!customMaterialUnit ? (
+            <select
+              className="select"
+              value={MEASUREMENT_UNITS.includes(materialUnit) ? materialUnit : ""}
+              onChange={(e) => {
+                if (e.target.value === "__other__") { setCustomMaterialUnit(true); setMaterialUnit(""); }
+                else setMaterialUnit(e.target.value);
+              }}
+            >
+              <option value="">Select unit…</option>
+              {MEASUREMENT_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+              <option value="__other__">Other…</option>
+            </select>
+          ) : (
+            <div className="flex gap-1.5">
+              <input className="input" value={materialUnit} onChange={(e) => setMaterialUnit(e.target.value)} placeholder="Type unit" autoFocus />
+              <button type="button" className="btn btn-secondary" style={{ flexShrink: 0 }} onClick={() => { setCustomMaterialUnit(false); setMaterialUnit(""); }}>List</button>
+            </div>
+          )}
         </div>
 
         <div className="field">
