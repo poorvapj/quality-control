@@ -7,6 +7,7 @@ import OpsDashboard from "./OpsDashboard";
 import DriDashboard from "./DriDashboard";
 import CrmDashboard from "./CrmDashboard";
 import ApprovalDashboard from "./ApprovalDashboard";
+import RoleDashboard from "./RoleDashboard";
 
 const STAGE_KEYS = ["canScreenStage1", "canProduceStage2", "canCrosscheckStage3", "canFinalApproveStage4"] as const;
 
@@ -18,8 +19,10 @@ const STAGE_KEYS = ["canScreenStage1", "canProduceStage2", "canCrosscheckStage3"
      approval rights and none of the built-in roles' broader access gets
      the review-queue-only ApprovalDashboard instead — approval is their
      whole reason to be in the app.
-   - Anything else (a custom role with no stage grants) falls back to
-     OpsDashboard, same as before this feature existed. */
+   - Any other custom role (e.g. Quality/Measurement/Execution — Masters ▸
+     Roles) gets RoleDashboard, which shows only the sections its own
+     module grants actually unlock (see RoleDashboard.tsx) — never the
+     full ops-wide OpsDashboard, which is built-in-role territory. */
 export default function Dashboard() {
   const { data, currentUserId, myRole } = useApp();
   const role = myRole();
@@ -31,6 +34,7 @@ export default function Dashboard() {
   const isBuiltIn = (BUILT_IN_ROLES as readonly string[]).includes(role);
   const hasAnyStageGrant = STAGE_KEYS.some((k) => canActOnStage(data, currentUserId, role, k));
   if (!isBuiltIn && hasAnyStageGrant) return <ApprovalDashboard />;
+  if (!isBuiltIn) return <RoleDashboard />;
 
   return <OpsDashboard />;
 }
