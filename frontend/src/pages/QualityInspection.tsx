@@ -31,6 +31,21 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
 // the master list). Keyed by the checklist's own title, used as both the
 // "Work Type" picker's value and the record's `workType`.
 const QC_CHECKLISTS: Record<string, string[]> = {
+  "Material Testing & Quality Checks": [
+    "Concrete strength: verify approved mix design, sampling, cube/cylinder casting, identification, curing, and compressive-strength test reports.",
+    "Sand: check grading/particle size, silt content, cleanliness, and compliance with approved specifications.",
+    "Coarse aggregate (metal): check nominal size, grading, shape/flakiness, cleanliness, and approved test results.",
+    "Bricks — strength: verify compressive-strength test results and compliance with specifications.",
+    "Bricks — water absorption: check water absorption test results as per applicable standards.",
+    "Other required material tests: verify test certificates and approvals before use."
+  ],
+  "Column Inspection": [
+    "Location and dimensions: confirm column position, size, and orientation against approved structural drawings.",
+    "Reinforcement steel: verify bar diameter, number, spacing, lap/development length, anchorage, and stirrup spacing.",
+    "Concrete cover: check specified cover blocks and required clear cover on all sides.",
+    "Shuttering/formwork: verify dimensions, line, level, verticality, rigidity, joints, cleanliness, and application of release agent.",
+    "Plumb: check column verticality before concreting and recheck as required."
+  ],
   "R.C.C. Slab Inspection": [
     "Shuttering check: verify slab level, thickness, dimensions, support/props, stability, tight joints, and cleanliness.",
     "Reinforcement steel: check bar diameter, spacing, top and bottom reinforcement, extra bars, laps, anchorage, and openings as per drawings.",
