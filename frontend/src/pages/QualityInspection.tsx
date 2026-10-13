@@ -23,7 +23,43 @@ type WorkItemsResponse = { available: false; reason: string } | { available: tru
 
 const RESULTS: QualityInspectionResult[] = ["Pass", "Fail", "Rework Required"];
 const SEVERITIES: Severity[] = ["Critical", "Major", "Minor"];
+const CHECKLIST_STATUSES = ["OK", "Not OK", "N/A"] as const;
 const todayStr = () => new Date().toISOString().slice(0, 10);
+
+// The site's physical QA/QC checklists, transcribed verbatim (per-item
+// text only — Status/Remarks are filled in by the inspector, not part of
+// the master list). Keyed by the checklist's own title, used as both the
+// "Work Type" picker's value and the record's `workType`.
+const QC_CHECKLISTS: Record<string, string[]> = {
+  "R.C.C. Slab Inspection": [
+    "Shuttering check: verify slab level, thickness, dimensions, support/props, stability, tight joints, and cleanliness.",
+    "Reinforcement steel: check bar diameter, spacing, top and bottom reinforcement, extra bars, laps, anchorage, and openings as per drawings.",
+    "Cover and embedded services: verify cover blocks, electrical conduits, sleeves, and other inserts do not displace reinforcement.",
+    "Pre-pour approval: confirm inspection clearance, concrete grade, pour sequence, access, and curing arrangements."
+  ],
+  "Brickwork Inspection": [
+    "Brickwork layout: check wall location, thickness, openings, and alignment against approved drawings.",
+    "Line, level, and plumb: check courses and wall faces regularly using suitable instruments.",
+    "Bond and joints: ensure proper bond, staggered vertical joints, uniform joint thickness, and fully filled mortar joints.",
+    "Mortar and bricks: verify approved materials, mortar mix, brick condition, and appropriate wetting where specified.",
+    "Laying and curing: ensure proper laying technique, toothed/keyed junctions where specified, and curing as required."
+  ],
+  "Plastering Inspection": [
+    "Pre-plaster services: check plumbing pipes, electrical conduits/boxes, and A.C. pipe/fittings before plastering.",
+    "Joint treatment: apply approved fibre mesh at concrete–brickwork junctions and other specified locations.",
+    "Surface preparation: ensure background is clean, sound, and prepared to the approved method; provide bonding treatment where specified.",
+    "Finish, level, and plumb: check thickness, flatness, corners, edges, line, level, and verticality."
+  ],
+  "Tile Work Inspection": [
+    "Floor level and slope: verify finished levels and required slope toward floor traps/drains in wet areas.",
+    "Tile condition: check tiles for cracks, chips, scratches, stains, and other visible defects before laying.",
+    "Base surface: confirm the substrate is sound, clean, level/appropriately sloped, and free of loose material.",
+    "Joints and gaps: check uniform joint width, alignment, spacers, and approved grout/filler.",
+    "Hollow tiles and finish: tap-test for hollow areas where appropriate; check lippage, cutting, edge finish, and skirting alignment.",
+    "Protection and cleaning: clean grout residue and protect finished tiles from damage until handover."
+  ]
+};
+type ChecklistStatus = (typeof CHECKLIST_STATUSES)[number];
 
 // A sentinel, non-real Stage id used ONLY to tag snags that originated from
 // a Work Quality Inspection failure — never a real progression Stage
@@ -164,7 +200,10 @@ export default function QualityInspection() {
               <TableRow key={insp.id}>
                 <TableCell muted className="whitespace-nowrap">{insp.inspectionDate}</TableCell>
                 <TableCell className="whitespace-nowrap">{insp.projectCode}</TableCell>
-                <TableCell strong>{insp.floorName}</TableCell>
+                <TableCell strong>
+                  {insp.floorName}
+                  {insp.workType && <div className="text-[10.5px] text-[var(--text-muted)] font-normal mt-0.5">{insp.workType}</div>}
+                </TableCell>
                 <TableCell muted className="truncate max-w-0">{insp.itemDescription ? `${insp.workOrderNo} · ${insp.itemDescription}` : "—"}</TableCell>
                 <TableCell>
                   <Badge color={insp.result === "Pass" ? "green" : insp.result === "Fail" ? "red" : "amber"}>
@@ -246,10 +285,21 @@ function FloorHistoryPanel({
             return (
               <Card key={insp.id} className="!p-3">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div className="text-[12.5px] font-semibold">{insp.inspectionDate} {insp.itemDescription ? `· ${insp.itemDescription}` : ""}</div>
+                  <div className="text-[12.5px] font-semibold">{insp.inspectionDate} {insp.workType ? `· ${insp.workType}` : ""}{insp.itemDescription ? ` · ${insp.itemDescription}` : ""}</div>
                   <Badge color={insp.result === "Pass" ? "green" : insp.result === "Fail" ? "red" : "amber"}>{insp.result}</Badge>
                 </div>
                 {insp.reInspectionOf && <div className="text-[11px] text-[var(--text-muted)] mt-1">Re-inspection of {insp.reInspectionOf}</div>}
+                {insp.contractor && <div className="text-[11px] text-[var(--text-muted)] mt-1">Contractor: {insp.contractor}</div>}
+                {insp.checklistItems && insp.checklistItems.length > 0 && (
+                  <div className="flex flex-col gap-1 mt-2">
+                    {insp.checklistItems.map((c, idx) => (
+                      <div key={idx} className="text-[11.5px] flex gap-1.5">
+                        <Badge color={c.status === "OK" ? "green" : c.status === "Not OK" ? "red" : "gray"}>{c.status}</Badge>
+                        <span className="flex-1">{c.text}{c.remarks ? ` — ${c.remarks}` : ""}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {insp.remarks && <div className="text-[12px] mt-1.5">{insp.remarks}</div>}
                 {insp.photos?.length > 0 && (
                   <div className="flex gap-1.5 mt-2 flex-wrap">
@@ -288,6 +338,9 @@ function InspectionForm({
   const [workOrderNo, setWorkOrderNo] = useState("");
   const [itemId, setItemId] = useState("");
   const [inspectionDate, setInspectionDate] = useState(todayStr());
+  const [workType, setWorkType] = useState("");
+  const [contractor, setContractor] = useState("");
+  const [checklist, setChecklist] = useState<{ text: string; status: ChecklistStatus | ""; remarks: string }[]>([]);
   const [result, setResult] = useState<QualityInspectionResult>("Pass");
   const [severity, setSeverity] = useState<Severity>("Major");
   const [remarks, setRemarks] = useState("");
@@ -304,13 +357,35 @@ function InspectionForm({
       setFloorId(reInspectOf.floorId);
       setWorkOrderNo(reInspectOf.workOrderNo || "");
       setItemId(reInspectOf.itemId || "");
+      setWorkType(reInspectOf.workType || "");
+      setChecklist((reInspectOf.workType && QC_CHECKLISTS[reInspectOf.workType] || []).map((text) => ({ text, status: "", remarks: "" })));
     } else {
       setProjectId(""); setFloorId(""); setWorkOrderNo(""); setItemId("");
+      setWorkType(""); setChecklist([]);
     }
     setInspectionDate(todayStr());
+    setContractor("");
     setResult("Pass"); setSeverity("Major"); setRemarks(""); setPhotos([]);
     setAssignedToUserId(""); setTargetDate("");
   }, [open, reInspectOf]);
+
+  // Picking a Work Type (re)seeds the checklist from the master list —
+  // blank status/remarks, ready for the inspector to fill in. Switching
+  // Work Type mid-form replaces the whole checklist (the old answers were
+  // for a different checklist, not partial progress on this one).
+  function onWorkTypeChange(wt: string) {
+    setWorkType(wt);
+    setChecklist((QC_CHECKLISTS[wt] || []).map((text) => ({ text, status: "", remarks: "" })));
+  }
+  function setItemStatus(idx: number, status: ChecklistStatus) {
+    setChecklist((prev) => prev.map((row, i) => (i === idx ? { ...row, status } : row)));
+    // Nudge the overall Result toward Fail the moment anything is marked
+    // Not OK — still just a default the inspector can change, never forced.
+    if (status === "Not OK") setResult((r) => (r === "Pass" ? "Fail" : r));
+  }
+  function setItemRemarks(idx: number, text: string) {
+    setChecklist((prev) => prev.map((row, i) => (i === idx ? { ...row, remarks: text } : row)));
+  }
 
   const project = allProjects.find((p) => p.id === projectId) || null;
   const floors = projectFloors(data, projectId || null);
@@ -341,6 +416,8 @@ function InspectionForm({
 
   async function save() {
     if (!projectId || !floorId) { toast("Project and Floor are required"); return; }
+    if (!workType) { toast("Select a checklist (Work Type) first"); return; }
+    if (checklist.some((row) => !row.status)) { toast("Mark every checklist point as OK / Not OK / N/A"); return; }
     if (result !== "Pass" && !remarks.trim()) { toast("Remarks are required for Fail / Rework Required"); return; }
     if (result !== "Pass" && !assignedToUserId) { toast("A responsible DRI must be assigned for Fail / Rework Required"); return; }
     if (result !== "Pass" && !targetDate) { toast("A target date is required for the corrective action"); return; }
@@ -366,6 +443,9 @@ function InspectionForm({
       itemType: itemEntry?.itemType,
       itemDescription: itemEntry?.description,
       unit: itemEntry?.unit,
+      workType,
+      contractor: contractor.trim() || undefined,
+      checklistItems: checklist.map((row) => ({ text: row.text, status: row.status as "OK" | "Not OK" | "N/A", remarks: row.remarks.trim() || undefined })),
       inspectionDate, result,
       remarks: remarks.trim() || undefined,
       photos,
@@ -460,13 +540,66 @@ function InspectionForm({
               {similarIssues.map((s) => (
                 <div key={s.id} className="text-[11.5px]">
                   <Badge color={s.result === "Fail" ? "red" : "amber"}>{s.result}</Badge>{" "}
-                  <span className="font-medium">{s.floorName} / {s.unitName}</span> · {s.inspectionDate}
+                  <span className="font-medium">{s.floorName}</span> · {s.inspectionDate}
                   {s.remarks && <div className="text-[var(--text-muted)] mt-0.5">{s.remarks}</div>}
                 </div>
               ))}
             </div>
           </div>
         )}
+
+        <div className="field full">
+          <label>Checklist (Work Type) *</label>
+          <SearchDropdown
+            value={workType}
+            disabled={!!reInspectOf}
+            onChange={onWorkTypeChange}
+            options={[{ value: "", label: "Select checklist…" }, ...Object.keys(QC_CHECKLISTS).map((wt) => ({ value: wt, label: wt }))]}
+          />
+        </div>
+
+        {checklist.length > 0 && (
+          <div className="field full">
+            <div className="overflow-x-auto border border-[var(--border)] rounded-radius-md">
+              <table className="w-full text-[12px] border-collapse">
+                <thead>
+                  <tr className="text-left text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] bg-[var(--bg-subtle)]">
+                    <th className="p-2 w-8">#</th>
+                    <th className="p-2">Inspection / Check Point</th>
+                    <th className="p-2 w-[220px]">Status *</th>
+                    <th className="p-2 w-[180px]">Remarks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {checklist.map((row, idx) => (
+                    <tr key={idx} className="border-t border-[var(--border)] align-top">
+                      <td className="p-2 text-[var(--text-muted)]">{idx + 1}</td>
+                      <td className="p-2">{row.text}</td>
+                      <td className="p-2">
+                        <div className="flex gap-2.5 flex-wrap">
+                          {CHECKLIST_STATUSES.map((st) => (
+                            <label key={st} className="flex items-center gap-1 text-[11.5px] cursor-pointer whitespace-nowrap">
+                              <input type="radio" name={`checklist-${idx}`} checked={row.status === st} onChange={() => setItemStatus(idx, st)} />
+                              {st}
+                            </label>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="p-2">
+                        <input className="input" value={row.remarks} onChange={(e) => setItemRemarks(idx, e.target.value)} placeholder="Optional" />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        <div className="field">
+          <label>Contractor</label>
+          <input className="input" value={contractor} onChange={(e) => setContractor(e.target.value)} placeholder="Optional" />
+        </div>
 
         <div className="field">
           <label>Inspection Date *</label>

@@ -514,6 +514,14 @@ export interface QualityInspection extends BaseRecord {
   unitId?: string;
   unitCode?: string;
   unitName?: string;
+  // The physical QA/QC checklist being inspected against (one of
+  // QC_CHECKLISTS' keys in QualityInspection.tsx) — denormalized per-item
+  // text + OK/Not OK/N/A status, same pattern as itemDescription elsewhere:
+  // the checklist content is reference data, snapshotted at save time so a
+  // later edit to the master list never silently rewrites a past record.
+  workType?: string;
+  contractor?: string;
+  checklistItems?: { text: string; status: "OK" | "Not OK" | "N/A"; remarks?: string }[];
   // Optional, manually-picked reference to a real VMS scope-item/sub-item —
   // never auto-matched to the Unit above. See the interface doc comment.
   workOrderNo?: string;
