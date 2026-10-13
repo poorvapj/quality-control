@@ -17,11 +17,26 @@ export const MATRIX_MODULES: MatrixModule[] = [
   { key: "team", label: "Team", actions: ["view", "edit"] },
   { key: "dpr", label: "Daily Progress Report", actions: ["view", "create"] },
   { key: "drawingRequests", label: "Drawing Requests", actions: ["view", "create", "edit"] },
-  { key: "qualityInspection", label: "Work Quality Inspection", actions: ["view", "create", "edit"] },
+  { key: "qualityInspection", label: "Quality Inspection", actions: ["view", "create", "edit"] },
+  { key: "unitExecution", label: "Measurement", actions: ["view", "create"] },
+  { key: "measurement", label: "Work-category Measurement (not in sidebar)", actions: ["view", "create"] },
+  { key: "progressAnalysis", label: "Progress Analysis", actions: ["view"] },
+  { key: "purchaseOrders", label: "Purchase Orders", actions: ["view"] },
   { key: "masters", label: "Masters", actions: ["view", "create", "edit", "delete"] },
   { key: "backups", label: "Backups", actions: ["view", "create", "delete"] },
   { key: "auditLog", label: "Audit Logs", actions: ["view"] }
 ];
+
+/* These pages used to be gated by the Work Quality Inspection grant. They
+   now have their own matrix rows, but until an admin sets one explicitly it
+   still inherits that same module+action, so nobody who could open a page
+   before loses it, and an explicit On/Off on the new row always wins. */
+export const LEGACY_FALLBACK: Record<string, string> = {
+  unitExecution: "qualityInspection",
+  measurement: "qualityInspection",
+  progressAnalysis: "qualityInspection",
+  purchaseOrders: "qualityInspection"
+};
 
 export function getModuleGrant(
   data: BoardData | null, userId: string | null, moduleKey: string
@@ -77,6 +92,23 @@ export function defaultGrantsForRole(role: Role | null | undefined): Record<stri
   for (const [moduleKey, actions] of Object.entries(def)) {
     out[moduleKey] = Object.fromEntries(actions.map((a) => [a, true]));
   }
+  return fillLegacyGrants(out);
+}
+
+/* Fills any module that has a LEGACY_FALLBACK but no entry of its own with
+   the legacy module's current values (limited to the actions it supports),
+   so the matrix toggles show the access a user really has instead of OFF. */
+export function fillLegacyGrants(
+  grants: Record<string, Partial<Record<ModuleAction, boolean>>> | undefined | null
+): Record<string, Partial<Record<ModuleAction, boolean>>> {
+  const out = { ...(grants || {}) };
+  for (const [key, legacy] of Object.entries(LEGACY_FALLBACK)) {
+    if (out[key]) continue;
+    const mod = MATRIX_MODULES.find((m) => m.key === key);
+    const from = out[legacy];
+    if (!mod || !from) continue;
+    out[key] = Object.fromEntries(mod.actions.filter((a) => a in from).map((a) => [a, !!from[a]]));
+  }
   return out;
 }
 
@@ -92,18 +124,31 @@ export function hasModuleGrant(
   data: BoardData | null, userId: string | null, moduleKey: string, action: ModuleAction
 ): boolean {
   if (userId === "U-ADMIN") return true;
+  const explicit = explicitGrant(data, userId, moduleKey, action);
+  if (explicit !== undefined) return explicit;
+  // Pages that predate their own matrix row inherit the old module's value.
+  const legacy = LEGACY_FALLBACK[moduleKey];
+  if (legacy) return hasModuleGrant(data, userId, legacy, action);
+  const user = byId(coll(data, "users"), userId);
+  if (!user) return false;
+  const def = DEFAULT_ROLE_GRANTS[user.role]?.[moduleKey];
+  return !!def?.includes(action);
+}
+
+/* An explicitly saved value for this exact module+action: per-user first,
+   then the user's role record (a built-in role's override or a custom
+   role's grants). undefined = nothing saved, the caller falls back. */
+function explicitGrant(
+  data: BoardData | null, userId: string | null, moduleKey: string, action: ModuleAction
+): boolean | undefined {
   const g = getModuleGrant(data, userId, moduleKey);
   if (g && action in g) return !!g[action];
   const user = byId(coll(data, "users"), userId);
-  if (!user) return false;
-  // An explicit Permission Matrix ▸ Role-wise save (for either a built-in
-  // role's override, or a custom role's own grants) always wins over the
-  // hardcoded DEFAULT_ROLE_GRANTS baseline for that exact module+action.
+  if (!user) return undefined;
   const roleRec = coll(data, "roles").find((r) => r.name === user.role);
   const roleAction = roleRec?.grants?.[moduleKey];
   if (roleAction && action in roleAction) return !!roleAction[action];
-  const def = DEFAULT_ROLE_GRANTS[user.role]?.[moduleKey];
-  return !!def?.includes(action);
+  return undefined;
 }
 
 /* Full module×action grid for one role, with every cell resolved to its
@@ -121,6 +166,15 @@ export function effectiveRoleGrants(
     for (const a of m.actions) {
       const explicit = roleRec?.grants?.[m.key]?.[a];
       out[m.key]![a] = explicit !== undefined ? explicit : !!DEFAULT_ROLE_GRANTS[roleName as Role]?.[m.key]?.includes(a);
+    }
+  }
+  // A module with its own row but nothing saved for it yet shows (and
+  // behaves as) its legacy module's value, see LEGACY_FALLBACK.
+  for (const [key, legacy] of Object.entries(LEGACY_FALLBACK)) {
+    const mod = MATRIX_MODULES.find((m) => m.key === key);
+    if (!mod) continue;
+    for (const a of mod.actions) {
+      if (roleRec?.grants?.[key]?.[a] === undefined) out[key]![a] = !!out[legacy]?.[a];
     }
   }
   return out;

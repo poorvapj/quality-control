@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
-import { myProjects, projectFloors, projectUnits, trackStages } from "../shared/rules";
+import { coll, myProjects, projectFloors, projectUnits, trackStages } from "../shared/rules";
+import { computeDriScores } from "../shared/driQuality";
 import {
   computeTopKpis, computeProjectOverview, computeStageProgress,
   computeSnagAnalysis, computePossessionTracker, computeTradePerformance, computeManagementAlerts,
@@ -12,6 +13,7 @@ import Badge from "../ui/tw/Badge";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
 import StatTile from "../components/StatTile";
+import { ScoreBar, TrendChip, Sparkline, ScoreLedger, ScoringRules } from "../components/DriQualityParts";
 
 /* Management/CEO-facing MIS Dashboard — read-only aggregation over the
    existing BoardData via shared/misData.ts. No new endpoint, no change
@@ -98,6 +100,22 @@ export default function MISDashboard() {
   const possession = useMemo(() => computePossessionTracker(data, currentUserId, filters), [data, currentUserId, filters]);
   const trades = useMemo(() => computeTradePerformance(data, currentUserId, filters), [data, currentUserId, filters]);
   const alerts = useMemo(() => computeManagementAlerts(data, currentUserId, filters), [data, currentUserId, filters]);
+
+  // DRI Quality Score — derived from the real Work Quality Inspection
+  // records in the same project scope as this page (and its Project/Floor/
+  // Unit filters). Date and snag filters don't apply: a score is a running
+  // total over a DRI's whole inspection history.
+  const [openDriId, setOpenDriId] = useState<string | null>(null);
+  const driResult = useMemo(() => {
+    const codes = new Set(allProjects.map((p) => p.code));
+    const scoped = coll(data, "qualityInspections").filter((i) =>
+      codes.has(i.projectCode) &&
+      (!projectId || i.projectId === projectId) &&
+      (!floorId || i.floorId === floorId) &&
+      (!unitId || i.unitId === unitId)
+    );
+    return computeDriScores(scoped, coll(data, "users"));
+  }, [data, allProjects, projectId, floorId, unitId]);
 
   const worstTrade = trades.slice().sort((a, b) => (b.criticalSnags * 10 + b.reopenRate) - (a.criticalSnags * 10 + a.reopenRate))[0];
 
@@ -302,6 +320,57 @@ export default function MISDashboard() {
             </div>
           </div>
         )}
+      </Card>
+
+      {/* ------------------------------------------------- DRI Quality Score */}
+      <Card className="mb-6">
+        <div className="flex items-start justify-between gap-3 flex-wrap mb-1">
+          <div className="text-[13px] font-bold">DRI Quality Score</div>
+          <div className="text-[11px] text-[var(--text-muted)]">Lowest score first · click a DRI to see the inspections behind it</div>
+        </div>
+        <div className="mb-4"><ScoringRules unattributedPasses={driResult.unattributedPasses} /></div>
+        <div className="overflow-x-auto overflow-y-auto max-h-[440px]">
+          <table className="w-full text-[12.5px] border-collapse">
+            <thead>
+              <tr className="text-left text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] sticky top-0 bg-[var(--bg-card)]">
+                <th className="pb-2 pr-4">DRI</th>
+                <th className="pb-2 pr-4">Score</th>
+                <th className="pb-2 pr-4">Fails</th>
+                <th className="pb-2 pr-4">Rework</th>
+                <th className="pb-2 pr-4">Recovered</th>
+                <th className="pb-2 pr-4">Open</th>
+                <th className="pb-2 pr-4">Trend</th>
+                <th className="pb-2">History</th>
+              </tr>
+            </thead>
+            <tbody>
+              {driResult.scores.map((d) => (
+                <React.Fragment key={d.userId}>
+                  <tr className="border-t border-[var(--border)] cursor-pointer hover:bg-[var(--bg-card-hover)]" onClick={() => setOpenDriId(openDriId === d.userId ? null : d.userId)}>
+                    <td className="py-2.5 pr-4 font-semibold">{openDriId === d.userId ? "▾" : "▸"} {d.name}</td>
+                    <td className="py-2.5 pr-4"><ScoreBar score={d.score} /></td>
+                    <td className="py-2.5 pr-4">{d.fails > 0 ? <span style={{ color: "#dc2626", fontWeight: 700 }}>{d.fails}</span> : 0}</td>
+                    <td className="py-2.5 pr-4">{d.reworks}</td>
+                    <td className="py-2.5 pr-4">{d.recoveries}</td>
+                    <td className="py-2.5 pr-4">{d.openFailures > 0 ? <span style={{ color: "#dc2626", fontWeight: 700 }}>{d.openFailures}</span> : 0}</td>
+                    <td className="py-2.5 pr-4"><TrendChip trend={d.trend} /></td>
+                    <td className="py-2.5"><Sparkline events={d.events} /></td>
+                  </tr>
+                  {openDriId === d.userId && (
+                    <tr>
+                      <td colSpan={8} className="pb-3 pt-1 bg-[var(--bg-subtle)] px-3">
+                        <ScoreLedger events={d.events} />
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))}
+              {driResult.scores.length === 0 && (
+                <tr><td colSpan={8} className="py-6 text-center text-[var(--text-muted)]">No Fail / Rework inspections with a responsible DRI in the current scope — nothing to score yet.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </Card>
 
       {/* ------------------------------------------------ 6. Trade Performance */}

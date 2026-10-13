@@ -450,24 +450,30 @@ function InspectionForm({
       <div className="form-grid">
         <div className="field">
           <label>Project *</label>
-          <select className="select" value={projectId} disabled={!!reInspectOf} onChange={(e) => { setProjectId(e.target.value); setFloorId(""); setUnitId(""); }}>
-            <option value="">—</option>
-            {allProjects.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
-          </select>
+          <SearchDropdown
+            value={projectId}
+            disabled={!!reInspectOf}
+            onChange={(v) => { setProjectId(v); setFloorId(""); setUnitId(""); }}
+            options={[{ value: "", label: "—" }, ...allProjects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))]}
+          />
         </div>
         <div className="field">
           <label>Floor *</label>
-          <select className="select" value={floorId} disabled={!!reInspectOf || !projectId} onChange={(e) => { setFloorId(e.target.value); setUnitId(""); }}>
-            <option value="">—</option>
-            {floors.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-          </select>
+          <SearchDropdown
+            value={floorId}
+            disabled={!!reInspectOf || !projectId}
+            onChange={(v) => { setFloorId(v); setUnitId(""); }}
+            options={[{ value: "", label: "—" }, ...floors.map((f) => ({ value: f.id, label: f.name }))]}
+          />
         </div>
         <div className="field full">
           <label>Unit *</label>
-          <select className="select" value={unitId} disabled={!!reInspectOf || !floorId} onChange={(e) => setUnitId(e.target.value)}>
-            <option value="">—</option>
-            {units.map((u) => <option key={u.id} value={u.id}>{u.name} ({u.code})</option>)}
-          </select>
+          <SearchDropdown
+            value={unitId}
+            disabled={!!reInspectOf || !floorId}
+            onChange={setUnitId}
+            options={[{ value: "", label: "—" }, ...units.map((u) => ({ value: u.id, label: `${u.name} (${u.code})` }))]}
+          />
         </div>
 
         {itemId && similarIssues.length > 0 && (
@@ -491,9 +497,12 @@ function InspectionForm({
         </div>
         <div className="field">
           <label>Result *</label>
-          <select className="select" value={result} onChange={(e) => setResult(e.target.value as QualityInspectionResult)}>
-            {RESULTS.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
+          <SearchDropdown
+            searchable={false}
+            value={result}
+            onChange={(v) => setResult(v as QualityInspectionResult)}
+            options={RESULTS.map((r) => ({ value: r, label: r }))}
+          />
         </div>
 
         <div className="field full">
@@ -510,16 +519,20 @@ function InspectionForm({
           <>
             <div className="field">
               <label>Severity *</label>
-              <select className="select" value={severity} onChange={(e) => setSeverity(e.target.value as Severity)}>
-                {SEVERITIES.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
+              <SearchDropdown
+                searchable={false}
+                value={severity}
+                onChange={(v) => setSeverity(v as Severity)}
+                options={SEVERITIES.map((sv) => ({ value: sv, label: sv }))}
+              />
             </div>
             <div className="field">
               <label>Responsible DRI *</label>
-              <select className="select" value={assignedToUserId} onChange={(e) => setAssignedToUserId(e.target.value)}>
-                <option value="">—</option>
-                {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-              </select>
+              <SearchDropdown
+                value={assignedToUserId}
+                onChange={setAssignedToUserId}
+                options={[{ value: "", label: "—" }, ...users.map((u) => ({ value: u.id, label: u.name }))]}
+              />
             </div>
             <div className="field">
               <label>Target Date *</label>

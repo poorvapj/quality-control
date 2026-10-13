@@ -153,12 +153,22 @@ export function blockReason(
   return null;
 }
 
-export function canAct(myRole: Role, stage: Stage): boolean {
+/** Roles that get Civil Engineer's day-to-day site access: the built-in CIVIL
+ *  and SUPERVISOR, plus any custom role (Masters ▸ Roles) whose record has
+ *  "Same stage access as Civil Engineer" ticked (actsLikeCivil). */
+export function isCivilLikeRole(data: BoardData | null, role: string | null | undefined): boolean {
+  if (!role) return false;
+  if (role === "CIVIL" || role === "SUPERVISOR") return true;
+  const rec = coll(data, "roles").find((r) => r.name === role);
+  return !!(rec as any)?.actsLikeCivil;
+}
+
+export function canAct(myRole: Role, stage: Stage, data?: BoardData | null): boolean {
   // SUPERVISOR has the same stage access as CIVIL — every unit/floor
   // stage's owning role is "CIVIL", never "SUPERVISOR" itself, so it needs
   // an explicit match here rather than the plain myRole === stage.role
   // check the other roles use.
-  if (myRole === "SUPERVISOR") return stage.role === "CIVIL";
+  if (myRole !== "CIVIL" && isCivilLikeRole(data ?? null, myRole)) return stage.role === "CIVIL";
   return myRole === "ADMIN" || myRole === "DRI" || myRole === stage.role;
 }
 
@@ -325,7 +335,7 @@ export function myReleases(data: BoardData | null, projectId: string | null, use
   const out: Release[] = [];
   const scan = (targetType: Track, targetId: string, list: JoinedStage[]) => {
     list.forEach((x, i) => {
-      if (!canAct(u.role, x.stage)) return;
+      if (!canAct(u.role, x.stage, data)) return;
       const p = prog(data, targetId, x.stage.id);
       if (p.status === "done") return;
       if (p.status === "released" || p.status === "ack" || p.status === "wip" || p.status === "fail") {

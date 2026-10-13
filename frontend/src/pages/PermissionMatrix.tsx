@@ -3,7 +3,7 @@ import { useApp } from "../context/AppContext";
 import { coll, byId } from "../shared/rules";
 import { nextId } from "../shared/helpers";
 import { buildEventOp } from "../shared/eventLog";
-import { countGrantedActions, defaultGrantsForRole, effectiveRoleGrants } from "../shared/permissionMatrix";
+import { countGrantedActions, defaultGrantsForRole, effectiveRoleGrants, fillLegacyGrants } from "../shared/permissionMatrix";
 import { ROLES } from "../services/config";
 import { BUILT_IN_ROLES } from "../types";
 import type { ModuleAction, ModuleGrant } from "../types";
@@ -30,7 +30,7 @@ export default function PermissionMatrix() {
   // invisibly via hasModuleGrant()'s fallback. Saving from here always
   // writes an explicit record, same as before.
   const [roleLabel, setRoleLabel] = useState(existing?.roleLabel || "");
-  const [grants, setGrants] = useState<Record<string, Partial<Record<ModuleAction, boolean>>>>(existing?.grants || defaultGrantsForRole(byId(users, userId)?.role));
+  const [grants, setGrants] = useState<Record<string, Partial<Record<ModuleAction, boolean>>>>(existing?.grants ? fillLegacyGrants(existing.grants) : defaultGrantsForRole(byId(users, userId)?.role));
   const [loadedFor, setLoadedFor] = useState(userId);
 
   // Re-sync local draft when the selected user changes (not on every data
@@ -38,7 +38,7 @@ export default function PermissionMatrix() {
   if (loadedFor !== userId) {
     const rec = coll(data, "moduleGrants").find((g) => g.userId === userId) || null;
     setRoleLabel(rec?.roleLabel || "");
-    setGrants(rec?.grants || defaultGrantsForRole(byId(users, userId)?.role));
+    setGrants(rec?.grants ? fillLegacyGrants(rec.grants) : defaultGrantsForRole(byId(users, userId)?.role));
     setLoadedFor(userId);
   }
 

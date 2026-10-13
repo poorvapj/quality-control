@@ -1,19 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useApp, authHeaders } from "../context/AppContext";
 import { API_BASE } from "../services/config";
-import { coll, myProjects, projectFloors, floorUnits, byId } from "../shared/rules";
+import { coll, myProjects, projectFloors, floorUnits } from "../shared/rules";
 import { nextId } from "../shared/helpers";
 import { buildEventOp } from "../shared/eventLog";
 import { hasModuleGrant } from "../shared/permissionMatrix";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
 import SidePanel from "../components/SidePanel";
-import StatTile from "../components/StatTile";
 import Card from "../ui/tw/Card";
 import Btn from "../ui/tw/Btn";
-import Badge from "../ui/tw/Badge";
 import Table, { TableRow, TableCell } from "../ui/tw/Table";
-import type { MaterialMeasurement, Unit as QcUnit } from "../types";
+import type { MaterialMeasurement } from "../types";
 
 interface VmsWorkItem {
   itemId: string; itemType: "scopeItem" | "subItem"; parentItemId: string | null;
@@ -28,21 +26,22 @@ interface MeasurementPrefill {
   floorId: string; floorName: string; unitId: string; unitCode: string; unitName: string;
 }
 
+const CUSTOM_ITEM = "__custom__";
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
-/* Anchored to QC's own real Project->Floor->Unit (same as Work Quality
-   Inspection — see that page and types/index.ts's doc comments for why a
-   VMS Work Order/scope-item can't be the anchor: QC has no "tower" concept
-   at all, while VMS's execution locations are free text with no fixed
-   format, so there's no reliable key to auto-match a Unit to a VMS item).
-   VMS execution data is therefore shown as a separate, project-level
-   reference list below the Unit table — never auto-joined to a specific
-   unit row. Store Outward / Material Assigned to DRI integration is
-   deferred to a later phase. */
+const qty = (n: number) => n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+
+/* Measurement — record a measurement for a QC Project → Floor → Unit,
+   optionally cross-referenced to a real VMS work item (see MeasurementForm).
+   The page itself is just the "New Measurement" button and the list of
+   recorded measurements, filterable by project / floor / flat. A QC Unit has
+   no reliable key back to a VMS scope item, so the VMS item is only ever a
+   deliberate pick, never auto-matched. Store Outward / Material Assigned to
+   DRI integration is deferred to a later phase. */
 export default function UnitExecutionWorkflow() {
   const { data, currentUserId, apply, toast, me } = useApp();
   const isAdmin = currentUserId === "U-ADMIN";
-  const canCreate = isAdmin || hasModuleGrant(data, currentUserId, "qualityInspection", "create");
+  const canCreate = isAdmin || hasModuleGrant(data, currentUserId, "unitExecution", "create");
   const allProjects = myProjects(data, currentUserId);
   const allowedProjectCodes = new Set(allProjects.map((p) => p.code));
 
@@ -56,155 +55,91 @@ export default function UnitExecutionWorkflow() {
     return () => { cancelled = true; };
   }, []);
 
-  const inspections = coll(data, "qualityInspections").filter((i) => allowedProjectCodes.has(i.projectCode));
   const measurements = coll(data, "materialMeasurements").filter((m) => allowedProjectCodes.has(m.projectCode));
 
   const [panelOpen, setPanelOpen] = useState(false);
-  const [prefill, setPrefill] = useState<MeasurementPrefill | null>(null);
   const [fProjectId, setFProjectId] = useState("");
+  // Floor / Flat only make sense inside one project — floor and unit names
+  // repeat across projects ("Ground Floor", "Flat 1"), so both stay disabled
+  // under "All projects" and reset whenever the project changes.
+  const [fFloorId, setFFloorId] = useState("");
+  const [fUnitId, setFUnitId] = useState("");
 
-  const projectRows = fProjectId ? allProjects.filter((p) => p.id === fProjectId) : allProjects;
-
-  const unitRows = useMemo(() => {
-    const rows: { projectId: string; projectCode: string; projectName: string; floorId: string; floorName: string; unit: QcUnit }[] = [];
-    for (const p of projectRows) {
-      for (const f of projectFloors(data, p.id)) {
-        for (const u of floorUnits(data, p.id, f.id)) {
-          rows.push({ projectId: p.id, projectCode: p.code, projectName: p.name, floorId: f.id, floorName: f.name, unit: u });
-        }
-      }
-    }
-    return rows;
-  }, [data, projectRows]);
-
-  function inspectionsFor(unitId: string) {
-    return inspections.filter((i) => i.unitId === unitId);
-  }
-  function measurementsFor(unitId: string) {
-    return measurements.filter((m) => m.unitId === unitId);
-  }
-  function latestInspection(unitId: string) {
-    const related = inspectionsFor(unitId);
-    return related.length ? related.sort((a, b) => b.createdAt - a.createdAt)[0] : null;
-  }
-
-  const snags = coll(data, "snags");
-  const unitsInspected = unitRows.filter((r) => inspectionsFor(r.unit.id).length > 0).length;
-  const unresolvedQuality = inspections.filter((i) => {
-    const snag = i.linkedSnagId ? byId(snags, i.linkedSnagId) : null;
-    return snag && snag.status !== "Closed";
-  }).length;
-  const unitsMeasured = unitRows.filter((r) => measurementsFor(r.unit.id).length > 0).length;
-  const totalMeasuredQty = measurements.reduce((s, m) => s + m.measuredQty, 0);
-
-  // VMS execution reference list — project-level only, never auto-joined to
-  // a specific unit row (see the page's doc comment above).
-  const vmsItemRows = useMemo(() => {
-    if (!workItems || !workItems.available) return [];
-    const rows: { projectCode: string; projectName: string; workOrderNo: string; item: VmsWorkItem }[] = [];
-    for (const p of workItems.projects) {
-      if (fProjectId && !allProjects.some((pr) => pr.id === fProjectId && pr.code === p.projectCode)) continue;
-      if (!allowedProjectCodes.has(p.projectCode)) continue;
-      for (const wo of p.workOrders) {
-        for (const item of wo.items) rows.push({ projectCode: p.projectCode, projectName: p.projectName, workOrderNo: wo.workOrderNo, item });
-      }
-    }
-    return rows;
-  }, [workItems, fProjectId, allProjects, allowedProjectCodes]);
-
+  const floorOptions = fProjectId ? projectFloors(data, fProjectId) : [];
+  const unitOptions = fProjectId && fFloorId ? floorUnits(data, fProjectId, fFloorId) : [];
   const projectOptions = allProjects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }));
+
+  const records = measurements
+    .filter((m) => (!fProjectId || m.projectId === fProjectId) && (!fFloorId || m.floorId === fFloorId) && (!fUnitId || m.unitId === fUnitId))
+    .sort((a, b) => b.createdAt - a.createdAt);
 
   return (
     <div>
       <div className="flex items-start justify-between gap-4 flex-wrap mt-0.5 mb-5">
         <div className="flex gap-3 items-start min-w-0">
           <div className="w-11 h-11 shrink-0 rounded-radius-md bg-primary-light text-primary flex items-center justify-center">
-            <NavIcon name="layers" size={20} />
+            <NavIcon name="ruler" size={20} />
           </div>
           <div>
-            <div className="text-xl font-semibold tracking-tight leading-tight">Unit Execution, Quality &amp; Measurement</div>
+            <div className="text-xl font-semibold tracking-tight leading-tight">Measurement</div>
             <div className="text-[12.5px] text-[var(--text-muted)] mt-1 leading-normal">
-              Per-unit Quality Inspection and Measurement history, plus a project-level VMS execution reference — the two are never auto-matched.
-              Store Outward / Material Assigned to DRI integration is deferred to a later phase.
+              Record measured quantity and material consumption by project, floor and flat, optionally linked to a VMS work item.
             </div>
           </div>
         </div>
-      </div>
-
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-        <StatTile label="Units Inspected" value={`${unitsInspected} / ${unitRows.length}`} icon="eye" />
-        <StatTile label="Unresolved Quality Issues" value={unresolvedQuality} icon="bug" valueClassName={unresolvedQuality > 0 ? "text-[var(--color-fail)]" : undefined} />
-        <StatTile label="Units Measured" value={`${unitsMeasured} / ${unitRows.length}`} icon="ruler" />
-        <StatTile label="Total Measured Qty" value={totalMeasuredQty} icon="package" />
+        {canCreate && <Btn label="＋ New Measurement" color="primary" onClick={() => setPanelOpen(true)} />}
       </div>
 
       <Card className="flex gap-3.5 flex-wrap mb-5">
         <div className="max-w-[260px]">
           <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Project</div>
-          <SearchDropdown value={fProjectId} onChange={setFProjectId} options={[{ value: "", label: "All projects" }, ...projectOptions]} neutralActive />
+          <SearchDropdown value={fProjectId} onChange={(v) => { setFProjectId(v); setFFloorId(""); setFUnitId(""); }} options={[{ value: "", label: "All projects" }, ...projectOptions]} neutralActive />
+        </div>
+        <div className="max-w-[220px] min-w-[170px]">
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Floor</div>
+          <SearchDropdown
+            searchable={false}
+            value={fFloorId}
+            onChange={(v) => { setFFloorId(v); setFUnitId(""); }}
+            options={[{ value: "", label: "All floors" }, ...floorOptions.map((fl) => ({ value: fl.id, label: fl.name }))]}
+            neutralActive
+            disabled={!fProjectId}
+          />
+        </div>
+        <div className="max-w-[220px] min-w-[170px]">
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Flat / Unit</div>
+          <SearchDropdown
+            value={fUnitId}
+            onChange={setFUnitId}
+            options={[{ value: "", label: "All flats" }, ...unitOptions.map((u) => ({ value: u.id, label: u.name }))]}
+            neutralActive
+            disabled={!fFloorId}
+          />
         </div>
       </Card>
 
-      <Card padded={false} className="mb-5 p-[18px]">
+      <Card padded={false} className="p-[18px]">
         <Table
-          columns={["Project", "Floor / Unit", "Latest Inspection", "Corrective Action", "VMS Reference", "Measured Qty", "Material Consumed", ""]}
-          colWidths={["9%", "16%", "12%", "12%", "20%", "12%", "12%", "7%"]}
-          colAligns={["left", "left", "left", "left", "left", "right", "right", "left"]}
-          maxHeight="480px"
+          columns={["Date", "Project", "Floor / Unit", "VMS Item", "Measured Qty", "Material Consumed", "Unused / Wastage", "Recorded By"]}
+          colAligns={["left", "left", "left", "left", "right", "right", "right", "left"]}
+          maxHeight="560px"
+          empty="No measurements recorded yet."
         >
-          {unitRows.map(({ projectId, projectCode, projectName, floorId, floorName, unit }) => {
-            const insp = latestInspection(unit.id);
-            const unitMeasurements = measurementsFor(unit.id);
-            const measuredQty = unitMeasurements.reduce((s, m) => s + m.measuredQty, 0);
-            const materialConsumed = unitMeasurements.reduce((s, m) => s + m.materialConsumedQty, 0);
-            const latestMeasurement = unitMeasurements.length ? unitMeasurements.sort((a, b) => b.createdAt - a.createdAt)[0] : null;
-            const vmsRef = insp?.itemDescription || latestMeasurement?.itemDescription || null;
-            const vmsWorkOrder = insp?.workOrderNo || latestMeasurement?.workOrderNo || null;
-            return (
-              <TableRow key={unit.id}>
-                <TableCell className="whitespace-nowrap">{projectCode}</TableCell>
-                <TableCell strong>{floorName} / {unit.name}</TableCell>
-                <TableCell>
-                  {insp ? <Badge color={insp.result === "Pass" ? "green" : insp.result === "Fail" ? "red" : "amber"}><span className="whitespace-nowrap">{insp.result}</span></Badge> : <span className="text-[var(--text-sub)]">Not inspected</span>}
-                </TableCell>
-                <TableCell muted className="whitespace-nowrap">
-                  {(() => {
-                    const snag = insp?.linkedSnagId ? byId(snags, insp.linkedSnagId) : null;
-                    return snag ? (snag.status === "Closed" ? "Resolved" : "Open") : "—";
-                  })()}
-                </TableCell>
-                <TableCell muted className="truncate max-w-0">{vmsRef ? `${vmsWorkOrder} · ${vmsRef}` : "—"}</TableCell>
-                <TableCell className="text-right tabular-nums whitespace-nowrap">{unitMeasurements.length ? `${measuredQty} ${unitMeasurements[0].measuredUnit}` : <span className="text-[var(--text-sub)]">Data unavailable</span>}</TableCell>
-                <TableCell className="text-right tabular-nums whitespace-nowrap">{unitMeasurements.length ? `${materialConsumed} ${unitMeasurements[0].materialUnit}` : <span className="text-[var(--text-sub)]">Data unavailable</span>}</TableCell>
-                <TableCell className="text-right">
-                  {canCreate && (
-                    <Btn label="Measure" color="secondary" size="sm" onClick={() => {
-                      setPrefill({ projectId, projectCode, projectName, floorId, floorName, unitId: unit.id, unitCode: unit.code, unitName: unit.name });
-                      setPanelOpen(true);
-                    }} />
-                  )}
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </Table>
-      </Card>
-
-      <Card padded={false}>
-        <div className="px-4 pt-3.5 pb-2 text-[12.5px] font-semibold">VMS Execution Reference</div>
-        <div className="px-4 pb-3 text-[11px] text-[var(--text-muted)]">
-          Real executed quantity from VMS Site Progress, by Work Order item — shown for cross-reference only, not matched to a specific Unit above.
-        </div>
-        {workItems && !workItems.available && (
-          <div className="empty mx-4 mb-4">VMS work items are unavailable right now ({workItems.reason}).</div>
-        )}
-        <Table columns={["Project / Work Order", "Item", "Executed Qty", "Locations"]} colWidths={["20%", "35%", "15%", "30%"]} colAligns={["left", "left", "right", "left"]} maxHeight="400px">
-          {vmsItemRows.map(({ projectCode, workOrderNo, item }) => (
-            <TableRow key={`${workOrderNo}-${item.itemId}`}>
-              <TableCell className="whitespace-nowrap">{projectCode} · {workOrderNo}</TableCell>
-              <TableCell strong>{item.itemType === "subItem" ? "↳ " : ""}{item.description}</TableCell>
-              <TableCell className="text-right tabular-nums whitespace-nowrap">{item.executedQty} {item.unit}</TableCell>
-              <TableCell muted className="truncate max-w-0">{item.locations.length ? item.locations.join(", ") : "—"}</TableCell>
+          {records.map((m) => (
+            <TableRow key={m.id}>
+              <TableCell muted className="whitespace-nowrap">{m.measurementDate}</TableCell>
+              <TableCell className="whitespace-nowrap">{m.projectCode}</TableCell>
+              <TableCell strong className="whitespace-nowrap">{m.floorName} / {m.unitName}</TableCell>
+              <TableCell>
+                {m.itemDescription
+                  ? <>{m.itemDescription}<div className="text-[10.5px] text-[var(--text-muted)] font-normal">{m.itemIsCustom ? "Not in VMS (typed in)" : m.workOrderNo}</div></>
+                  : <span className="text-[var(--text-sub)]">—</span>}
+                {m.remarks && <div className="text-[10.5px] text-[var(--text-muted)] font-normal max-w-[260px] truncate" title={m.remarks}>{m.remarks}</div>}
+              </TableCell>
+              <TableCell className="text-right tabular-nums whitespace-nowrap">{qty(m.measuredQty)} {m.measuredUnit}</TableCell>
+              <TableCell className="text-right tabular-nums whitespace-nowrap">{qty(m.materialConsumedQty)} {m.materialUnit}</TableCell>
+              <TableCell muted className="text-right tabular-nums whitespace-nowrap">{qty(m.unusedBalanceQty)} / {qty(m.wastageQty)} {m.materialUnit}</TableCell>
+              <TableCell muted className="whitespace-nowrap">{m.recordedByName}</TableCell>
             </TableRow>
           ))}
         </Table>
@@ -212,8 +147,9 @@ export default function UnitExecutionWorkflow() {
 
       <MeasurementForm
         open={panelOpen}
-        onClose={() => { setPanelOpen(false); setPrefill(null); }}
-        prefill={prefill}
+        onClose={() => setPanelOpen(false)}
+        defaults={{ projectId: fProjectId, floorId: fFloorId, unitId: fUnitId }}
+        existing={coll(data, "materialMeasurements")}
         workItems={workItems}
         allProjects={allProjects}
         currentUserId={currentUserId}
@@ -226,18 +162,26 @@ export default function UnitExecutionWorkflow() {
 }
 
 function MeasurementForm({
-  open, onClose, prefill, workItems, allProjects, currentUserId, recordedByName, apply, toast
+  open, onClose, defaults, existing, workItems, allProjects, currentUserId, recordedByName, apply, toast
 }: {
-  open: boolean; onClose: () => void; prefill: MeasurementPrefill | null;
+  open: boolean; onClose: () => void;
+  /** Starting selection (the page's current filters) — the person can change it. */
+  defaults: { projectId: string; floorId: string; unitId: string };
+  existing: MaterialMeasurement[];
   workItems: WorkItemsResponse | null;
   allProjects: { id: string; code: string; name: string }[];
   currentUserId: string | null; recordedByName: string;
   apply: (ops: any[]) => Promise<void>;
   toast: (msg: string) => void;
 }) {
+  const { data } = useApp();
+  const [pProjectId, setPProjectId] = useState("");
+  const [pFloorId, setPFloorId] = useState("");
+  const [pUnitId, setPUnitId] = useState("");
   const [measurementDate, setMeasurementDate] = useState(todayStr());
-  const [workOrderNo, setWorkOrderNo] = useState("");
   const [itemId, setItemId] = useState("");
+  // A work item the person typed because it isn't in VMS.
+  const [customItem, setCustomItem] = useState("");
   const [measuredQty, setMeasuredQty] = useState("");
   const [measuredUnit, setMeasuredUnit] = useState("");
   const [materialConsumedQty, setMaterialConsumedQty] = useState("");
@@ -249,27 +193,46 @@ function MeasurementForm({
 
   useEffect(() => {
     if (!open) return;
+    setPProjectId(defaults.projectId); setPFloorId(defaults.floorId); setPUnitId(defaults.unitId);
     setMeasurementDate(todayStr());
-    setWorkOrderNo(""); setItemId("");
+    setItemId(""); setCustomItem("");
     setMeasuredQty(""); setMeasuredUnit("");
     setMaterialConsumedQty(""); setMaterialUnit("");
     setUnusedBalanceQty(""); setWastageQty(""); setRemarks("");
-  }, [open, prefill]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
-  // VMS Work Order/Item picker — same optional, manual-only cross-reference
-  // pattern as Work Quality Inspection (see that page and the
-  // MaterialMeasurement interface's doc comment in types/index.ts): a QC
-  // Unit has no reliable key back to a VMS scope-item, so this is never
-  // auto-matched to the Unit selected in the table, only a deliberate pick.
+  // Project -> Floor -> Flat, chosen here (the page no longer has a unit
+  // table to launch from). `prefill` is the resolved selection, or null
+  // until all three are picked.
+  const pProject = allProjects.find((p) => p.id === pProjectId) || null;
+  const pFloors = pProject ? projectFloors(data, pProject.id) : [];
+  const pFloor = pFloors.find((fl) => fl.id === pFloorId) || null;
+  const pUnits = pProject && pFloor ? floorUnits(data, pProject.id, pFloor.id) : [];
+  const pUnit = pUnits.find((u) => u.id === pUnitId) || null;
+  const prefill: MeasurementPrefill | null = pProject && pFloor && pUnit
+    ? { projectId: pProject.id, projectCode: pProject.code, projectName: pProject.name, floorId: pFloor.id, floorName: pFloor.name, unitId: pUnit.id, unitCode: pUnit.code, unitName: pUnit.name }
+    : null;
+
+  // VMS item picker — one searchable list of every item on this project's
+  // VMS work orders (the Work Order is no longer a separate step; it's shown
+  // in each option's label and still saved on the record, taken from the
+  // chosen item). Still optional and manual-only, same as Work Quality
+  // Inspection: a QC Unit has no reliable key back to a VMS scope-item, so
+  // it is never auto-matched to the Unit selected in the table, only a
+  // deliberate pick.
   const project = prefill ? allProjects.find((p) => p.id === prefill.projectId) || null : null;
   const projectEntry = (workItems && workItems.available && project)
     ? workItems.projects.find((p) => p.projectCode === project.code)
     : null;
-  const workOrderEntry = projectEntry?.workOrders.find((w) => w.workOrderNo === workOrderNo) || null;
-  const itemEntry = workOrderEntry?.items.find((i) => i.itemId === itemId) || null;
+  const projectItems = useMemo(
+    () => (projectEntry ? projectEntry.workOrders.flatMap((w) => w.items.map((i) => ({ ...i, workOrderNo: w.workOrderNo }))) : []),
+    [projectEntry]
+  );
+  const itemEntry = projectItems.find((i) => i.itemId === itemId) || null;
 
   async function save() {
-    if (!prefill) { toast("Select a unit first"); return; }
+    if (!prefill) { toast("Select the project, floor and flat first"); return; }
     const mQty = Number(measuredQty), mcQty = Number(materialConsumedQty);
     const ubQty = Number(unusedBalanceQty) || 0, wQty = Number(wastageQty) || 0;
     if (!measuredUnit.trim() || !materialUnit.trim()) { toast("Measured unit and material unit are required"); return; }
@@ -278,16 +241,17 @@ function MeasurementForm({
     if (ubQty < 0 || wQty < 0) { toast("Unused balance and wastage must be non-negative"); return; }
 
     setSaving(true);
-    const id = nextId("MM", []);
+    const id = nextId("MM", existing);
     const rec: MaterialMeasurement = {
       id,
       projectId: prefill.projectId, projectCode: prefill.projectCode, projectName: prefill.projectName,
       floorId: prefill.floorId, floorName: prefill.floorName,
       unitId: prefill.unitId, unitCode: prefill.unitCode, unitName: prefill.unitName,
-      workOrderNo: itemEntry ? workOrderNo : undefined,
-      itemId: itemEntry ? itemEntry.itemId : undefined,
+      workOrderNo: !customItem && itemEntry ? itemEntry.workOrderNo : undefined,
+      itemId: !customItem && itemEntry ? itemEntry.itemId : undefined,
       itemType: itemEntry?.itemType,
-      itemDescription: itemEntry?.description,
+      itemDescription: customItem ? customItem : itemEntry?.description,
+      itemIsCustom: customItem ? true : undefined,
       measurementDate,
       measuredQty: mQty, measuredUnit: measuredUnit.trim(),
       materialConsumedQty: mcQty, materialUnit: materialUnit.trim(),
@@ -315,7 +279,7 @@ function MeasurementForm({
       wide
       icon={<NavIcon name="ruler" size={18} />}
       title="Record Measurement"
-      desc={prefill ? `${prefill.projectCode} · ${prefill.floorName} / ${prefill.unitName}` : "Select a unit from the table first."}
+      desc={prefill ? `${prefill.projectCode} · ${prefill.floorName} / ${prefill.unitName}` : "Pick the project, floor and flat to measure."}
       onClose={onClose}
       footer={
         <>
@@ -325,38 +289,66 @@ function MeasurementForm({
       }
     >
       <div className="form-grid">
+        <div className="field full">
+          <label>Project *</label>
+          <SearchDropdown
+            value={pProjectId}
+            onChange={(v) => { setPProjectId(v); setPFloorId(""); setPUnitId(""); setItemId(""); }}
+            options={[{ value: "", label: "Select project…" }, ...allProjects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))]}
+          />
+        </div>
+        <div className="field">
+          <label>Floor *</label>
+          <SearchDropdown
+            searchable={false}
+            value={pFloorId}
+            onChange={(v) => { setPFloorId(v); setPUnitId(""); }}
+            options={[{ value: "", label: "Select floor…" }, ...pFloors.map((fl) => ({ value: fl.id, label: fl.name }))]}
+            disabled={!pProjectId}
+          />
+        </div>
+        <div className="field">
+          <label>Flat / Unit *</label>
+          <SearchDropdown
+            value={pUnitId}
+            onChange={setPUnitId}
+            options={[{ value: "", label: "Select flat…" }, ...pUnits.map((u) => ({ value: u.id, label: u.name }))]}
+            disabled={!pFloorId}
+          />
+        </div>
         <div className="field">
           <label>Measurement Date *</label>
           <input className="input" type="date" value={measurementDate} onChange={(e) => setMeasurementDate(e.target.value)} />
         </div>
-        <div className="field" />
-
-        <div className="field">
-          <label>VMS Work Order (optional)</label>
-          {workItems && !workItems.available && (
-            <div className="empty" style={{ marginBottom: 6 }}>VMS work items are unavailable right now ({workItems.reason}).</div>
-          )}
-          <select className="select" value={workOrderNo} disabled={!projectEntry} onChange={(e) => { setWorkOrderNo(e.target.value); setItemId(""); }}>
-            <option value="">— none —</option>
-            {projectEntry?.workOrders.map((w) => <option key={w.workOrderNo} value={w.workOrderNo}>{w.workOrderNo}</option>)}
-          </select>
-        </div>
         <div className="field">
           <label>VMS Work Item (optional)</label>
-          <select
-            className="select"
-            value={itemId}
-            disabled={!workOrderEntry}
-            onChange={(e) => {
-              const id = e.target.value;
+          <SearchDropdown
+            value={customItem ? CUSTOM_ITEM : itemId}
+            disabled={!project}
+            onChange={(id) => {
+              if (id === CUSTOM_ITEM) return; // re-picking the typed entry — nothing to change
+              setCustomItem("");
               setItemId(id);
-              const picked = workOrderEntry?.items.find((i) => i.itemId === id);
+              const picked = projectItems.find((i) => i.itemId === id);
               if (picked && !measuredUnit) setMeasuredUnit(picked.unit);
             }}
-          >
-            <option value="">— not linked to a VMS item —</option>
-            {workOrderEntry?.items.map((i) => <option key={i.itemId} value={i.itemId}>{i.itemType === "subItem" ? "↳ " : ""}{i.description} ({i.unit})</option>)}
-          </select>
+            // Type something that isn't listed and an 'Add "…"' row appears.
+            onCreate={(text) => { setCustomItem(text); setItemId(""); }}
+            options={[
+              { value: "", label: "Select or type a work item…" },
+              ...(customItem ? [{ value: CUSTOM_ITEM, label: `${customItem} (added by you)` }] : []),
+              ...projectItems.map((i) => ({
+                value: i.itemId,
+                label: `${i.itemType === "subItem" ? "↳ " : ""}${i.description} · ${i.workOrderNo} (${i.unit})`
+              }))
+            ]}
+          />
+          {workItems && !workItems.available && (
+            <div className="text-[11px] text-[var(--color-fail)] mt-1">VMS work items unavailable ({workItems.reason}) — you can still type one.</div>
+          )}
+          {workItems && workItems.available && !!project && projectItems.length === 0 && (
+            <div className="text-[11px] text-[var(--text-muted)] mt-1">No VMS items for this project — type one in the search box.</div>
+          )}
         </div>
 
         {itemEntry && (

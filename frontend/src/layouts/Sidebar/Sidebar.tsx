@@ -22,6 +22,9 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
   const canViewDpr = isAdmin || isDri || hasModuleGrant(data, currentUserId, "dpr", "view");
   const canViewDrawingRequests = isAdmin || isDri || hasModuleGrant(data, currentUserId, "drawingRequests", "view");
   const canViewQualityInspection = isAdmin || hasModuleGrant(data, currentUserId, "qualityInspection", "view");
+  const canViewUnitExecution = isAdmin || hasModuleGrant(data, currentUserId, "unitExecution", "view");
+  const canViewProgressAnalysis = isAdmin || hasModuleGrant(data, currentUserId, "progressAnalysis", "view");
+  const canViewPurchaseOrders = isAdmin || hasModuleGrant(data, currentUserId, "purchaseOrders", "view");
 
   // Icon-only collapse only ever makes sense on desktop. A stale
   // collapsed=true from localStorage (e.g. set on desktop, then this page
@@ -71,11 +74,10 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
         ...(canViewTeam ? [{ key: "team" as TabKey, icon: "team", label: "Team" }] : []),
         ...(canViewDpr ? [{ key: "dpr" as TabKey, icon: "dpr", label: "Daily Progress Report" }] : []),
         ...(canViewDrawingRequests ? [{ key: "drawingRequests" as TabKey, icon: "drawing", label: "Drawing Requests" }] : []),
-        ...(canViewQualityInspection ? [{ key: "qualityInspection" as TabKey, icon: "eye", label: "Work Quality Inspection" }] : []),
-        ...(canViewQualityInspection ? [{ key: "unitExecutionWorkflow" as TabKey, icon: "layers", label: "Unit Execution & Measurement" }] : []),
-        ...(canViewQualityInspection ? [{ key: "measurement" as TabKey, icon: "ruler", label: "Measurement" }] : []),
-        ...(canViewQualityInspection ? [{ key: "progressAnalysis" as TabKey, icon: "trend", label: "Progress Analysis" }] : []),
-        ...(canViewQualityInspection ? [{ key: "purchaseOrders" as TabKey, icon: "package", label: "Purchase Orders" }] : [])
+        ...(canViewQualityInspection ? [{ key: "qualityInspection" as TabKey, icon: "eye", label: "Quality Inspection" }] : []),
+        ...(canViewUnitExecution ? [{ key: "unitExecutionWorkflow" as TabKey, icon: "layers", label: "Measurement" }] : []),
+        ...(canViewProgressAnalysis ? [{ key: "progressAnalysis" as TabKey, icon: "trend", label: "Progress Analysis" }] : []),
+        ...(canViewPurchaseOrders ? [{ key: "purchaseOrders" as TabKey, icon: "package", label: "Purchase Orders" }] : [])
       ]
     },
     {

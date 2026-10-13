@@ -373,7 +373,7 @@ function StageCell({
   // other stage's canAct() — but an explicit Permission Matrix grant still
   // additively unlocks it, same as Internal Possession (which stays
   // CIVIL-only, CRM has no access there).
-  const canActBase = joined.stage.id === "STG-HOO" ? myRole() === "ADMIN" || myRole() === "CRM" : canAct(myRole(), joined.stage);
+  const canActBase = joined.stage.id === "STG-HOO" ? myRole() === "ADMIN" || myRole() === "CRM" : canAct(myRole(), joined.stage, data);
   const mine = canActBase || hasModuleGrant(data, currentUserId, solid ? "handoverInternal" : "handoverOwner", "edit");
   const chk = joined.map.checklistId ? byId(coll(data, "checklists"), joined.map.checklistId) : null;
 

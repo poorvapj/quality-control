@@ -1,7 +1,7 @@
 import React, { useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { ROLES } from "../services/config";
-import { byId, coll, canAct, blockReason, openSnagsFor, prog, refLabel, trackStages, snagTarget, unitSummary, rccChecklistItems, rccItemBlockReason, rccItemLabel, myProjects } from "../shared/rules";
+import { byId, coll, canAct, blockReason, openSnagsFor, prog, refLabel, trackStages, snagTarget, unitSummary, rccChecklistItems, rccItemBlockReason, rccItemLabel, myProjects, isCivilLikeRole } from "../shared/rules";
 import { fmtDT, ago, dueLabel } from "../shared/helpers";
 import { useActions } from "../hooks/useActions";
 import AssignRow from "./AssignRow";
@@ -98,7 +98,7 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
           const done = p.status === "done";
           const fail = p.status === "fail";
           const block = rccItemBlockReason(data, id, s.id, items, i);
-          const mine = myRole() === "ADMIN" || myRole() === "DRI" || myRole() === "CIVIL" || myRole() === "SUPERVISOR";
+          const mine = myRole() === "ADMIN" || myRole() === "DRI" || isCivilLikeRole(data, myRole());
           const nestedChk = it.checklistId ? byId(coll(data, "checklists"), it.checklistId) : null;
 
           return (
@@ -136,7 +136,7 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
                 <div className="stage-actions">
                   {(!block || done) && (
                     <>
-                      {it.isHidden && !p.meas && (myRole() === "CIVIL" || myRole() === "SUPERVISOR" || myRole() === "ADMIN" || myRole() === "DRI") && (
+                      {it.isHidden && !p.meas && (isCivilLikeRole(data, myRole()) || myRole() === "ADMIN" || myRole() === "DRI") && (
                         <button className="btn btn-meas btn-sm" onClick={() => { pendingPhoto.current = { kind: "unit", id, stageId: s.id, itemId: it.id }; fileRef.current?.click(); }}>
                           📸 Measure &amp; photograph
                         </button>
@@ -182,7 +182,7 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
           const done = p.status === "done";
           const fail = p.status === "fail";
           const block = blockReason(data, currentProjectId, kind, id, idx);
-          const mine = canAct(myRole(), s);
+          const mine = canAct(myRole(), s, data);
           const chk = x.map.checklistId ? byId(coll(data, "checklists"), x.map.checklistId) : null;
 
           return (
@@ -220,7 +220,7 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
                 <div className="stage-actions">
                   {(!block || done) && (
                     <>
-                      {s.isHidden && !p.meas && (myRole() === "CIVIL" || myRole() === "SUPERVISOR" || myRole() === "ADMIN" || myRole() === "DRI") && (
+                      {s.isHidden && !p.meas && (isCivilLikeRole(data, myRole()) || myRole() === "ADMIN" || myRole() === "DRI") && (
                         <button className="btn btn-meas btn-sm" onClick={() => { pendingPhoto.current = { kind, id, stageId: s.id }; fileRef.current?.click(); }}>
                           📸 Measure &amp; photograph
                         </button>
@@ -426,7 +426,7 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
               // unlike every other stage's canAct(). CRM fills it from what
               // the customer says verbally; Internal Possession stays
               // CIVIL-only, CRM has no access there.
-              const mine = joined.stage.id === "STG-HOO" ? myRole() === "ADMIN" || myRole() === "CRM" : canAct(myRole(), joined.stage);
+              const mine = joined.stage.id === "STG-HOO" ? myRole() === "ADMIN" || myRole() === "CRM" : canAct(myRole(), joined.stage, data);
               const chk = joined.map.checklistId ? byId(coll(data, "checklists"), joined.map.checklistId) : null;
               // Unlike the informational-only structure block above, Owner
               // Possession is a REAL lock on Internal Possession — its Fill
@@ -496,7 +496,7 @@ function SnagDrawer({ id }: { id: string }) {
   const d = dueLabel(s.dueAt);
   const closed = s.status === "Closed";
   // CRM doesn't do field/rework — snags shouldn't be reassignable to them.
-  const users = coll(data, "users").filter((u) => u.active !== false && (u.role === "CIVIL" || u.role === "SUPERVISOR"));
+  const users = coll(data, "users").filter((u) => u.active !== false && isCivilLikeRole(data, u.role));
 
   const label: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: "#9CA3AF", marginBottom: 4 };
   const value: React.CSSProperties = { fontSize: 14, fontWeight: 500, color: "var(--text-main)", lineHeight: 1.4 };

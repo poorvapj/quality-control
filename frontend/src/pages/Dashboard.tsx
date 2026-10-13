@@ -1,6 +1,7 @@
 import React from "react";
 import { useApp } from "../context/AppContext";
 import { canActOnStage } from "../shared/permissions";
+import { isCivilLikeRole } from "../shared/rules";
 import { BUILT_IN_ROLES } from "../types";
 import OpsDashboard from "./OpsDashboard";
 import DriDashboard from "./DriDashboard";
@@ -25,7 +26,7 @@ export default function Dashboard() {
 
   if (role === "DRI") return <DriDashboard />;
   if (role === "CRM") return <CrmDashboard />;
-  if (role === "ADMIN" || role === "CIVIL" || role === "SUPERVISOR") return <OpsDashboard />;
+  if (role === "ADMIN" || isCivilLikeRole(data, role)) return <OpsDashboard />;
 
   const isBuiltIn = (BUILT_IN_ROLES as readonly string[]).includes(role);
   const hasAnyStageGrant = STAGE_KEYS.some((k) => canActOnStage(data, currentUserId, role, k));

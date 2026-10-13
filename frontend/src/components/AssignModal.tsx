@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useApp } from "../context/AppContext";
-import { coll, trackStages, projectFloors, projectUnits, rccChecklistItems, myProjects } from "../shared/rules";
+import { coll, trackStages, projectFloors, projectUnits, rccChecklistItems, myProjects, isCivilLikeRole } from "../shared/rules";
 import { HOUR } from "../services/config";
 import { useActions } from "../hooks/useActions";
 import SidePanel from "./SidePanel";
@@ -62,7 +62,7 @@ export default function AssignModal() {
   const stages = trackStages(data, projectId, targetType);
   // Work assignments are always civil site work — only CIVIL-role users
   // can be assigned to them.
-  const users = coll(data, "users").filter((u) => u.active !== false && (u.role === "CIVIL" || u.role === "SUPERVISOR"));
+  const users = coll(data, "users").filter((u) => u.active !== false && isCivilLikeRole(data, u.role));
 
   // Item-based stages (RCC, Brick, AC, Electric, Plastering) each render as
   // their own group in the Stage picker, one heading per stage, their items

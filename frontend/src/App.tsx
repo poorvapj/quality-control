@@ -88,10 +88,10 @@ export default function App() {
       (activeTab === "dpr" && !isDri && !hasModuleGrant(data, currentUserId, "dpr", "view")) ||
       (activeTab === "drawingRequests" && !isDri && !hasModuleGrant(data, currentUserId, "drawingRequests", "view")) ||
       (activeTab === "qualityInspection" && !hasModuleGrant(data, currentUserId, "qualityInspection", "view")) ||
-      (activeTab === "unitExecutionWorkflow" && !hasModuleGrant(data, currentUserId, "qualityInspection", "view")) ||
-      (activeTab === "measurement" && !hasModuleGrant(data, currentUserId, "qualityInspection", "view")) ||
-      (activeTab === "progressAnalysis" && !hasModuleGrant(data, currentUserId, "qualityInspection", "view")) ||
-      (activeTab === "purchaseOrders" && !hasModuleGrant(data, currentUserId, "qualityInspection", "view")) ||
+      (activeTab === "unitExecutionWorkflow" && !hasModuleGrant(data, currentUserId, "unitExecution", "view")) ||
+      (activeTab === "measurement" && !hasModuleGrant(data, currentUserId, "measurement", "view")) ||
+      (activeTab === "progressAnalysis" && !hasModuleGrant(data, currentUserId, "progressAnalysis", "view")) ||
+      (activeTab === "purchaseOrders" && !hasModuleGrant(data, currentUserId, "purchaseOrders", "view")) ||
       // MIS Dashboard is management/CEO-level cross-project analytics —
       // admin-only, same as Permission Matrix, not additively grantable.
       activeTab === "misDashboard" ||

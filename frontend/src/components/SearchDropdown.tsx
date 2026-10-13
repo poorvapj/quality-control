@@ -28,8 +28,12 @@ export interface DropdownOption {
  *  Fully inline-styled (no shared CSS classes) so each usage is
  *  self-contained, same pattern as DropdownMenu.tsx. */
 export default function SearchDropdown({
-  value, onChange, multi = false, multiValue, onChangeMulti, options, searchable = true, icon, scrollable = true, pill = false, neutralActive = false, disabled = false
+  value, onChange, multi = false, multiValue, onChangeMulti, options, searchable = true, icon, scrollable = true, pill = false, neutralActive = false, disabled = false, onCreate
 }: {
+  /** When set, typing something that isn't in `options` offers an
+   *  '＋ Add "…"' row at the top of the list; picking it calls this with the
+   *  typed text (the parent decides how to store it). */
+  onCreate?: (text: string) => void;
   value?: string; onChange?: (v: string) => void; options: DropdownOption[]; searchable?: boolean; icon?: string; scrollable?: boolean; pill?: boolean;
   /** Turns this into a multi-select checklist: the panel stays open across
    *  picks, every row (including group/subgroup headings, which cascade to
@@ -122,10 +126,23 @@ export default function SearchDropdown({
               />
             </div>
           )}
-          <div style={{ maxHeight: scrollable ? 240 : "none", overflowY: scrollable ? "auto" : "visible", padding: 4 }}>
-            {filtered.length === 0 ? (
+          <div style={{ maxHeight: scrollable ? 203 : "none", overflowY: scrollable ? "auto" : "visible", padding: 4 }}>
+            {onCreate && q.trim() && !options.some((o) => o.label.trim().toLowerCase() === q.trim().toLowerCase()) && (
+              <button
+                type="button"
+                onClick={() => { onCreate(q.trim()); setOpen(false); }}
+                style={{
+                  display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", padding: "9px 10px", marginBottom: 2,
+                  border: "1px dashed var(--theme-primary)", borderRadius: 8, background: "none", cursor: "pointer",
+                  color: "var(--theme-primary)", fontSize: 13, fontWeight: 600
+                }}
+              >
+                ＋ Add "{q.trim()}"
+              </button>
+            )}
+            {filtered.length === 0 ? (onCreate && q.trim() ? null : (
               <div style={{ padding: 14, textAlign: "center", fontSize: 12.5, color: "var(--text-sub)" }}>No matches</div>
-            ) : (
+            )) : (
               filtered.map((o, i) => {
                 // Every option belonging to a group whose heading (or
                 // subheading) is fully "covered" reads as active too — not
