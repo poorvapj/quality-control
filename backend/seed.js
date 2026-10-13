@@ -28,7 +28,10 @@ const COLLECTIONS = [
   "vendors",           // Vendor/Contractor master (migrated from VMS) — code/name/work types only, no financial/KYC fields
   "roles",             // Custom roles beyond the 5 built-in ones (DRI/CRM/CIVIL/ADMIN/SUPERVISOR) — Masters ▸ Role Master
   "forms",             // Admin-built custom forms — Masters ▸ Form Master
-  "formSubmissions"    // Responses to a custom form (public or in-app)
+  "formSubmissions",   // Responses to a custom form (public or in-app)
+  "qualityInspections", // Work Quality Inspection records (Pass/Fail/Rework Required) against a VMS project/work-order/work-item
+  "materialMeasurements", // Unit Execution Workflow's measurement step — measured qty + material consumption, Store integration deferred
+  "purchaseOrders" // Synced from IMS's PO_APPROVED webhook (imsWebhook.js) — sanitized, non-financial subset only; matched to a QC project by exact name, never fuzzy
 ];
 
 function blankData() {

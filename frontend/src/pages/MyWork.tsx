@@ -1,6 +1,6 @@
 import React from "react";
 import { useApp } from "../context/AppContext";
-import { myAssignments, mySnags, myReleases, assignmentsByMe, snagsByMe, refLabel, snagTarget, myProjects } from "../shared/rules";
+import { myAssignments, mySnags, myReleases, assignmentsByMe, snagsByMe, refLabel, snagTarget, myProjects, coll, byId } from "../shared/rules";
 import { ago, dueLabel } from "../shared/helpers";
 import AssignRow from "../components/AssignRow";
 import SnagRow from "../components/SnagRow";
@@ -41,6 +41,17 @@ export default function MyWork() {
     : [];
   const allSng = isAdmin
     ? (data?.snags || []).filter((s) => projectIds.includes(s.projectId) && s.status !== "Closed").sort((a, b) => (a.dueAt || 0) - (b.dueAt || 0))
+    : [];
+  // Every past Quality Inspection failure/rework this DRI was made
+  // responsible for — open AND closed, not just what's currently on them —
+  // so they can recognize a repeat mistake on similar work before it
+  // happens again, not just react to the current snag. Reusing
+  // QualityInspection's own correctiveAction.assignedToUserId, never a
+  // separate "history" record.
+  const myQualityFailures = !isAdmin
+    ? coll(data, "qualityInspections")
+        .filter((i) => i.correctiveAction?.assignedToUserId === currentUserId)
+        .sort((a, b) => b.createdAt - a.createdAt)
     : [];
 
   return (
@@ -109,6 +120,28 @@ export default function MyWork() {
           <SectionLabel icon="snags">Snags on Me</SectionLabel>
           <Card padded={false}>
             {sng.length ? sng.map((s) => <SnagRow key={s.id} s={s} />) : <div className="py-7 text-center text-[var(--text-muted)] text-[13px]">No open snags assigned to you.</div>}
+          </Card>
+
+          <SectionLabel icon="eye">Your Quality Failure History</SectionLabel>
+          <Card padded={false}>
+            {myQualityFailures.length ? myQualityFailures.map((insp) => {
+              const snag = insp.linkedSnagId ? byId(coll(data, "snags"), insp.linkedSnagId) : null;
+              return (
+                <div
+                  key={insp.id}
+                  className="flex items-center justify-between gap-3 py-3.5 px-4 border-b border-[var(--border)] cursor-pointer transition-colors last:border-b-0"
+                  onClick={() => openDrawer({ kind: "unit", id: insp.unitId })}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] font-bold">{insp.floorName} / {insp.unitName}{insp.itemDescription ? ` · ${insp.itemDescription}` : ""}</div>
+                    <div className="text-[11px] text-[var(--text-muted)] mt-0.5 leading-normal">{insp.remarks || "No remarks"} · {insp.inspectionDate}</div>
+                  </div>
+                  <Badge color={insp.result === "Fail" ? "red" : "amber"}>
+                    {snag ? (snag.status === "Closed" ? "Resolved" : "Open") : insp.result}
+                  </Badge>
+                </div>
+              );
+            }) : <div className="py-7 text-center text-[var(--text-muted)] text-[13px]">No quality failures recorded against you yet.</div>}
           </Card>
         </>
       )}

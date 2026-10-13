@@ -7,7 +7,7 @@ import React from "react";
    Extracted from HandoverChecklist.tsx's original hand-rolled table so
    later page conversions reuse the same markup instead of retyping it. */
 export default function Table({
-  columns, children, empty = "No records found.", maxHeight, colWidths
+  columns, children, empty = "No records found.", maxHeight, colWidths, colAligns
 }: {
   columns: string[];
   children: React.ReactNode;
@@ -21,6 +21,12 @@ export default function Table({
   /** Optional per-column width (e.g. ["20%","80%"]) — same length as
    *  `columns`. Omit to let columns size to content, as before. */
   colWidths?: string[];
+  /** Optional per-column header text alignment (e.g. ["left","right"]) —
+   *  same length as `columns`. Pass "right" for any column whose body
+   *  cells are right-aligned (tabular-nums), so the header label lines up
+   *  over its values instead of sitting at the opposite edge. Omit/"left"
+   *  is the default for every column, as before. */
+  colAligns?: ("left" | "right")[];
 }) {
   const hasRows = React.Children.count(children) > 0;
   return (
@@ -33,10 +39,10 @@ export default function Table({
         )}
         <thead>
           <tr className="text-left text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
-            {columns.map((c) => (
+            {columns.map((c, i) => (
               <th
                 key={c}
-                className="pb-2.5 pr-4 last:pr-0 bg-[var(--bg-card)]"
+                className={"pb-2.5 pr-4 last:pr-0 bg-[var(--bg-card)]" + (colAligns?.[i] === "right" ? " text-right" : "")}
                 style={maxHeight ? { position: "sticky", top: 0, zIndex: 1 } : undefined}
               >
                 {c}
@@ -59,10 +65,11 @@ export function TableRow({ children }: { children: React.ReactNode }) {
 }
 
 export function TableCell({
-  children, strong, muted, className = ""
+  children, strong, muted, className = "", colSpan, onClick, title
 }: {
-  children: React.ReactNode; strong?: boolean; muted?: boolean; className?: string;
+  children: React.ReactNode; strong?: boolean; muted?: boolean; className?: string; colSpan?: number;
+  onClick?: () => void; title?: string;
 }) {
   const tone = strong ? "font-bold" : muted ? "text-[var(--text-muted)]" : "";
-  return <td className={`py-2.5 pr-4 last:pr-0 ${tone} ${className}`.trim()}>{children}</td>;
+  return <td colSpan={colSpan} title={title} onClick={onClick} className={`py-2.5 pr-4 last:pr-0 ${tone} ${className}`.trim()}>{children}</td>;
 }

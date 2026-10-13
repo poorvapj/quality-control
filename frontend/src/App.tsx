@@ -10,6 +10,10 @@ import ChecklistModal from "./components/ChecklistModal";
 import RecordModal from "./components/RecordModal";
 import Dashboard from "./pages/Dashboard";
 import MISDashboard from "./pages/MISDashboard";
+import ExecutionReconciliation from "./pages/ExecutionReconciliation";
+import QualityInspection from "./pages/QualityInspection";
+import UnitExecutionWorkflow from "./pages/UnitExecutionWorkflow";
+import ProgressAnalysis from "./pages/ProgressAnalysis";
 import MyWork from "./pages/MyWork";
 import TowerBoard from "./pages/TowerBoard";
 import HandoverChecklist from "./pages/HandoverChecklist";
@@ -35,6 +39,10 @@ export default function App() {
   const pages: Record<string, React.ReactNode> = {
     dash: <Dashboard />,
     misDashboard: <MISDashboard />,
+    executionReconciliation: <ExecutionReconciliation />,
+    qualityInspection: <QualityInspection />,
+    unitExecutionWorkflow: <UnitExecutionWorkflow />,
+    progressAnalysis: <ProgressAnalysis />,
     work: <MyWork />,
     board: <TowerBoard />,
     handoverChecklist: <HandoverChecklist />,
@@ -75,9 +83,15 @@ export default function App() {
       // Permission Matrix grant is only needed for other roles.
       (activeTab === "dpr" && !isDri && !hasModuleGrant(data, currentUserId, "dpr", "view")) ||
       (activeTab === "drawingRequests" && !isDri && !hasModuleGrant(data, currentUserId, "drawingRequests", "view")) ||
+      (activeTab === "qualityInspection" && !hasModuleGrant(data, currentUserId, "qualityInspection", "view")) ||
+      (activeTab === "unitExecutionWorkflow" && !hasModuleGrant(data, currentUserId, "qualityInspection", "view")) ||
+      (activeTab === "progressAnalysis" && !hasModuleGrant(data, currentUserId, "qualityInspection", "view")) ||
       // MIS Dashboard is management/CEO-level cross-project analytics —
       // admin-only, same as Permission Matrix, not additively grantable.
       activeTab === "misDashboard" ||
+      // Same reasoning as Quality MIS — cross-project VMS execution/
+      // billing data, admin-only, not additively grantable.
+      activeTab === "executionReconciliation" ||
       activeTab === "permissionMatrix") &&
     !isAdmin;
 

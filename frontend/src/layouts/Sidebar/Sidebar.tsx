@@ -21,6 +21,7 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
   // Permission Matrix grant is only needed for other roles.
   const canViewDpr = isAdmin || isDri || hasModuleGrant(data, currentUserId, "dpr", "view");
   const canViewDrawingRequests = isAdmin || isDri || hasModuleGrant(data, currentUserId, "drawingRequests", "view");
+  const canViewQualityInspection = isAdmin || hasModuleGrant(data, currentUserId, "qualityInspection", "view");
 
   // Icon-only collapse only ever makes sense on desktop. A stale
   // collapsed=true from localStorage (e.g. set on desktop, then this page
@@ -45,7 +46,11 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
       label: "Overview",
       items: [
         { key: "dash", icon: "dashboard", label: "Dashboard" },
-        ...(isAdmin ? [{ key: "misDashboard" as TabKey, icon: "trend", label: "Quality MIS" }] : [])
+        ...(isAdmin ? [{ key: "misDashboard" as TabKey, icon: "trend", label: "Quality MIS" }] : []),
+        // Cross-project VMS execution/billing reconciliation — admin-only,
+        // same reasoning as Quality MIS (management-level financial data,
+        // not additively grantable via Permission Matrix).
+        ...(isAdmin ? [{ key: "executionReconciliation" as TabKey, icon: "database", label: "Execution Reconciliation" }] : [])
       ]
     },
     {
@@ -65,7 +70,10 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
         { key: "snags", icon: "snags", label: "Snags", badge: snagBadge },
         ...(canViewTeam ? [{ key: "team" as TabKey, icon: "team", label: "Team" }] : []),
         ...(canViewDpr ? [{ key: "dpr" as TabKey, icon: "dpr", label: "Daily Progress Report" }] : []),
-        ...(canViewDrawingRequests ? [{ key: "drawingRequests" as TabKey, icon: "drawing", label: "Drawing Requests" }] : [])
+        ...(canViewDrawingRequests ? [{ key: "drawingRequests" as TabKey, icon: "drawing", label: "Drawing Requests" }] : []),
+        ...(canViewQualityInspection ? [{ key: "qualityInspection" as TabKey, icon: "eye", label: "Work Quality Inspection" }] : []),
+        ...(canViewQualityInspection ? [{ key: "unitExecutionWorkflow" as TabKey, icon: "layers", label: "Unit Execution & Measurement" }] : []),
+        ...(canViewQualityInspection ? [{ key: "progressAnalysis" as TabKey, icon: "trend", label: "Progress Analysis" }] : [])
       ]
     },
     {

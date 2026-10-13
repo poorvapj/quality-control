@@ -61,6 +61,12 @@ const { MongoClient } = require("mongodb");
 const cloudinary = require("cloudinary").v2;
 const { seedData, blankData, COLLECTIONS } = require("./seed.js");
 const { handleVmsDprSync } = require("./vmsDprApiHandler.js");
+const { getExecutionReconciliation, requiresAdmin } = require("./executionReconciliation.js");
+const { getVmsWorkItems } = require("./vmsWorkItems.js");
+const { shouldResolveOriginal } = require("./qualityInspectionRules.js");
+const { validateMeasurement } = require("./materialMeasurementRules.js");
+const { getProgressAnalysis } = require("./progressAnalysis.js");
+const { sanitizePoEvent, matchProjectByName } = require("./imsWebhook.js");
 
 /* ------------------------------------------------------------- passwords
    Node's built-in scrypt is our own hashing scheme going forward. Plaintext
@@ -141,6 +147,7 @@ const AUTOMATION_SECRET = process.env.AUTOMATION_SECRET || "";
 // AUTOMATION_SECRET/BACKUP_CRON_SECRET above (no user session; VMS is an
 // unattended server-to-server caller, not a logged-in person).
 const VMS_SYNC_SECRET = process.env.VMS_SYNC_SECRET || "";
+const IMS_WEBHOOK_SECRET = process.env.IMS_WEBHOOK_SECRET || "";
 
 /* ------------------------------------------------------- Slack (no n8n)
    Talks to Slack's Web API directly with a bot token — no middleman
@@ -739,6 +746,13 @@ async function assertOpAllowed(op, session) {
     return;
   }
 
+  if (op.op === "upsert" && op.coll === "materialMeasurements" && op.rec) {
+    if (!session) { const e = new Error("Sign-in required"); e.status = 401; throw e; }
+    const err = validateMeasurement(op.rec);
+    if (err) { const e = new Error(err); e.status = 400; throw e; }
+    return;
+  }
+
   if (op.op === "upsert" && !PUBLIC_CREATE_ONLY.includes(op.coll)) {
     if (!session) { const e = new Error("Sign-in required"); e.status = 401; throw e; }
     return;
@@ -847,6 +861,26 @@ async function applyOps(ops, session) {
           notifySnagTarget("snag_reopened", rec, existing);
         } else if (reassigned) {
           notifySnagTarget("snag_assigned", rec, existing);
+        }
+      } else if (op.coll === "qualityInspections") {
+        await mongoDb.collection(op.coll).updateOne({ id: op.rec.id }, update, { upsert: true });
+        // A passing re-inspection closes the ORIGINAL failed inspection's
+        // linked Snag server-side — never trust the client alone to close
+        // its own loop, since that Snag's status gates the "open issues"
+        // KPI everyone else sees. The corrective-action ASSIGNMENT
+        // notification itself already happened via the "snags" upsert
+        // branch above, in the same apply() batch that created this record.
+        if (shouldResolveOriginal(rec)) {
+          const original = await mongoDb.collection("qualityInspections").findOne(
+            { id: rec.reInspectionOf },
+            { projection: { linkedSnagId: 1 } }
+          );
+          if (original?.linkedSnagId) {
+            await mongoDb.collection("snags").updateOne(
+              { id: original.linkedSnagId },
+              { $set: { status: "Closed", closedAt: Date.now(), closedBy: session ? session.userId : null } }
+            );
+          }
         }
       } else {
         await mongoDb.collection(op.coll).updateOne({ id: op.rec.id }, update, { upsert: true });
@@ -1281,6 +1315,30 @@ async function handleApi(req, res, urlPath) {
     const result = await handleVmsDprSync(body, mongoDb);
     return sendJson(res, result.status, result.body);
   }
+  if (req.method === "POST" && urlPath === "/api/ims/webhook") {
+    // IMS's PO_APPROVED event lands here — no user session (IMS is an
+    // unattended server-to-server caller), same shared-secret pattern as
+    // /api/integrations/vms/dpr. sanitizePoEvent() (imsWebhook.js) strips
+    // every financial/PII field (vendor bank details, GST/PAN, contact
+    // info, payment amounts) before anything is written — this module is
+    // deliberately non-financial, same boundary as progressAnalysis.js.
+    if (!IMS_WEBHOOK_SECRET) return sendJson(res, 501, { error: "IMS_WEBHOOK_SECRET is not configured" });
+    if (!timingSafeStringEqual(req.headers["x-ims-secret"], IMS_WEBHOOK_SECRET)) {
+      return sendJson(res, 401, { error: "Invalid IMS webhook secret" });
+    }
+    const body = await readBody(req);
+    const parsed = sanitizePoEvent(body);
+    if (!parsed.valid) return sendJson(res, 400, { error: parsed.error });
+    const qcProjects = await mongoDb.collection("projects").find({}, { projection: { id: 1, code: 1, name: 1 } }).toArray();
+    const matched = matchProjectByName(parsed.record.projectNameRaw, qcProjects);
+    const rec = {
+      ...parsed.record,
+      projectId: matched ? matched.id : null,
+      projectCode: matched ? matched.code : null
+    };
+    await mongoDb.collection("purchaseOrders").updateOne({ id: rec.id }, { $set: rec }, { upsert: true });
+    return sendJson(res, 200, { ok: true, matched: !!matched });
+  }
   if (req.method === "POST" && urlPath === "/api/photo") {
     const body = await readBody(req);
     const m = /^data:image\/(png|jpe?g|webp);base64,([A-Za-z0-9+/=]+)$/.exec(body.dataUrl || "");
@@ -1313,6 +1371,40 @@ async function handleApi(req, res, urlPath) {
     if (!session.isAdmin) return sendJson(res, 403, { error: "Admin access required" });
     const doc = await createBackup(session.userId);
     return sendJson(res, 200, summarizeBackup(doc));
+  }
+  if (req.method === "GET" && urlPath === "/api/execution-reconciliation") {
+    // Read-only aggregation over VMS's own Work Order/Running Bill data
+    // (reuses the same SOURCE_MONGO_URI connection the VMS DPR poller
+    // already has — same cluster, no new credential). Admin-only, same
+    // reasoning as /api/backups and the MIS Dashboard: cross-project
+    // financial data, not additively grantable via Permission Matrix.
+    const authError = requiresAdmin(getSession(req));
+    if (authError) return sendJson(res, authError.status, { error: authError.error });
+    const result = await getExecutionReconciliation();
+    return sendJson(res, 200, result);
+  }
+  if (req.method === "GET" && urlPath === "/api/vms-work-items") {
+    // Lightweight project/work-order/work-item structure for the Work
+    // Quality Inspection form's pickers — no rate/billing data (see
+    // vmsWorkItems.js), so this only requires a signed-in session, same
+    // as the rest of the app's non-admin-gated reads. Fine-grained "can
+    // this user actually log an inspection" gating happens via the
+    // qualityInspection module grant on the frontend, same pattern as
+    // every other module.
+    const session = getSession(req);
+    if (!session) return sendJson(res, 401, { error: "Sign-in required" });
+    const result = await getVmsWorkItems();
+    return sendJson(res, 200, result);
+  }
+  if (req.method === "GET" && urlPath === "/api/progress-analysis") {
+    // Project-wise planned-vs-completed VMS progress, variance/sign-off
+    // status, and billed-vs-unbilled qty per location (see
+    // progressAnalysis.js) — no rate/amount exposed, so same non-admin,
+    // signed-in-only gating as /api/vms-work-items.
+    const session = getSession(req);
+    if (!session) return sendJson(res, 401, { error: "Sign-in required" });
+    const result = await getProgressAnalysis();
+    return sendJson(res, 200, result);
   }
   if (req.method === "GET" && urlPath === "/api/backups") {
     const session = getSession(req);

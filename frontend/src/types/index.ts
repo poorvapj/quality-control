@@ -210,6 +210,10 @@ export interface Snag extends BaseRecord {
   reopenedBy?: string | null;
   photos?: Photo[];
   comments?: unknown[];
+  // Set only for a snag auto-created from a failed Work Quality Inspection
+  // (see QualityInspection.linkedSnagId, the reverse pointer) — omitted for
+  // every other snag source (QC gate checklist failures, manually raised).
+  qualityInspectionId?: string | null;
 }
 
 export interface Assignment extends BaseRecord {
@@ -482,6 +486,144 @@ export interface CustomFormSubmission extends BaseRecord {
   isPublic?: boolean;
 }
 
+export type QualityInspectionResult = "Pass" | "Fail" | "Rework Required";
+
+/* Anchored to QC's own real Project->Floor->Unit (the same ids Tower Board/
+   Handover Checklist use — projectId/floorId/unitId), NOT to a VMS Work
+   Order/scope-item. A VMS Work Order has no reliable key back to a QC Unit:
+   QC's Unit model has no "tower" concept at all (one QC Project already IS
+   one building), while VMS's progressEntries carry free-text tower/floor/
+   flatNo typed per entry with no fixed format — so a QC Unit can never be
+   safely auto-matched to a VMS scope-item/location. The VMS reference
+   (workOrderNo/itemId/...) is therefore kept OPTIONAL and always a manual,
+   explicit pick from the Work Quality Inspection / Unit Execution Workflow
+   page's VMS item list — never auto-matched, never required. Deliberately
+   NOT inferred from DPR qty, checklist completion, floor status, or snag
+   status — per the read-only audit this session, none of those are a
+   reliable quality signal for a specific executed quantity, so this is
+   QC's own, independent record. */
+export interface QualityInspection extends BaseRecord {
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  floorId: string;
+  floorName: string;
+  unitId: string;
+  unitCode: string;
+  unitName: string;
+  // Optional, manually-picked reference to a real VMS scope-item/sub-item —
+  // never auto-matched to the Unit above. See the interface doc comment.
+  workOrderNo?: string;
+  itemId?: string;
+  itemType?: "scopeItem" | "subItem";
+  itemDescription?: string; // denormalized at pick time — VMS's own description, read-only reference
+  unit?: string;
+  inspectionDate: string; // "YYYY-MM-DD"
+  result: QualityInspectionResult;
+  remarks?: string; // required by the UI (not the schema) when result !== "Pass"
+  photos: Photo[];
+  inspectorUserId: string;
+  inspectorName: string;
+  // Who's responsible and by when — display-only context. The actual
+  // open/in-progress/closed state is never duplicated here: it lives on the
+  // linked Snag (linkedSnagId) below, which is the single source of truth
+  // reused from the existing Snag/DRI/notification system.
+  correctiveAction?: {
+    assignedToUserId: string;
+    assignedToName: string;
+    targetDate: string;
+  } | null;
+  // The real Snag auto-created for a Fail/Rework result — reuses the
+  // existing Snag collection, DRI assignment/notification, and My
+  // Work/DRI-dashboard surfacing wholesale instead of re-building a
+  // parallel one. Created exactly once per failed inspection, at creation
+  // time only (inspections are never edited after save, only re-inspected
+  // as a brand-new record) — this is what prevents duplicate snags for the
+  // same failed inspection.
+  linkedSnagId?: string | null;
+  // Set when this inspection re-checks a prior Fail/Rework record — a
+  // passing result here closes that original's linked Snag server-side
+  // (server.js), closing the loop instead of leaving it open forever once
+  // the issue is actually fixed.
+  reInspectionOf?: string | null;
+  createdAt: number;
+}
+
+/* Unit Execution Workflow, measurement step — anchored to the same real QC
+   Project->Floor->Unit as QualityInspection (see that interface's doc
+   comment for why a VMS Work Order/scope-item can't be the anchor).
+   Deliberately independent of QualityInspection's result: a measurement is
+   never inferred FROM an inspection (or vice versa) — they're two separate
+   real signals, linked only by an optional reference, per the "never
+   equate reported execution with independently verified measurement" rule
+   this was built under. `storeOutwardRef` is a stable, currently-unused
+   placeholder reserved for the deferred Store integration phase — never
+   read or written to by anything today, just a reserved column so that
+   future phase doesn't need a schema migration to add it. */
+export interface MaterialMeasurement extends BaseRecord {
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  floorId: string;
+  floorName: string;
+  unitId: string;
+  unitCode: string;
+  unitName: string;
+  // Optional, manually-picked reference to a real VMS scope-item/sub-item —
+  // never auto-matched to the Unit above.
+  workOrderNo?: string;
+  itemId?: string;
+  itemType?: "scopeItem" | "subItem";
+  itemDescription?: string;
+  measurementDate: string; // "YYYY-MM-DD"
+  measuredQty: number;
+  measuredUnit: string;
+  materialConsumedQty: number;
+  materialUnit: string;
+  unusedBalanceQty: number;
+  wastageQty: number;
+  remarks?: string;
+  qualityInspectionId?: string | null; // optional link to a QualityInspection on the same unit — never assumed, always explicit
+  storeOutwardRef?: string | null; // reserved, unused — see doc comment above
+  // Reserved placeholder for the planned IMS (Inventory Management System)
+  // integration — a Purchase Order reference, same pattern as
+  // storeOutwardRef above: never read or written to until the real IMS
+  // connection/schema is confirmed (read-only audit first, same as every
+  // other external integration in this app), so this never holds a
+  // fabricated or guessed value.
+  purchaseOrderRef?: string | null;
+  recordedByUserId: string;
+  recordedByName: string;
+  createdAt: number;
+}
+
+/* Synced from IMS's "PO_APPROVED" webhook event (backend/imsWebhook.js
+   sanitizes the raw event before it ever reaches this collection) —
+   deliberately a narrow, non-financial subset: no vendor GST/PAN/bank
+   details, no payment amounts, no per-level approval trail, none of which
+   has a legitimate reason to live in QC. IMS references a project by NAME
+   only (no shared code like VMS has), so `projectId`/`projectCode` are
+   null whenever that name didn't exactly match a real QC project — shown
+   as "Unmatched" in the UI, never guessed via a fuzzy/partial match. Not
+   linked to a specific Work Order or scope-item: IMS's PO payload has no
+   such reference, so this is shown at the project level only. */
+export interface PurchaseOrder extends BaseRecord {
+  projectId: string | null;
+  projectCode: string | null;
+  projectNameRaw: string; // IMS's own project name, as sent — kept even when unmatched, so it's never silently dropped
+  phase?: string;
+  workType?: string;
+  milestone?: string;
+  vendorName?: string;
+  status: string; // IMS's own status string (e.g. "Approved") — not re-interpreted
+  priority?: string;
+  date?: string;
+  deliveryDate?: string;
+  items: { itemName: string; sku: string; category: string; qty: number; unit: string }[];
+  remark?: string;
+  receivedAt: number;
+}
+
 export interface BoardData {
   projects: Project[];
   floors: Floor[];
@@ -503,6 +645,9 @@ export interface BoardData {
   roles: RoleDef[];
   forms: CustomFormDef[];
   formSubmissions: CustomFormSubmission[];
+  qualityInspections: QualityInspection[];
+  materialMeasurements: MaterialMeasurement[];
+  purchaseOrders: PurchaseOrder[];
   progress: Record<string, ProgressPatch>;
   events: EventLog[];
   [key: string]: unknown;
@@ -516,7 +661,7 @@ export type Op =
   | { op: "progress"; key: string; patch: Partial<ProgressPatch> }
   | { op: "event"; ev: EventLog };
 
-export type TabKey = "dash" | "misDashboard" | "work" | "board" | "handoverChecklist" | "handoverInternal" | "handoverOwner" | "snags" | "team" | "masters" | "addUser" | "dpr" | "drawingRequests" | "backups" | "auditLog" | "permissionMatrix";
+export type TabKey = "dash" | "misDashboard" | "executionReconciliation" | "qualityInspection" | "unitExecutionWorkflow" | "progressAnalysis" | "work" | "board" | "handoverChecklist" | "handoverInternal" | "handoverOwner" | "snags" | "team" | "masters" | "addUser" | "dpr" | "drawingRequests" | "backups" | "auditLog" | "permissionMatrix";
 export type MasterKey = "projects" | "floors" | "units" | "stages" | "qparams" | "checklists" | "stagemap" | "users" | "permissions" | "workTargets" | "teams" | "roles" | "forms";
 
 export type FieldType = "text" | "number" | "date" | "color" | "select" | "ref" | "bool" | "textarea" | "items" | "password" | "permissionGrid" | "formFields";

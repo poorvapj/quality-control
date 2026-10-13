@@ -17,6 +17,7 @@ export const MATRIX_MODULES: MatrixModule[] = [
   { key: "team", label: "Team", actions: ["view", "edit"] },
   { key: "dpr", label: "Daily Progress Report", actions: ["view", "create"] },
   { key: "drawingRequests", label: "Drawing Requests", actions: ["view", "create", "edit"] },
+  { key: "qualityInspection", label: "Work Quality Inspection", actions: ["view", "create", "edit"] },
   { key: "masters", label: "Masters", actions: ["view", "create", "edit", "delete"] },
   { key: "backups", label: "Backups", actions: ["view", "create", "delete"] },
   { key: "auditLog", label: "Audit Logs", actions: ["view"] }
@@ -44,14 +45,16 @@ export const DEFAULT_ROLE_GRANTS: Partial<Record<Role, Record<string, ModuleActi
     handoverInternal: ["view", "edit"],
     snags: ["view", "create", "edit", "delete"],
     team: ["view"],
-    dpr: ["view", "create"]
+    dpr: ["view", "create"],
+    qualityInspection: ["view", "create", "edit"]
   },
   SUPERVISOR: {
     dashboard: ["view"], myWork: ["view"], towerBoard: ["view"],
     handoverInternal: ["view", "edit"],
     snags: ["view", "create", "edit", "delete"],
     team: ["view"],
-    dpr: ["view", "create"]
+    dpr: ["view", "create"],
+    qualityInspection: ["view", "create", "edit"]
   },
   DRI: {
     dashboard: ["view"], myWork: ["view"], towerBoard: ["view"],
