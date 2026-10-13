@@ -454,7 +454,7 @@ function InspectionForm({
             value={projectId}
             disabled={!!reInspectOf}
             onChange={(v) => { setProjectId(v); setFloorId(""); setUnitId(""); }}
-            options={[{ value: "", label: "—" }, ...allProjects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))]}
+            options={[{ value: "", label: "Select project…" }, ...allProjects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))]}
           />
         </div>
         <div className="field">
@@ -463,7 +463,7 @@ function InspectionForm({
             value={floorId}
             disabled={!!reInspectOf || !projectId}
             onChange={(v) => { setFloorId(v); setUnitId(""); }}
-            options={[{ value: "", label: "—" }, ...floors.map((f) => ({ value: f.id, label: f.name }))]}
+            options={[{ value: "", label: "Select floor…" }, ...floors.map((f) => ({ value: f.id, label: f.name }))]}
           />
         </div>
         <div className="field full">
@@ -472,7 +472,7 @@ function InspectionForm({
             value={unitId}
             disabled={!!reInspectOf || !floorId}
             onChange={setUnitId}
-            options={[{ value: "", label: "—" }, ...units.map((u) => ({ value: u.id, label: `${u.name} (${u.code})` }))]}
+            options={[{ value: "", label: "Select unit…" }, ...units.map((u) => ({ value: u.id, label: `${u.name} (${u.code})` }))]}
           />
         </div>
 
@@ -531,7 +531,7 @@ function InspectionForm({
               <SearchDropdown
                 value={assignedToUserId}
                 onChange={setAssignedToUserId}
-                options={[{ value: "", label: "—" }, ...users.map((u) => ({ value: u.id, label: u.name }))]}
+                options={[{ value: "", label: "Select DRI…" }, ...users.map((u) => ({ value: u.id, label: u.name }))]}
               />
             </div>
             <div className="field">
