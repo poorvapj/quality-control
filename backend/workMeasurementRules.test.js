@@ -1,7 +1,7 @@
 const assert = require("assert");
 const {
   normLocation, normCategory, matchMeasurement, flattenItems, compareQuantities,
-  validateWorkMeasurement, findMatches, resolveLink, getComparisons
+  validateWorkMeasurement, findMatches, resolveLink, getComparisons, buildCategoryTree, getCategories
 } = require("./workMeasurementRules.js");
 
 let passed = 0;
@@ -228,6 +228,36 @@ const draft = (over = {}) => ({
     assert.ok(validateWorkMeasurement({ ...ok, measuredUnit: " " }));
     assert.ok(validateWorkMeasurement({ ...ok, dimensions: { length: -2 } }));
     assert.strictEqual(validateWorkMeasurement({ ...ok, dimensions: { length: 2, width: 3 } }), null);
+  });
+
+  console.log("work categories (VMS category tree)");
+  // trade -> work category -> item, as in VMS's categories collection
+  const catRows = [
+    { _id: "t1", name: "Civil / RCC" },
+    { _id: "t2", name: "Marketing" }, // a trade with no children is selectable itself
+    { _id: "w1", name: "Plastering work", parentId: "t1" },
+    { _id: "w2", name: "Column work", parentId: "t1" },
+    { _id: "i1", name: "Inner plaster", parentId: "w1" },
+    { _id: "i2", name: "Outer plaster", parentId: "w1" },
+    { _id: "x", name: "Retired", parentId: "t1", isActive: false }
+  ];
+  await test("the picker offers only work categories (middle level), grouped by trade — never item-level names", () => {
+    const { options } = buildCategoryTree(catRows);
+    assert.deepStrictEqual(options.map((o) => o.group + ">" + o.name), ["Civil / RCC>Column work", "Civil / RCC>Plastering work", "Marketing>Marketing"]);
+  });
+  await test("a work category stands for the item names filed under it, so Plastering matches 'Inner plaster'", async () => {
+    assert.deepStrictEqual(buildCategoryTree(catRows).descendantsOf("plastering work").sort(), ["Inner plaster", "Outer plaster"]);
+    const db = fakeDb([wo("WO-1", "Civil / RCC", [si("a", "Inner plaster", "sq.ft", [entry(60, { floor: "6th floor" })])])], undefined, catRows);
+    const m = await findMatches(draft({ category: "Plastering work" }), db);
+    assert.strictEqual(m.status, "unique");
+    assert.strictEqual(m.candidates[0].description, "Inner plaster");
+    // a sibling work category does not pull in unrelated items
+    assert.strictEqual((await findMatches(draft({ category: "Column work" }), db)).status, "none");
+  });
+  await test("getCategories returns the grouped list", async () => {
+    const out = await getCategories(fakeDb([], undefined, catRows));
+    assert.strictEqual(out.available, true);
+    assert.strictEqual(out.categories.length, 3);
   });
 
   console.log(`\n${passed} passed`);

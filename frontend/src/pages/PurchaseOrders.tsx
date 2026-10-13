@@ -33,13 +33,21 @@ export default function PurchaseOrders() {
   const allProjects = myProjects(data, currentUserId);
   const allowedProjectCodes = new Set(allProjects.map((p) => p.code));
 
-  const purchaseOrders = coll(data, "purchaseOrders")
+  const allPurchaseOrders = coll(data, "purchaseOrders")
     .filter((po) => !po.projectCode || allowedProjectCodes.has(po.projectCode))
     .sort((a, b) => b.receivedAt - a.receivedAt);
 
   const [fProjectCode, setFProjectCode] = useState("");
   const [fStatus, setFStatus] = useState("");
+  const [showDeleted, setShowDeleted] = useState(false);
   const [selected, setSelected] = useState<PurchaseOrder | null>(null);
+
+  // Deleted (IMS Recycle Bin) POs are kept in storage (soft delete — never
+  // actually removed, so a later restore event has the original data to
+  // restore onto) but hidden from the default view, same as a real recycle
+  // bin — visible only via the toggle.
+  const purchaseOrders = showDeleted ? allPurchaseOrders : allPurchaseOrders.filter((po) => !po.deleted);
+  const deletedCount = allPurchaseOrders.filter((po) => po.deleted).length;
 
   const statusOptions = useMemo(
     () => Array.from(new Set(purchaseOrders.map((po) => po.status).filter(Boolean))).sort(),
@@ -88,19 +96,28 @@ export default function PurchaseOrders() {
           <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Status</div>
           <SearchDropdown value={fStatus} onChange={setFStatus} options={[{ value: "", label: "All statuses" }, ...statusOptions.map((s) => ({ value: s, label: s }))]} neutralActive />
         </div>
+        {deletedCount > 0 && (
+          <label className="flex items-center gap-1.5 text-[12px] text-[var(--text-muted)] cursor-pointer self-end pb-1.5">
+            <input type="checkbox" checked={showDeleted} onChange={(e) => setShowDeleted(e.target.checked)} />
+            Show deleted ({deletedCount})
+          </label>
+        )}
       </Card>
 
-      <Card padded={false}>
+      <Card padded={false} className="p-[18px]">
         <Table
           columns={["PO ID", "Project", "Vendor", "Status", "Items", "Order Date", "Delivery Date"]}
-          colWidths={["12%", "16%", "13%", "13%", "28%", "9%", "9%"]}
+          colWidths={["11%", "17%", "14%", "12%", "26%", "10%", "10%"]}
           colAligns={["left", "left", "left", "left", "left", "left", "left"]}
           empty="No Purchase Orders received from IMS yet."
           maxHeight="640px"
         >
           {filtered.map((po) => (
             <TableRow key={po.id}>
-              <TableCell strong className="whitespace-nowrap cursor-pointer" onClick={() => setSelected(po)}>{po.id}</TableCell>
+              <TableCell strong className="whitespace-nowrap cursor-pointer" onClick={() => setSelected(po)}>
+                {po.id}
+                {po.deleted && <Badge color="gray"><span className="whitespace-nowrap ml-1">Deleted</span></Badge>}
+              </TableCell>
               <TableCell className="whitespace-nowrap cursor-pointer" onClick={() => setSelected(po)}>
                 {po.projectCode ? `${po.projectCode}` : (
                   <span title={`IMS sent project name "${po.projectNameRaw}" which didn't match any real QC project`}>
@@ -202,6 +219,25 @@ function PurchaseOrderDetail({ po, onClose }: { po: PurchaseOrder | null; onClos
               ))}
             </div>
           </div>
+
+          {po.approvals && (po.approvals.l1 || po.approvals.l2 || po.approvals.l3) && (
+            <div>
+              <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-2">Approvals</div>
+              <div className="flex gap-2 flex-wrap">
+                {(["l1", "l2", "l3"] as const).map((lvl) => po.approvals?.[lvl] && (
+                  <div key={lvl} className="text-[11.5px] border border-[var(--border)] rounded-radius-sm px-2 py-1">
+                    <span className="font-semibold uppercase">{lvl}</span>: {po.approvals[lvl]!.status}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {po.deleted && (
+            <div className="text-[12px] text-[var(--text-muted)] border-t border-[var(--border)] pt-3">
+              This PO was deleted in IMS (moved to Recycle Bin or permanently removed). If it's restored in IMS, it will reappear here automatically.
+            </div>
+          )}
 
           {po.remark && (
             <div>

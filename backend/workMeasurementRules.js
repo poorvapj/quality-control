@@ -152,7 +152,10 @@ function matchMeasurement(draft, items) {
     return { status: "none", candidates: [], reason: "NO_LOCATION" };
   }
 
-  let pool = items.filter((i) => normCategory(i.description) === key).map((i) => ({ i, on: "item" }));
+  // The chosen work category, plus the names VMS files under it (see
+  // buildCategoryTree) — all exact-equality keys, nothing fuzzy.
+  const keys = new Set([key, ...(draft.categoryAliases || []).map(normCategory).filter(Boolean)]);
+  let pool = items.filter((i) => keys.has(normCategory(i.description))).map((i) => ({ i, on: "item" }));
   if (pool.length === 0) pool = items.filter((i) => normCategory(i.workOrderCategory) === key).map((x) => ({ i: x, on: "workOrderCategory" }));
   if (pool.length === 0) return { status: "none", candidates: [], reason: "NO_CATEGORY_MATCH" };
 
@@ -180,6 +183,55 @@ function compareQuantities(measuredQty, measuredUnit, executedQty, executedUnit)
     variance,
     variancePct: comparable && executedQty > 0 ? Math.round((variance / executedQty) * 1000) / 10 : null
   };
+}
+
+/* VMS's `categories` collection is a 3-level tree (read-only analysis of the
+   live data): 14 TRADES (Civil / RCC, Painting, Electricity…) → ~470 WORK
+   CATEGORIES (Plastering work, Column work, Brick work, Wiring…) → ~96 ITEMS
+   (Inner plaster / Outer plaster under Plastering work). Scope-item
+   descriptions in work orders are written from this same vocabulary.
+   A person measuring picks a WORK CATEGORY (middle level), so only that
+   level is offered — the item level is scope-item wording and stays out of the
+   picker. For matching, a work category also stands for its own descendants:
+   "Plastering work" matches a scope item described "Inner plaster". Exact
+   name equality against this known tree — never fuzzy. */
+function buildCategoryTree(rows) {
+  const active = (rows || []).filter((r) => r && r.isActive !== false && String(r.name || r.title || "").trim());
+  const nameOf = (r) => String(r.name || r.title).trim();
+  const byId = new Map(active.map((r) => [String(r._id), r]));
+  const parentOf = (r) => (r.parentId ? byId.get(String(r.parentId)) || null : null);
+  const depthOf = (r) => { let d = 0, cur = r; while (parentOf(cur) && d < 10) { cur = parentOf(cur); d++; } return d; };
+  const childCount = new Map();
+  for (const r of active) if (r.parentId) childCount.set(String(r.parentId), (childCount.get(String(r.parentId)) || 0) + 1);
+
+  const seen = new Set();
+  const options = [];
+  for (const r of active) {
+    const d = depthOf(r);
+    const isTradeWithoutChildren = d === 0 && !childCount.get(String(r._id));
+    if (d !== 1 && !isTradeWithoutChildren) continue;
+    const group = d === 1 ? nameOf(parentOf(r)) : nameOf(r);
+    const key = normCategory(nameOf(r)) + "|" + normCategory(group);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    options.push({ name: nameOf(r), group });
+  }
+  options.sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name));
+
+  /** Names of every category below any node called `name` (any depth). */
+  function descendantsOf(name) {
+    const want = normCategory(name);
+    const out = new Set();
+    for (const r of active) {
+      let cur = parentOf(r), hops = 0;
+      while (cur && hops < 10) {
+        if (normCategory(nameOf(cur)) === want) { out.add(nameOf(r)); break; }
+        cur = parentOf(cur); hops++;
+      }
+    }
+    return Array.from(out);
+  }
+  return { options, descendantsOf };
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -226,7 +278,9 @@ async function findMatches(draft, vmsDbOverride) {
   if (!vmsDb) return { available: false, reason: "SOURCE_MONGO_URI is not configured", status: "none", candidates: [] };
   const { projectFound, workOrders } = await projectWorkOrders(vmsDb, draft.projectCode);
   if (!projectFound) return { available: true, status: "none", candidates: [], reason: "PROJECT_NOT_IN_VMS" };
-  return { available: true, ...matchMeasurement(draft, flattenItems(workOrders)) };
+  const tree = buildCategoryTree(await vmsDb.collection("categories").find({}, { projection: { name: 1, title: 1, parentId: 1, isActive: 1 } }).toArray());
+  const categoryAliases = tree.descendantsOf(draft.category);
+  return { available: true, ...matchMeasurement({ ...draft, categoryAliases }, flattenItems(workOrders)) };
 }
 
 /** Decide what link a record is allowed to be saved with. The client may
@@ -284,13 +338,11 @@ async function getComparisons(measurements, vmsDbOverride) {
 async function getCategories(vmsDbOverride) {
   const vmsDb = vmsDbOverride || await getVmsDb();
   if (!vmsDb) return { available: false, reason: "SOURCE_MONGO_URI is not configured", categories: [] };
-  const rows = await vmsDb.collection("categories").find({}, { projection: { name: 1, title: 1 } }).toArray();
-  const names = Array.from(new Set(rows.map((r) => String(r.name || r.title || "").trim()).filter(Boolean)));
-  names.sort((a, b) => a.localeCompare(b));
-  return { available: true, categories: names };
+  const rows = await vmsDb.collection("categories").find({}, { projection: { name: 1, title: 1, parentId: 1, isActive: 1 } }).toArray();
+  return { available: true, categories: buildCategoryTree(rows).options };
 }
 
 module.exports = {
   normLocation, normCategory, normUnit, entryMatchesLocation, flattenItems, matchMeasurement,
-  compareQuantities, validateWorkMeasurement, findMatches, resolveLink, getComparisons, getCategories
+  compareQuantities, validateWorkMeasurement, findMatches, resolveLink, getComparisons, getCategories, buildCategoryTree
 };

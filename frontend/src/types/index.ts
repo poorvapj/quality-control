@@ -575,6 +575,9 @@ export interface MaterialMeasurement extends BaseRecord {
   itemId?: string;
   itemType?: "scopeItem" | "subItem";
   itemDescription?: string;
+  // True when the person typed a work item that isn't in VMS — itemDescription
+  // is then their own text and there is no workOrderNo / itemId.
+  itemIsCustom?: boolean;
   measurementDate: string; // "YYYY-MM-DD"
   measuredQty: number;
   measuredUnit: string;
@@ -631,30 +634,36 @@ export interface WorkMeasurement extends BaseRecord {
   linkedItemUnit?: string | null;
 }
 
-/* Synced from IMS's "PO_APPROVED" webhook event (backend/imsWebhook.js
-   sanitizes the raw event before it ever reaches this collection) —
-   deliberately a narrow, non-financial subset: no vendor GST/PAN/bank
-   details, no payment amounts, no per-level approval trail, none of which
-   has a legitimate reason to live in QC. IMS references a project by NAME
-   only (no shared code like VMS has), so `projectId`/`projectCode` are
-   null whenever that name didn't exactly match a real QC project — shown
-   as "Unmatched" in the UI, never guessed via a fuzzy/partial match. Not
-   linked to a specific Work Order or scope-item: IMS's PO payload has no
-   such reference, so this is shown at the project level only. */
+/* Synced from IMS's PO lifecycle webhook (backend/imsWebhook.js sanitizes
+   the raw event before it ever reaches this collection) — deliberately a
+   narrow, non-financial subset: no vendor GST/PAN/bank details, no payment
+   amounts, none of which has a legitimate reason to live in QC (approval
+   level status is kept — it's workflow state, not financial). IMS
+   references a project by NAME only (no shared code like VMS has), so
+   `projectId`/`projectCode` are null whenever that name didn't exactly
+   match a real QC project — shown as "Unmatched" in the UI, never guessed
+   via a fuzzy/partial match. Not linked to a specific Work Order or
+   scope-item: IMS's PO payload has no such reference, so this is shown at
+   the project level only. `deleted` is a soft-delete flag (IMS's Recycle
+   Bin / permanent delete) — the record is kept, never removed, so a later
+   restore event can un-delete it without re-sending the full payload. */
 export interface PurchaseOrder extends BaseRecord {
   projectId: string | null;
   projectCode: string | null;
   projectNameRaw: string; // IMS's own project name, as sent — kept even when unmatched, so it's never silently dropped
+  deleted: boolean;
   phase?: string;
   workType?: string;
   milestone?: string;
   vendorName?: string;
-  status: string; // IMS's own status string (e.g. "Approved") — not re-interpreted
+  status: string; // IMS's own status string (e.g. "Approved", "GRN Fulfilled") — not re-interpreted
   priority?: string;
   date?: string;
   deliveryDate?: string;
   items: { itemName: string; sku: string; category: string; qty: number; unit: string }[];
+  approvals?: { l1: { status: string; at: string | null } | null; l2: { status: string; at: string | null } | null; l3: { status: string; at: string | null } | null } | null;
   remark?: string;
+  sourceUpdatedAt?: number | null; // IMS's own data.updatedAt, epoch ms — used server-side to drop stale/reordered webhook deliveries
   receivedAt: number;
 }
 

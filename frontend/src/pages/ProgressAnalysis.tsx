@@ -74,7 +74,7 @@ function projectStats(p: ProgressProject) {
    rather than guessed into the wrong project. */
 export default function ProgressAnalysis() {
   const { data: boardData } = useApp();
-  const purchaseOrders = coll(boardData, "purchaseOrders");
+  const purchaseOrders = coll(boardData, "purchaseOrders").filter((po) => !po.deleted);
   const [data, setData] = useState<ProgressResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

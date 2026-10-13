@@ -64,7 +64,7 @@ async function postMatch(body: unknown): Promise<MatchResponse> {
 export default function Measurement() {
   const { data, currentUserId, apply, toast, me } = useApp();
   const isAdmin = currentUserId === "U-ADMIN";
-  const canCreate = isAdmin || hasModuleGrant(data, currentUserId, "qualityInspection", "create");
+  const canCreate = isAdmin || hasModuleGrant(data, currentUserId, "measurement", "create");
   const allProjects = myProjects(data, currentUserId);
   const allowedCodes = new Set(allProjects.map((p) => p.code));
   const measurements = coll(data, "workMeasurements")
@@ -76,7 +76,7 @@ export default function Measurement() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [confirming, setConfirming] = useState<WorkMeasurement | null>(null);
 
-  const [categories, setCategories] = useState<string[]>([]);
+  const [categories, setCategories] = useState<{ name: string; group: string }[]>([]);
   const [categoriesNote, setCategoriesNote] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -314,7 +314,7 @@ function ConfirmLinkPanel({ record, onClose, onConfirm }: {
 }
 
 function MeasurementPanel({ open, onClose, categories, categoriesNote, existing, apply, toast, userId, userName }: {
-  open: boolean; onClose: () => void; categories: string[]; categoriesNote: string | null;
+  open: boolean; onClose: () => void; categories: { name: string; group: string }[]; categoriesNote: string | null;
   existing: WorkMeasurement[]; apply: (ops: any[]) => Promise<any>; toast: (m: string) => void; userId: string; userName: string;
 }) {
   const { data, currentUserId } = useApp();
@@ -466,7 +466,7 @@ function MeasurementPanel({ open, onClose, categories, categoriesNote, existing,
 
         <div className="field full">
           <label>Work Category *</label>
-          <SearchDropdown value={category} onChange={setCategory} options={[{ value: "", label: "Select category…" }, ...categories.map((c) => ({ value: c, label: c }))]} />
+          <SearchDropdown value={category} onChange={setCategory} options={[{ value: "", label: "Select category…" }, ...categories.map((c) => ({ value: c.name, label: c.name, group: c.group }))]} />
           {categoriesNote && <div className="text-[11px] text-[var(--text-muted)] mt-1">VMS categories unavailable: {categoriesNote}</div>}
         </div>
 

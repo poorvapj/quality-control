@@ -67,7 +67,7 @@ const { shouldResolveOriginal } = require("./qualityInspectionRules.js");
 const { validateMeasurement } = require("./materialMeasurementRules.js");
 const { getProgressAnalysis } = require("./progressAnalysis.js");
 const workMeasurements = require("./workMeasurementRules.js");
-const { sanitizePoEvent, matchProjectByName } = require("./imsWebhook.js");
+const { sanitizePoEvent, matchProjectByName, isStaleUpdate } = require("./imsWebhook.js");
 
 /* ------------------------------------------------------------- passwords
    Node's built-in scrypt is our own hashing scheme going forward. Plaintext
@@ -284,6 +284,21 @@ async function getUserRole(userId) {
   roleCache.set(userId, role);
   setTimeout(() => roleCache.delete(userId), 10000); // short TTL — a role change (rare) is visible within 10s, not stuck forever
   return role;
+}
+
+// A custom role (Masters ▸ Roles) can opt in to Civil Engineer's site stage
+// access with its "actsLikeCivil" flag — mirrors isCivilLikeRole() in
+// frontend/src/shared/rules.ts. Same short cache as getUserRole().
+const civilLikeRoleCache = new Map(); // role name -> boolean
+async function roleActsLikeCivil(role) {
+  if (!role) return false;
+  if (role === "CIVIL" || role === "SUPERVISOR") return true;
+  if (civilLikeRoleCache.has(role)) return civilLikeRoleCache.get(role);
+  const rec = await mongoDb.collection("roles").findOne({ name: role }, { projection: { actsLikeCivil: 1 } });
+  const v = !!(rec && rec.actsLikeCivil);
+  civilLikeRoleCache.set(role, v);
+  setTimeout(() => civilLikeRoleCache.delete(role), 10000);
+  return v;
 }
 
 // Mirrors frontend/src/shared/permissionMatrix.ts's MATRIX_MODULES — an
@@ -795,7 +810,7 @@ async function assertOpAllowed(op, session) {
       // explicit match here too, mirroring rules.ts's canAct().
       const allowed = isOwnerPossession
         ? role === "ADMIN" || role === "CRM"
-        : role === "ADMIN" || role === "DRI" || (!!stageRole && role === stageRole) || (role === "SUPERVISOR" && stageRole === "CIVIL");
+        : role === "ADMIN" || role === "DRI" || (!!stageRole && role === stageRole) || (stageRole === "CIVIL" && await roleActsLikeCivil(role));
       if (!allowed) {
         const e = new Error("Not authorized to act on this stage");
         e.status = 403;
@@ -1347,21 +1362,39 @@ async function handleApi(req, res, urlPath) {
       return sendJson(res, 401, { error: "Invalid IMS webhook secret" });
     }
     const body = await readBody(req);
-    const parsed = sanitizePoEvent(body);
+    // VMS_PO_UPDATE_EVENT/VMS_PO_DELETE_EVENT: uncomment in .env once IMS
+    // confirms it sends real lifecycle event names instead of always
+    // "PO_APPROVED" + an `action` field — no code change needed either way,
+    // sanitizePoEvent() already treats `event` and `action` as independent
+    // signals for the same thing (see imsWebhook.js's doc comment).
+    const parsed = sanitizePoEvent(body, {
+      updateEventName: process.env.VMS_PO_UPDATE_EVENT || "",
+      deleteEventName: process.env.VMS_PO_DELETE_EVENT || ""
+    });
     if (!parsed.valid) {
       console.warn("[ims-webhook] rejected 400 — " + parsed.error);
       return sendJson(res, 400, { error: parsed.error });
     }
-    const qcProjects = await mongoDb.collection("projects").find({}, { projection: { id: 1, code: 1, name: 1 } }).toArray();
-    const matched = matchProjectByName(parsed.record.projectNameRaw, qcProjects);
-    const rec = {
-      ...parsed.record,
-      projectId: matched ? matched.id : null,
-      projectCode: matched ? matched.code : null
-    };
+    const existing = await mongoDb.collection("purchaseOrders").findOne({ id: parsed.record.id });
+    if (isStaleUpdate(existing && existing.sourceUpdatedAt, parsed.record.sourceUpdatedAt)) {
+      console.warn(`[ims-webhook] ignored stale update for PO ${parsed.record.id} — incoming data.updatedAt is older than what's already stored`);
+      return sendJson(res, 200, { ok: true, ignored: "stale" });
+    }
+    // A delete ping often carries nothing but {poId, deleted:true} — merge
+    // onto the existing stored record (if any) so project/items/status
+    // aren't wiped out by a payload that was never going to resend them.
+    let projectId = existing ? existing.projectId : null;
+    let projectCode = existing ? existing.projectCode : null;
+    if (!parsed.record.deleted) {
+      const qcProjects = await mongoDb.collection("projects").find({}, { projection: { id: 1, code: 1, name: 1 } }).toArray();
+      const matched = matchProjectByName(parsed.record.projectNameRaw, qcProjects);
+      projectId = matched ? matched.id : null;
+      projectCode = matched ? matched.code : null;
+    }
+    const rec = { ...(existing || {}), ...parsed.record, projectId, projectCode };
     await mongoDb.collection("purchaseOrders").updateOne({ id: rec.id }, { $set: rec }, { upsert: true });
-    console.log(`[ims-webhook] saved PO ${rec.id} — ${matched ? "linked to project " + matched.code : 'NOT linked: no QC project named "' + rec.projectNameRaw + '"'}`);
-    return sendJson(res, 200, { ok: true, matched: !!matched });
+    console.log(`[ims-webhook] saved PO ${rec.id} (deleted=${rec.deleted}) — ${projectCode ? "linked to project " + projectCode : "NOT linked to any QC project"}`);
+    return sendJson(res, 200, { ok: true, matched: !!projectCode });
   }
   if (req.method === "POST" && urlPath === "/api/photo") {
     const body = await readBody(req);
