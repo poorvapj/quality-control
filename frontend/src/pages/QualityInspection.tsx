@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useApp, authHeaders } from "../context/AppContext";
 import { API_BASE } from "../services/config";
-import { coll, myProjects, projectFloors, floorUnits, byId } from "../shared/rules";
+import { coll, myProjects, projectFloors, byId } from "../shared/rules";
 import { nextId } from "../shared/helpers";
 import { buildEventOp } from "../shared/eventLog";
 import { hasModuleGrant } from "../shared/permissionMatrix";
@@ -62,25 +62,22 @@ export default function QualityInspection() {
 
   const [panelOpen, setPanelOpen] = useState(false);
   const [reInspectOf, setReInspectOf] = useState<QI | null>(null);
-  const [historyUnit, setHistoryUnit] = useState<{ unitId: string; unitLabel: string } | null>(null);
+  const [historyFloor, setHistoryFloor] = useState<{ floorId: string; floorLabel: string } | null>(null);
 
   // --- filters for the list ------------------------------------------------
   const [fProjectId, setFProjectId] = useState("");
   const [fFloorId, setFFloorId] = useState("");
-  const [fUnitId, setFUnitId] = useState("");
   const [fResult, setFResult] = useState("");
   const [fDri, setFDri] = useState("");
   const [fSnagStatus, setFSnagStatus] = useState(""); // "", "open", "overdue", "closed"
 
   const fFloors = projectFloors(data, fProjectId || null);
-  const fUnits = fFloorId ? floorUnits(data, fProjectId || null, fFloorId) : [];
 
   const filtered = useMemo(() => {
     const today = todayStr();
     return inspections.filter((i) => {
       if (fProjectId && i.projectId !== fProjectId) return false;
       if (fFloorId && i.floorId !== fFloorId) return false;
-      if (fUnitId && i.unitId !== fUnitId) return false;
       if (fResult && i.result !== fResult) return false;
       if (fDri && i.correctiveAction?.assignedToUserId !== fDri) return false;
       if (fSnagStatus) {
@@ -93,7 +90,7 @@ export default function QualityInspection() {
       return true;
     }).sort((a, b) => b.createdAt - a.createdAt);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inspections, fProjectId, fFloorId, fUnitId, fResult, fDri, fSnagStatus, snags]);
+  }, [inspections, fProjectId, fFloorId, fResult, fDri, fSnagStatus, snags]);
 
   const openIssues = inspections.filter((i) => { const s = linkedSnag(i); return s && s.status !== "Closed"; }).length;
   const failedCount = inspections.filter((i) => i.result === "Fail").length;
@@ -113,7 +110,7 @@ export default function QualityInspection() {
           <div>
             <div className="text-xl font-semibold tracking-tight leading-tight">Work Quality Inspection</div>
             <div className="text-[12.5px] text-[var(--text-muted)] mt-1 leading-normal">
-              Unit-wise Pass/Fail/Rework inspections. A Fail/Rework automatically raises a Snag against the responsible DRI, reusing the existing Snag/DRI workflow.
+              Floor-wise Pass/Fail/Rework inspections. A Fail/Rework automatically raises a Snag against the responsible DRI, reusing the existing Snag/DRI workflow.
             </div>
           </div>
         </div>
@@ -132,15 +129,11 @@ export default function QualityInspection() {
       <Card className="flex gap-3.5 flex-wrap mb-5">
         <div className="max-w-[220px]">
           <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Project</div>
-          <SearchDropdown value={fProjectId} onChange={(v) => { setFProjectId(v); setFFloorId(""); setFUnitId(""); }} options={[{ value: "", label: "All projects" }, ...projectOptions]} neutralActive />
+          <SearchDropdown value={fProjectId} onChange={(v) => { setFProjectId(v); setFFloorId(""); }} options={[{ value: "", label: "All projects" }, ...projectOptions]} neutralActive />
         </div>
         <div className="max-w-[180px]">
           <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Floor</div>
-          <SearchDropdown value={fFloorId} onChange={(v) => { setFFloorId(v); setFUnitId(""); }} options={[{ value: "", label: "All floors" }, ...fFloors.map((f) => ({ value: f.id, label: f.name }))]} neutralActive />
-        </div>
-        <div className="max-w-[180px]">
-          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Unit</div>
-          <SearchDropdown value={fUnitId} onChange={setFUnitId} options={[{ value: "", label: "All units" }, ...fUnits.map((u) => ({ value: u.id, label: u.name }))]} neutralActive />
+          <SearchDropdown value={fFloorId} onChange={setFFloorId} options={[{ value: "", label: "All floors" }, ...fFloors.map((f) => ({ value: f.id, label: f.name }))]} neutralActive />
         </div>
         <div className="max-w-[170px]">
           <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Result</div>
@@ -160,7 +153,7 @@ export default function QualityInspection() {
 
       <Card padded={false} className="p-[18px]">
         <Table
-          columns={["Date", "Project", "Unit", "VMS Reference", "Result", "Inspector", "Snag / Corrective Action", ""]}
+          columns={["Date", "Project", "Floor", "VMS Reference", "Result", "Inspector", "Snag / Corrective Action", ""]}
           colWidths={["9%", "9%", "15%", "16%", "13%", "12%", "17%", "9%"]}
           maxHeight="560px"
         >
@@ -171,7 +164,7 @@ export default function QualityInspection() {
               <TableRow key={insp.id}>
                 <TableCell muted className="whitespace-nowrap">{insp.inspectionDate}</TableCell>
                 <TableCell className="whitespace-nowrap">{insp.projectCode}</TableCell>
-                <TableCell strong>{insp.floorName} / {insp.unitName}</TableCell>
+                <TableCell strong>{insp.floorName}</TableCell>
                 <TableCell muted className="truncate max-w-0">{insp.itemDescription ? `${insp.workOrderNo} · ${insp.itemDescription}` : "—"}</TableCell>
                 <TableCell>
                   <Badge color={insp.result === "Pass" ? "green" : insp.result === "Fail" ? "red" : "amber"}>
@@ -193,7 +186,7 @@ export default function QualityInspection() {
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-col gap-1.5 items-start">
-                    <Btn label="History" color="secondary" size="sm" onClick={() => setHistoryUnit({ unitId: insp.unitId, unitLabel: `${insp.floorName} / ${insp.unitName}` })} />
+                    <Btn label="History" color="secondary" size="sm" onClick={() => setHistoryFloor({ floorId: insp.floorId, floorLabel: insp.floorName })} />
                     {canCreate && insp.result !== "Pass" && snag?.status !== "Closed" && (
                       <Btn label="Re-inspect" color="secondary" size="sm" onClick={() => { setReInspectOf(insp); setPanelOpen(true); }} />
                     )}
@@ -220,11 +213,11 @@ export default function QualityInspection() {
         toast={toast}
       />
 
-      <UnitHistoryPanel
-        open={!!historyUnit}
-        onClose={() => setHistoryUnit(null)}
-        unitId={historyUnit?.unitId || ""}
-        unitLabel={historyUnit?.unitLabel || ""}
+      <FloorHistoryPanel
+        open={!!historyFloor}
+        onClose={() => setHistoryFloor(null)}
+        floorId={historyFloor?.floorId || ""}
+        floorLabel={historyFloor?.floorLabel || ""}
         inspections={inspections}
         snags={snags}
       />
@@ -232,20 +225,20 @@ export default function QualityInspection() {
   );
 }
 
-function UnitHistoryPanel({
-  open, onClose, unitId, unitLabel, inspections, snags
+function FloorHistoryPanel({
+  open, onClose, floorId, floorLabel, inspections, snags
 }: {
-  open: boolean; onClose: () => void; unitId: string; unitLabel: string;
+  open: boolean; onClose: () => void; floorId: string; floorLabel: string;
   inspections: QI[]; snags: Snag[];
 }) {
   const history = useMemo(
-    () => inspections.filter((i) => i.unitId === unitId).sort((a, b) => a.createdAt - b.createdAt),
-    [inspections, unitId]
+    () => inspections.filter((i) => i.floorId === floorId).sort((a, b) => a.createdAt - b.createdAt),
+    [inspections, floorId]
   );
   return (
-    <SidePanel open={open} wide icon={<NavIcon name="clock" size={18} />} title="Unit Quality History" desc={unitLabel} onClose={onClose} footer={<button className="btn btn-secondary" onClick={onClose}>Close</button>}>
+    <SidePanel open={open} wide icon={<NavIcon name="clock" size={18} />} title="Floor Quality History" desc={floorLabel} onClose={onClose} footer={<button className="btn btn-secondary" onClick={onClose}>Close</button>}>
       {history.length === 0 ? (
-        <div className="empty">No inspections recorded for this unit yet.</div>
+        <div className="empty">No inspections recorded for this floor yet.</div>
       ) : (
         <div className="flex flex-col gap-3">
           {history.map((insp) => {
@@ -292,7 +285,6 @@ function InspectionForm({
 }) {
   const [projectId, setProjectId] = useState("");
   const [floorId, setFloorId] = useState("");
-  const [unitId, setUnitId] = useState("");
   const [workOrderNo, setWorkOrderNo] = useState("");
   const [itemId, setItemId] = useState("");
   const [inspectionDate, setInspectionDate] = useState(todayStr());
@@ -310,11 +302,10 @@ function InspectionForm({
     if (reInspectOf) {
       setProjectId(reInspectOf.projectId);
       setFloorId(reInspectOf.floorId);
-      setUnitId(reInspectOf.unitId);
       setWorkOrderNo(reInspectOf.workOrderNo || "");
       setItemId(reInspectOf.itemId || "");
     } else {
-      setProjectId(""); setFloorId(""); setUnitId(""); setWorkOrderNo(""); setItemId("");
+      setProjectId(""); setFloorId(""); setWorkOrderNo(""); setItemId("");
     }
     setInspectionDate(todayStr());
     setResult("Pass"); setSeverity("Major"); setRemarks(""); setPhotos([]);
@@ -323,9 +314,7 @@ function InspectionForm({
 
   const project = allProjects.find((p) => p.id === projectId) || null;
   const floors = projectFloors(data, projectId || null);
-  const units = floorId ? floorUnits(data, projectId || null, floorId) : [];
   const floor = byId(floors, floorId);
-  const unit = byId(units, unitId);
 
   // VMS Work Order/Item picker is an OPTIONAL manual reference only — a QC
   // Unit has no reliable key back to a VMS scope-item/location (see the
@@ -340,19 +329,18 @@ function InspectionForm({
   const itemEntry = workOrderEntry?.items.find((i) => i.itemId === itemId) || null;
 
   // Previous Similar Issues — only ever matched by the same, explicitly
-  // picked VMS itemId across OTHER real units (never guessed from free-text
-  // description, and never crossing unit boundaries into "similar" status
-  // claims — this is purely informational history for the inspector).
+  // picked VMS itemId across OTHER real floors (never guessed from free-text
+  // description — this is purely informational history for the inspector).
   const similarIssues = useMemo(() => {
     if (!itemId) return [];
     return allInspections
-      .filter((i) => i.itemId === itemId && i.unitId !== unitId && i.result !== "Pass")
+      .filter((i) => i.itemId === itemId && i.floorId !== floorId && i.result !== "Pass")
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, 5);
-  }, [allInspections, itemId, unitId]);
+  }, [allInspections, itemId, floorId]);
 
   async function save() {
-    if (!projectId || !floorId || !unitId) { toast("Project, Floor and Unit are required"); return; }
+    if (!projectId || !floorId) { toast("Project and Floor are required"); return; }
     if (result !== "Pass" && !remarks.trim()) { toast("Remarks are required for Fail / Rework Required"); return; }
     if (result !== "Pass" && !assignedToUserId) { toast("A responsible DRI must be assigned for Fail / Rework Required"); return; }
     if (result !== "Pass" && !targetDate) { toast("A target date is required for the corrective action"); return; }
@@ -373,7 +361,6 @@ function InspectionForm({
       id,
       projectId, projectCode: project?.code || "", projectName: project?.name || "",
       floorId, floorName: floor?.name || "",
-      unitId, unitCode: unit?.code || "", unitName: unit?.name || "",
       workOrderNo: itemEntry ? workOrderNo : undefined,
       itemId: itemEntry ? itemEntry.itemId : undefined,
       itemType: itemEntry?.itemType,
@@ -394,21 +381,20 @@ function InspectionForm({
 
     const ops: any[] = [
       { op: "upsert", coll: "qualityInspections", rec },
-      buildEventOp(currentUserId, "QUALITY_INSPECTION", id, "", `Quality Inspection · ${result} · ${rec.unitName}`)
+      buildEventOp(currentUserId, "QUALITY_INSPECTION", id, "", `Quality Inspection · ${result} · ${rec.floorName}`)
     ];
     if (needsSnag && snagId) {
       // Location always in the title — never just the VMS item description
       // — so the snag/quality observation is unambiguous on the DRI
       // dashboard and in their failure history, even if a VMS item was
       // also picked.
-      const location = `${rec.floorName} / ${rec.unitName}`;
+      const location = rec.floorName;
       const label = itemEntry?.description ? `${location} · ${itemEntry.description}` : location;
       ops.push({
         op: "upsert", coll: "snags",
         rec: {
           id: snagId,
           projectId,
-          unitId,
           floorId,
           stageId: QC_INSPECTION_STAGE_ID,
           qualityInspectionId: id,
@@ -438,7 +424,7 @@ function InspectionForm({
       wide
       icon={<NavIcon name="eye" size={18} />}
       title={reInspectOf ? "Re-inspect" : "New Inspection"}
-      desc={reInspectOf ? `Re-checking: ${reInspectOf.floorName} / ${reInspectOf.unitName}` : "Record a Pass/Fail/Rework Required result against a real Unit."}
+      desc={reInspectOf ? `Re-checking: ${reInspectOf.floorName}` : "Record a Pass/Fail/Rework Required result against a real Floor."}
       onClose={onClose}
       footer={
         <>
@@ -453,26 +439,17 @@ function InspectionForm({
           <SearchDropdown
             value={projectId}
             disabled={!!reInspectOf}
-            onChange={(v) => { setProjectId(v); setFloorId(""); setUnitId(""); }}
+            onChange={(v) => { setProjectId(v); setFloorId(""); }}
             options={[{ value: "", label: "Select project…" }, ...allProjects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))]}
           />
         </div>
-        <div className="field">
+        <div className="field full">
           <label>Floor *</label>
           <SearchDropdown
             value={floorId}
             disabled={!!reInspectOf || !projectId}
-            onChange={(v) => { setFloorId(v); setUnitId(""); }}
+            onChange={setFloorId}
             options={[{ value: "", label: "Select floor…" }, ...floors.map((f) => ({ value: f.id, label: f.name }))]}
-          />
-        </div>
-        <div className="field full">
-          <label>Unit *</label>
-          <SearchDropdown
-            value={unitId}
-            disabled={!!reInspectOf || !floorId}
-            onChange={setUnitId}
-            options={[{ value: "", label: "Select unit…" }, ...units.map((u) => ({ value: u.id, label: `${u.name} (${u.code})` }))]}
           />
         </div>
 

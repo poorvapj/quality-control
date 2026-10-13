@@ -130,10 +130,10 @@ export default function MyWork() {
                 <div
                   key={insp.id}
                   className="flex items-center justify-between gap-3 py-3.5 px-4 border-b border-[var(--border)] cursor-pointer transition-colors last:border-b-0"
-                  onClick={() => openDrawer({ kind: "unit", id: insp.unitId })}
+                  onClick={() => openDrawer({ kind: "floor", id: insp.floorId })}
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="text-[13px] font-bold">{insp.floorName} / {insp.unitName}{insp.itemDescription ? ` · ${insp.itemDescription}` : ""}</div>
+                    <div className="text-[13px] font-bold">{insp.floorName}{insp.itemDescription ? ` · ${insp.itemDescription}` : ""}</div>
                     <div className="text-[11px] text-[var(--text-muted)] mt-0.5 leading-normal">{insp.remarks || "No remarks"} · {insp.inspectionDate}</div>
                   </div>
                   <Badge color={insp.result === "Fail" ? "red" : "amber"}>

@@ -508,9 +508,12 @@ export interface QualityInspection extends BaseRecord {
   projectName: string;
   floorId: string;
   floorName: string;
-  unitId: string;
-  unitCode: string;
-  unitName: string;
+  // Inspections are now recorded at Floor granularity, not per flat/unit —
+  // these are kept optional (never written by the current form) only so
+  // older records that do have a unit stay displayable/filterable.
+  unitId?: string;
+  unitCode?: string;
+  unitName?: string;
   // Optional, manually-picked reference to a real VMS scope-item/sub-item —
   // never auto-matched to the Unit above. See the interface doc comment.
   workOrderNo?: string;
