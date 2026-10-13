@@ -108,6 +108,36 @@ async function main() {
     assert.strictEqual(item.varianceFlag, false);
   });
 
+  await test("periodCompletedQty sums only entries within [from,to], excluding invalidated, and is null when no period is given", async () => {
+    const db = {
+      collection(name) {
+        if (name === "workorders") return arr([{
+          _id: "wo3", workOrderNo: "WO-0003", projectId: "p1", projectName: "Zen Garden",
+          scopeItems: [{
+            _id: "si3", description: "RAFT", unit: "sqm", plannedQty: 1000, completedQty: 600,
+            progressEntries: [
+              { date: "2026-10-05", qtyAdded: 100 },  // before the window
+              { date: "2026-10-07", qtyAdded: 200 },  // inside
+              { date: "2026-10-10", qtyAdded: 300 },  // inside
+              { date: "2026-10-12", qtyAdded: 50 },   // after the window
+              { date: "2026-10-08", qtyAdded: 999, invalidated: { done: true } } // excluded regardless
+            ]
+          }]
+        }]);
+        if (name === "projects") return arr([{ _id: "p1", code: "PRJ-013", name: "Zen Garden" }]);
+        if (name === "users") return arr([]);
+        throw new Error("unexpected collection: " + name);
+      }
+    };
+    const withoutPeriod = await getProgressAnalysis(db);
+    assert.strictEqual(withoutPeriod.projects[0].workOrders[0].items[0].periodCompletedQty, null);
+
+    const withPeriod = await getProgressAnalysis(db, { from: "2026-10-06", to: "2026-10-11" });
+    const item = withPeriod.projects[0].workOrders[0].items[0];
+    assert.strictEqual(item.periodCompletedQty, 500, "only the 2 in-window, non-invalidated entries (200+300)");
+    assert.strictEqual(item.completedQty, 600, "all-time completedQty is untouched by passing a period");
+  });
+
   console.log(`\n${passed} passed`);
   if (process.exitCode) { console.error("SOME TESTS FAILED"); process.exit(1); }
 }

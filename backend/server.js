@@ -1488,7 +1488,15 @@ async function handleApi(req, res, urlPath) {
     // signed-in-only gating as /api/vms-work-items.
     const session = getSession(req);
     if (!session) return sendJson(res, 401, { error: "Sign-in required" });
-    const result = await getProgressAnalysis();
+    // ?from=&to= (both "YYYY-MM-DD") are optional — only the Daily Progress
+    // Report page passes them, to get each item's periodCompletedQty
+    // alongside its usual all-time figures (see progressAnalysis.js's own
+    // doc comment); Progress Analysis's own dashboard omits them entirely.
+    const { searchParams } = new URL(req.url, "http://localhost");
+    const from = searchParams.get("from") || undefined;
+    const to = searchParams.get("to") || undefined;
+    const periodBounds = from && to ? { from, to } : undefined;
+    const result = await getProgressAnalysis(undefined, periodBounds);
     return sendJson(res, 200, result);
   }
   if (req.method === "GET" && urlPath === "/api/backups") {

@@ -224,41 +224,55 @@ export default function DailyProgressReportPage() {
       .map(([workType, entries]) => ({ workType, entries, pct: Math.round((entries / totalEntries) * 100) }));
 
     // The report's Work Progress is VMS's own work-order data only (no QC
-    // Work Target rows mixed in), built the way VMS's Work Progress
-    // (Site-wide) table is — checked against VMS's own table:
+    // Work Target rows mixed in) — one row per Project + Work Order + scope
+    // item, matching VMS's own (per-project) Daily Progress Report exactly:
+    // never merged across projects or work orders, even when two items
+    // happen to share a name (a "RAFT" in one project is not the same
+    // physical thing as a "RAFT" in another; merging them would silently
+    // blend two unrelated quantities into one misleading row).
     //   - only top-level scope items (sub-items are the steps inside one, not
     //     separate rows),
-    //   - same item name + unit across work orders -> one row, planned and
-    //     completed summed,
     //   - an item's completed = the sum of its sub-items' completed when it
     //     has sub-items, otherwise its own completed — VMS's stored
     //     completedQty, from /api/progress-analysis (not re-derived),
+    //   - "completed" means done WITHIN this report's period (periodCompletedQty)
+    //     when a period is selected, same as VMS's own report — never an
+    //     all-time cumulative figure in that case,
     //   - biggest planned first.
     // Read live, never stored, so it can't drift from VMS.
-    type WpAgg = { workItem: string; unit: string; planned: number; completed: number; projects: Set<string>; workOrders: Set<string> };
-    const wpByItem = new Map<string, WpAgg>();
+    type WpRow = { workItem: string; projectName: string; workOrderNo: string; unit: string; planned: number; completed: number };
+    const workProgressRows: WpRow[] = [];
     try {
-      type PaItem = { itemId: string; itemType: "scopeItem" | "subItem"; parentItemId: string | null; description: string; unit: string; plannedQty: number; completedQty: number };
+      type PaItem = { itemId: string; itemType: "scopeItem" | "subItem"; parentItemId: string | null; description: string; unit: string; plannedQty: number; completedQty: number; periodCompletedQty: number | null };
       type PaResponse = { available: false } | { available: true; projects: { projectCode: string; projectName: string; workOrders: { workOrderNo: string; items: PaItem[] }[] }[] };
-      const res: PaResponse = await fetch(API_BASE + "/api/progress-analysis", { headers: authHeaders() }).then((r) => r.json());
+      // from/to make "Completed" mean "done in this report's period", same
+      // as VMS's own Daily Progress Report — omit them (as this page's own
+      // "All Time" range does) and the endpoint falls back to all-time
+      // completedQty, exactly mirroring VMS's own isAllTime behavior.
+      const paUrl = API_BASE + "/api/progress-analysis" + (bounds ? `?from=${bounds.from}&to=${bounds.to}` : "");
+      const res: PaResponse = await fetch(paUrl, { headers: authHeaders() }).then((r) => r.json());
       if (res.available) {
         for (const proj of res.projects) {
           const qcProject = coll(data, "projects").find((p) => p.code === proj.projectCode);
           if (fProject && qcProject?.id !== fProject) continue;
           for (const wo of proj.workOrders) {
-            // sub-item completed, summed per parent scope item
+            // sub-item completed, summed per parent scope item — period-
+            // scoped when a period is active, same fallback as the item
+            // itself (periodCompletedQty null -> use completedQty).
+            const qtyOf = (it: PaItem) => (bounds ? it.periodCompletedQty ?? 0 : it.completedQty);
             const subSums = new Map<string, number>();
-            for (const it of wo.items) if (it.itemType === "subItem" && it.parentItemId) subSums.set(it.parentItemId, (subSums.get(it.parentItemId) || 0) + it.completedQty);
+            for (const it of wo.items) if (it.itemType === "subItem" && it.parentItemId) subSums.set(it.parentItemId, (subSums.get(it.parentItemId) || 0) + qtyOf(it));
             for (const it of wo.items) {
               if (it.itemType !== "scopeItem" || !(it.plannedQty > 0)) continue;
-              const item = { description: it.description, unit: it.unit, plannedQty: it.plannedQty, executedQty: subSums.has(it.itemId) ? subSums.get(it.itemId)! : it.completedQty };
-              const key = item.description.trim().toLowerCase() + "|" + (item.unit || "").trim().toLowerCase();
-              if (!wpByItem.has(key)) wpByItem.set(key, { workItem: item.description.trim(), unit: item.unit, planned: 0, completed: 0, projects: new Set(), workOrders: new Set() });
-              const agg = wpByItem.get(key)!;
-              agg.planned += item.plannedQty;
-              agg.completed += item.executedQty;
-              agg.projects.add(qcProject?.name || proj.projectName || "—");
-              agg.workOrders.add(wo.workOrderNo);
+              const executedQty = subSums.has(it.itemId) ? subSums.get(it.itemId)! : qtyOf(it);
+              workProgressRows.push({
+                workItem: it.description.trim(),
+                projectName: qcProject?.name || proj.projectName || "—",
+                workOrderNo: wo.workOrderNo,
+                unit: it.unit,
+                planned: it.plannedQty,
+                completed: executedQty
+              });
             }
           }
         }
@@ -267,16 +281,8 @@ export default function DailyProgressReportPage() {
       // Same tolerance as every other optional data source on this page —
       // a VMS read hiccup must never block generating the rest of the report.
     }
-    const workProgress = Array.from(wpByItem.values())
-      .map((w) => ({
-        workItem: w.workItem,
-        projectName: w.projects.size === 1 ? Array.from(w.projects)[0] : `${w.projects.size} projects`,
-        workOrderNo: w.workOrders.size === 1 ? Array.from(w.workOrders)[0] : `${w.workOrders.size} work orders`,
-        unit: w.unit,
-        planned: w.planned,
-        completed: w.completed,
-        pct: Math.min(100, Math.round((w.completed / w.planned) * 100))
-      }))
+    const workProgress = workProgressRows
+      .map((w) => ({ ...w, pct: Math.min(100, Math.round((w.completed / w.planned) * 100)) }))
       .sort((a, b) => b.planned - a.planned || a.workItem.localeCompare(b.workItem))
       .slice(0, 15);
 

@@ -61,7 +61,25 @@ function locationBreakdown(entries) {
   return Array.from(byLocation.values());
 }
 
-function itemSummary(item, itemType, parentItemId, usersById) {
+function entryDateStr(e) {
+  if (e.date instanceof Date) return e.date.toISOString().slice(0, 10);
+  return String(e.date || "").slice(0, 10);
+}
+
+// A Daily/Weekly Progress Report's "Completed" means work done IN THAT
+// PERIOD, not the item's all-time cumulative total (VMS's own Daily
+// Progress Report shows it this way — confirmed against a real VMS report
+// this session). `periodBounds` is optional so every other caller
+// (Progress Analysis's own dashboard, which is intentionally a running
+// cumulative view) is completely unaffected when it's omitted.
+function periodCompletedQty(entries, periodBounds) {
+  if (!periodBounds) return null;
+  return activeEntries(entries)
+    .filter((e) => { const d = entryDateStr(e); return d >= periodBounds.from && d <= periodBounds.to; })
+    .reduce((s, e) => s + (Number(e.qtyAdded) || 0), 0);
+}
+
+function itemSummary(item, itemType, parentItemId, usersById, periodBounds) {
   const plannedQty = Number(item.plannedQty) || 0;
   const completedQty = Number(item.completedQty) || 0;
   const locations = locationBreakdown(item.progressEntries);
@@ -76,6 +94,10 @@ function itemSummary(item, itemType, parentItemId, usersById) {
     unit: item.unit || "",
     plannedQty,
     completedQty,
+    // Only present when a period was requested — the qty actually added
+    // within [periodBounds.from, periodBounds.to], inclusive, excluding
+    // invalidated entries (same rule as everything else here).
+    periodCompletedQty: periodCompletedQty(item.progressEntries, periodBounds),
     // null (not 0) when plannedQty is 0 — a 0-planned item has no
     // meaningful "% of plan", and showing 0% would read as "no progress"
     // when it may really mean "not estimated yet". Frontend renders this
@@ -92,7 +114,11 @@ function itemSummary(item, itemType, parentItemId, usersById) {
   };
 }
 
-async function getProgressAnalysis(vmsDbOverride) {
+/** `periodBounds` ({from, to}, both "YYYY-MM-DD") is optional — pass it to
+ *  get each item's periodCompletedQty alongside its usual all-time figures;
+ *  omit it (as Progress Analysis's own dashboard does) and that field is
+ *  simply null on every row. */
+async function getProgressAnalysis(vmsDbOverride, periodBounds) {
   const vmsDb = vmsDbOverride || await getVmsDb();
   if (!vmsDb) return { available: false, reason: "SOURCE_MONGO_URI is not configured" };
 
@@ -116,8 +142,8 @@ async function getProgressAnalysis(vmsDbOverride) {
 
     const items = [];
     for (const si of wo.scopeItems || []) {
-      items.push(itemSummary(si, "scopeItem", null, usersById));
-      for (const sub of si.subItems || []) items.push(itemSummary(sub, "subItem", String(si._id), usersById));
+      items.push(itemSummary(si, "scopeItem", null, usersById, periodBounds));
+      for (const sub of si.subItems || []) items.push(itemSummary(sub, "subItem", String(si._id), usersById, periodBounds));
     }
     byProject.get(projectCode).workOrders.push({ workOrderNo: wo.workOrderNo || "", items });
   }
@@ -125,4 +151,4 @@ async function getProgressAnalysis(vmsDbOverride) {
   return { available: true, projects: Array.from(byProject.values()) };
 }
 
-module.exports = { getProgressAnalysis, activeEntries, locationKey, locationBreakdown, itemSummary };
+module.exports = { getProgressAnalysis, activeEntries, locationKey, locationBreakdown, itemSummary, periodCompletedQty };
