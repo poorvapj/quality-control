@@ -147,7 +147,10 @@ const AUTOMATION_SECRET = process.env.AUTOMATION_SECRET || "";
 // AUTOMATION_SECRET/BACKUP_CRON_SECRET above (no user session; VMS is an
 // unattended server-to-server caller, not a logged-in person).
 const VMS_SYNC_SECRET = process.env.VMS_SYNC_SECRET || "";
-const IMS_WEBHOOK_SECRET = process.env.IMS_WEBHOOK_SECRET || "";
+// .trim() defends against a trailing newline/space from pasting the value
+// into a dashboard's env-var field — a very common way this silently
+// breaks without ever showing up when you look at the value.
+const IMS_WEBHOOK_SECRET = (process.env.IMS_WEBHOOK_SECRET || "").trim();
 
 /* ------------------------------------------------------- Slack (no n8n)
    Talks to Slack's Web API directly with a bot token — no middleman
@@ -1323,7 +1326,7 @@ async function handleApi(req, res, urlPath) {
     // info, payment amounts) before anything is written — this module is
     // deliberately non-financial, same boundary as progressAnalysis.js.
     if (!IMS_WEBHOOK_SECRET) return sendJson(res, 501, { error: "IMS_WEBHOOK_SECRET is not configured" });
-    if (!timingSafeStringEqual(req.headers["x-ims-secret"], IMS_WEBHOOK_SECRET)) {
+    if (!timingSafeStringEqual(String(req.headers["x-ims-secret"] || "").trim(), IMS_WEBHOOK_SECRET)) {
       return sendJson(res, 401, { error: "Invalid IMS webhook secret" });
     }
     const body = await readBody(req);
