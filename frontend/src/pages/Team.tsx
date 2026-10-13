@@ -11,10 +11,12 @@ export default function Team() {
   const [search, setSearch] = useState("");
   const allActiveUsers = coll(data, "users").filter((u) => u.active !== false);
   const myTeam = coll(data, "teams").find((t) => t.leaderId === currentUserId) || null;
-  // Admin, or anyone additively granted the full board via the Permission
-  // Matrix, sees everyone — same as before this change. A Team Leader with
-  // neither of those instead sees ONLY their own team's roster.
-  const fullAccess = isAdmin || hasModuleGrant(data, currentUserId, "team", "view");
+  // Admin sees everyone. So does anyone granted the full board via the
+  // Permission Matrix / a role default (DRI has "team view" by default) —
+  // UNLESS they lead a team: a Team Leader sees ONLY their own team's
+  // roster (their members + themselves), even if their role would
+  // otherwise give them the whole board.
+  const fullAccess = isAdmin || (!myTeam && hasModuleGrant(data, currentUserId, "team", "view"));
   const users = fullAccess
     ? allActiveUsers
     : myTeam

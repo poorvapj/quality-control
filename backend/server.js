@@ -67,6 +67,7 @@ const { shouldResolveOriginal } = require("./qualityInspectionRules.js");
 const { validateMeasurement } = require("./materialMeasurementRules.js");
 const { getProgressAnalysis } = require("./progressAnalysis.js");
 const workMeasurements = require("./workMeasurementRules.js");
+const { getVmsDrawingRequests } = require("./vmsDrawingRequests.js");
 const { sanitizePoEvent, matchProjectByName, isStaleUpdate } = require("./imsWebhook.js");
 
 /* ------------------------------------------------------------- passwords
@@ -1439,6 +1440,15 @@ async function handleApi(req, res, urlPath) {
     if (authError) return sendJson(res, authError.status, { error: authError.error });
     const result = await getExecutionReconciliation();
     return sendJson(res, 200, result);
+  }
+  if (req.method === "GET" && urlPath === "/api/vms-drawing-requests") {
+    // VMS's own Drawing Request list (read-only) — what the generated Daily
+    // Progress Report's Drawing Request table is built from, so it matches
+    // VMS rather than QC's separately-progressed copy. Signed-in only, same
+    // level as /api/vms-work-items; no financial data involved.
+    const session = getSession(req);
+    if (!session) return sendJson(res, 401, { error: "Sign-in required" });
+    return sendJson(res, 200, await getVmsDrawingRequests());
   }
   if (req.method === "GET" && urlPath === "/api/vms-work-items") {
     // Lightweight project/work-order/work-item structure for the Work

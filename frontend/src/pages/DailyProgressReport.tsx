@@ -21,6 +21,16 @@ const STAGE_LABEL: Record<string, string> = {
   approved: "Approved",
   returned: "Returned"
 };
+// VMS's own Drawing Request stages (reviewStatus) — what the generated
+// report shows, since the report must match VMS, not QC's own workflow.
+const VMS_STAGE_LABEL: Record<string, string> = {
+  "l1-gm": "GM Screening (L1)",
+  "l2-architect": "Architect Drawing (L2)",
+  approved: "Approved",
+  returned: "Returned"
+};
+const vmsStageLabel = (s: string) => VMS_STAGE_LABEL[s] || (s ? s.replace(/[-_]+/g, " ") : "—");
+
 const STAGE_BADGE_CLASS: Record<string, string> = {
   "stage-1-screen": "gate",
   "stage-2-produce": "wip",
@@ -80,7 +90,7 @@ function fmtDate(ts: number): string {
 }
 
 export default function DailyProgressReportPage() {
-  const { data, currentUserId, myRole } = useApp();
+  const { data, currentUserId, myRole, toast } = useApp();
   const isAdmin = currentUserId === "U-ADMIN";
   const isDri = !isAdmin && (myRole() === "ADMIN" || myRole() === "DRI");
   const [open, setOpen] = useState(false);
@@ -213,45 +223,42 @@ export default function DailyProgressReportPage() {
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])) // same tie-break reasoning as majorWorkType above
       .map(([workType, entries]) => ({ workType, entries, pct: Math.round((entries / totalEntries) * 100) }));
 
-    const workTargetRows = allWorkTargets.map((t) => {
-      const completed = rows
-        .filter((r) => r.projectId === t.projectId)
-        .reduce((a, r) => a + r.workEntries.filter((we) => we.category === t.category && we.qty != null).reduce((b, we) => b + (we.qty || 0), 0), 0);
-      return {
-        workItem: t.category,
-        projectName: byId(coll(data, "projects"), t.projectId)?.name || "—",
-        workOrderNo: "—",
-        unit: t.unit,
-        planned: t.plannedQty,
-        completed,
-        pct: t.plannedQty > 0 ? Math.min(100, Math.round((completed / t.plannedQty) * 100)) : 0
-      };
-    });
-    // Real VMS Work Order items, pulled live (not synced/stored — always
-    // current) from /api/vms-work-items, same endpoint Quality Inspection's
-    // picker already uses. Both planned and completed here are real VMS
-    // figures: plannedQty from the scope item itself, completed from VMS's
-    // own progress entries (activeQty) — unlike a Work Target row, this
-    // needs no DPR-category matching at all.
-    let workOrderItemRows: { workItem: string; projectName: string; workOrderNo: string; unit: string; planned: number; completed: number; pct: number }[] = [];
+    // The report's Work Progress is VMS's own work-order data only (no QC
+    // Work Target rows mixed in), built the way VMS's Work Progress
+    // (Site-wide) table is — checked against VMS's own table:
+    //   - only top-level scope items (sub-items are the steps inside one, not
+    //     separate rows),
+    //   - same item name + unit across work orders -> one row, planned and
+    //     completed summed,
+    //   - an item's completed = the sum of its sub-items' completed when it
+    //     has sub-items, otherwise its own completed — VMS's stored
+    //     completedQty, from /api/progress-analysis (not re-derived),
+    //   - biggest planned first.
+    // Read live, never stored, so it can't drift from VMS.
+    type WpAgg = { workItem: string; unit: string; planned: number; completed: number; projects: Set<string>; workOrders: Set<string> };
+    const wpByItem = new Map<string, WpAgg>();
     try {
-      const res: VmsWorkItemsResponse = await fetch(API_BASE + "/api/vms-work-items", { headers: authHeaders() }).then((r) => r.json());
+      type PaItem = { itemId: string; itemType: "scopeItem" | "subItem"; parentItemId: string | null; description: string; unit: string; plannedQty: number; completedQty: number };
+      type PaResponse = { available: false } | { available: true; projects: { projectCode: string; projectName: string; workOrders: { workOrderNo: string; items: PaItem[] }[] }[] };
+      const res: PaResponse = await fetch(API_BASE + "/api/progress-analysis", { headers: authHeaders() }).then((r) => r.json());
       if (res.available) {
         for (const proj of res.projects) {
           const qcProject = coll(data, "projects").find((p) => p.code === proj.projectCode);
           if (fProject && qcProject?.id !== fProject) continue;
           for (const wo of proj.workOrders) {
-            for (const item of wo.items) {
-              if (!(item.plannedQty > 0)) continue;
-              workOrderItemRows.push({
-                workItem: item.description,
-                projectName: qcProject?.name || proj.projectName || "—",
-                workOrderNo: wo.workOrderNo,
-                unit: item.unit,
-                planned: item.plannedQty,
-                completed: item.executedQty,
-                pct: Math.min(100, Math.round((item.executedQty / item.plannedQty) * 100))
-              });
+            // sub-item completed, summed per parent scope item
+            const subSums = new Map<string, number>();
+            for (const it of wo.items) if (it.itemType === "subItem" && it.parentItemId) subSums.set(it.parentItemId, (subSums.get(it.parentItemId) || 0) + it.completedQty);
+            for (const it of wo.items) {
+              if (it.itemType !== "scopeItem" || !(it.plannedQty > 0)) continue;
+              const item = { description: it.description, unit: it.unit, plannedQty: it.plannedQty, executedQty: subSums.has(it.itemId) ? subSums.get(it.itemId)! : it.completedQty };
+              const key = item.description.trim().toLowerCase() + "|" + (item.unit || "").trim().toLowerCase();
+              if (!wpByItem.has(key)) wpByItem.set(key, { workItem: item.description.trim(), unit: item.unit, planned: 0, completed: 0, projects: new Set(), workOrders: new Set() });
+              const agg = wpByItem.get(key)!;
+              agg.planned += item.plannedQty;
+              agg.completed += item.executedQty;
+              agg.projects.add(qcProject?.name || proj.projectName || "—");
+              agg.workOrders.add(wo.workOrderNo);
             }
           }
         }
@@ -260,14 +267,64 @@ export default function DailyProgressReportPage() {
       // Same tolerance as every other optional data source on this page —
       // a VMS read hiccup must never block generating the rest of the report.
     }
-    const workProgress = [...workTargetRows, ...workOrderItemRows]
-      .filter((w) => w.planned > 0).sort((a, b) => b.planned - a.planned).slice(0, 15);
+    const workProgress = Array.from(wpByItem.values())
+      .map((w) => ({
+        workItem: w.workItem,
+        projectName: w.projects.size === 1 ? Array.from(w.projects)[0] : `${w.projects.size} projects`,
+        workOrderNo: w.workOrders.size === 1 ? Array.from(w.workOrders)[0] : `${w.workOrders.size} work orders`,
+        unit: w.unit,
+        planned: w.planned,
+        completed: w.completed,
+        pct: Math.min(100, Math.round((w.completed / w.planned) * 100))
+      }))
+      .sort((a, b) => b.planned - a.planned || a.workItem.localeCompare(b.workItem))
+      .slice(0, 15);
+
+    // Drawing Requests: VMS's own list, so the report shows VMS's current
+    // stage per ticket and includes tickets raised only in VMS. Same filters
+    // as the page (project; a DRI sees only their own, matched by name since
+    // VMS has no QC user id). If VMS can't be read, fall back to QC's copy and
+    // say so, instead of silently producing a different table.
+    type ReportDr = { ticketNo: string; description: string; projectName: string; driName: string; stageLabel: string; requestedOn: string; daysSince: number; open: boolean };
+    let reportDrawingRequests: ReportDr[] = allDrawingRequests.map((r) => ({
+      ticketNo: r.ticketNo,
+      description: r.description,
+      projectName: r.projectName || refLabel(data, "projects", r.projectId),
+      driName: r.requesterName,
+      stageLabel: STAGE_LABEL[r.reviewStatus] || r.reviewStatus,
+      requestedOn: fmtDate(r.createdAt),
+      daysSince: daysSince(r.createdAt),
+      open: r.reviewStatus !== "approved" && r.reviewStatus !== "returned"
+    }));
+    try {
+      const vdr: { available: boolean; reason?: string; requests: { ticketNo: string; description: string; projectCode: string; projectName: string; driName: string; reviewStatus: string; createdAt: number }[] } =
+        await fetch(API_BASE + "/api/vms-drawing-requests", { headers: authHeaders() }).then((r) => r.json());
+      if (vdr && vdr.available && Array.isArray(vdr.requests)) {
+        const scopeProject = fProject ? projects.find((p) => p.id === fProject) || null : null;
+        const myName = (byId(coll(data, "users"), currentUserId)?.name || "").trim().toLowerCase();
+        reportDrawingRequests = vdr.requests
+          .filter((r) => !scopeProject || (r.projectCode ? r.projectCode === scopeProject.code : r.projectName.trim().toLowerCase() === scopeProject.name.trim().toLowerCase()))
+          .filter((r) => !isDri || r.driName.trim().toLowerCase() === myName)
+          .map((r) => ({
+            ticketNo: r.ticketNo,
+            description: r.description,
+            projectName: r.projectName || "—",
+            driName: r.driName || "—",
+            stageLabel: vmsStageLabel(r.reviewStatus),
+            requestedOn: fmtDate(r.createdAt),
+            daysSince: daysSince(r.createdAt),
+            open: r.reviewStatus !== "approved" && r.reviewStatus !== "returned"
+          }));
+      } else {
+        toast("VMS drawing requests unavailable — the report uses QC's copy for that table");
+      }
+    } catch {
+      toast("Couldn't reach VMS for drawing requests — the report uses QC's copy for that table");
+    }
 
     const periodLabel = rangeLabel;
     const OVERDUE_DAYS = 3;
-    const overdueDrawingReqs = allDrawingRequests.filter(
-      (r) => r.reviewStatus !== "approved" && r.reviewStatus !== "returned" && daysSince(r.createdAt) > OVERDUE_DAYS
-    );
+    const overdueDrawingReqs = reportDrawingRequests.filter((r) => r.open && r.daysSince > OVERDUE_DAYS);
     const totalProjectsInScope = fProject ? 1 : projects.length;
     const notReportedCount = (fProject ? projects.filter((p) => p.id === fProject) : projects).filter((p) => !reportedProjectIds.has(p.id)).length;
     const actionItems: { level: "critical" | "warning" | "good"; text: string }[] = [];
@@ -291,20 +348,12 @@ export default function DailyProgressReportPage() {
         workTypes: workTypesLogged,
         reportingDays,
         reportsSubmitted: rows.length,
-        drawingRequests: allDrawingRequests.length
+        drawingRequests: reportDrawingRequests.length
       },
       projectSummary,
       workTypeSummary,
       workProgress,
-      drawingRequests: allDrawingRequests.map((r) => ({
-        ticketNo: r.ticketNo,
-        description: r.description,
-        projectName: r.projectName || refLabel(data, "projects", r.projectId),
-        driName: r.requesterName,
-        stageLabel: STAGE_LABEL[r.reviewStatus] || r.reviewStatus,
-        requestedOn: fmtDate(r.createdAt),
-        daysSince: daysSince(r.createdAt)
-      })),
+      drawingRequests: reportDrawingRequests.map(({ open: _open, ...row }) => row),
       actionItems
     });
   }

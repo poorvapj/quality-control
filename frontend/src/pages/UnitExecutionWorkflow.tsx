@@ -54,10 +54,18 @@ export default function UnitExecutionWorkflow() {
   const [workItems, setWorkItems] = useState<WorkItemsResponse | null>(null);
   useEffect(() => {
     let cancelled = false;
+    // A non-OK reply (expired session, server error) used to be treated as
+    // data and shown as a bare "unavailable"; now the real reason is kept.
     fetch(API_BASE + "/api/vms-work-items", { headers: authHeaders() })
-      .then((r) => r.json())
+      .then(async (r) => {
+        const j = await r.json().catch(() => null);
+        if (!r.ok || !j || typeof j.available !== "boolean") {
+          return { available: false, reason: (j && j.error) || `server replied ${r.status}` } as WorkItemsResponse;
+        }
+        return j as WorkItemsResponse;
+      })
       .then((j) => { if (!cancelled) setWorkItems(j); })
-      .catch(() => { if (!cancelled) setWorkItems({ available: false, reason: "Failed to load" }); });
+      .catch(() => { if (!cancelled) setWorkItems({ available: false, reason: "could not reach the server" }); });
     return () => { cancelled = true; };
   }, []);
 
