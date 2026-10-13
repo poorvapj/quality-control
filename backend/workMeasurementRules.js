@@ -135,7 +135,10 @@ function candidateOf(item, matchedOn, location) {
     matchedEntryCount: matching.length,
     // Executed quantity VMS recorded AT THIS LOCATION only (VMS's own
     // active-entry rule: invalidated entries never count).
-    executedQtyAtLocation: matching.reduce((s, e) => s + (Number(e.qtyAdded) || 0), 0)
+    executedQtyAtLocation: matching.reduce((s, e) => s + (Number(e.qtyAdded) || 0), 0),
+    // Executed across ALL locations — only used to give context when nothing
+    // matches this location (see categoryItems below); never used to link.
+    executedQtyTotal: item.entries.filter(isActive).reduce((s, e) => s + (Number(e.qtyAdded) || 0), 0)
   };
 }
 
@@ -156,7 +159,13 @@ function matchMeasurement(draft, items) {
   const candidates = pool
     .map(({ i, on }) => candidateOf(i, on === "item" ? "itemDescription" : "workOrderCategory", location))
     .filter((c) => c.matchedEntryCount > 0);
-  if (candidates.length === 0) return { status: "none", candidates: [], reason: "NO_LOCATION_MATCH" };
+  if (candidates.length === 0) {
+    // Nothing is linkable here, but the person measuring should still see
+    // the plan: the category's VMS items with planned / total executed.
+    // Informational only — these are NOT candidates and are never linked.
+    const categoryItems = pool.map(({ i, on }) => candidateOf(i, on === "item" ? "itemDescription" : "workOrderCategory", location));
+    return { status: "none", candidates: [], reason: "NO_LOCATION_MATCH", categoryItems };
+  }
   return { status: candidates.length === 1 ? "unique" : "ambiguous", candidates };
 }
 

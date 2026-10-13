@@ -3,19 +3,31 @@ import { useApp } from "../context/AppContext";
 import { coll, myProjects } from "../shared/rules";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
+import SidePanel from "../components/SidePanel";
 import StatTile from "../components/StatTile";
 import Card from "../ui/tw/Card";
 import Badge from "../ui/tw/Badge";
 import Table, { TableRow, TableCell } from "../ui/tw/Table";
+import type { PurchaseOrder } from "../types";
 
 const qty = (n: number) => n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+const ITEMS_PREVIEW_COUNT = 2;
+
+function statusColor(status: string): "green" | "amber" | "gray" {
+  if (status === "Approved" || status.toLowerCase().includes("fulfilled")) return "green";
+  if (status.toLowerCase().includes("cancel") || status.toLowerCase().includes("reject")) return "gray";
+  return "amber";
+}
 
 /* All Purchase Orders synced from IMS's PO_APPROVED webhook
    (backend/imsWebhook.js) — a flat, standalone list (Progress Analysis's
    project detail view shows the same records scoped to one project; this
    page is the full, unfiltered-by-default list across every project,
    including ones IMS referenced by a project name that didn't match any
-   real QC project — surfaced here as "Unmatched" rather than hidden). */
+   real QC project — surfaced here as "Unmatched" rather than hidden). Each
+   row opens a side panel with the full item list — the table itself only
+   previews the first couple of items so one PO with 20+ line items doesn't
+   blow out every row's height. */
 export default function PurchaseOrders() {
   const { data, currentUserId } = useApp();
   const allProjects = myProjects(data, currentUserId);
@@ -27,6 +39,7 @@ export default function PurchaseOrders() {
 
   const [fProjectCode, setFProjectCode] = useState("");
   const [fStatus, setFStatus] = useState("");
+  const [selected, setSelected] = useState<PurchaseOrder | null>(null);
 
   const statusOptions = useMemo(
     () => Array.from(new Set(purchaseOrders.map((po) => po.status).filter(Boolean))).sort(),
@@ -53,7 +66,7 @@ export default function PurchaseOrders() {
           <div>
             <div className="text-xl font-semibold tracking-tight leading-tight">Purchase Orders</div>
             <div className="text-[12.5px] text-[var(--text-muted)] mt-1 leading-normal">
-              Synced from IMS's PO_APPROVED webhook — non-financial (no vendor GST/PAN/bank details or payment amounts are stored). Matched to a QC project by exact name.
+              Synced from IMS's PO_APPROVED webhook — non-financial (no vendor GST/PAN/bank details or payment amounts are stored). Matched to a QC project by exact name. Click a row for full details.
             </div>
           </div>
         </div>
@@ -80,40 +93,124 @@ export default function PurchaseOrders() {
       <Card padded={false}>
         <Table
           columns={["PO ID", "Project", "Vendor", "Status", "Items", "Order Date", "Delivery Date"]}
+          colWidths={["12%", "16%", "13%", "13%", "28%", "9%", "9%"]}
           colAligns={["left", "left", "left", "left", "left", "left", "left"]}
           empty="No Purchase Orders received from IMS yet."
           maxHeight="640px"
         >
           {filtered.map((po) => (
             <TableRow key={po.id}>
-              <TableCell strong className="whitespace-nowrap">{po.id}</TableCell>
-              <TableCell className="whitespace-nowrap">
+              <TableCell strong className="whitespace-nowrap cursor-pointer" onClick={() => setSelected(po)}>{po.id}</TableCell>
+              <TableCell className="whitespace-nowrap cursor-pointer" onClick={() => setSelected(po)}>
                 {po.projectCode ? `${po.projectCode}` : (
                   <span title={`IMS sent project name "${po.projectNameRaw}" which didn't match any real QC project`}>
                     <Badge color="red"><span className="whitespace-nowrap">Unmatched</span></Badge>
                   </span>
                 )}
-                <div className="text-[10.5px] text-[var(--text-muted)] mt-0.5">{po.projectNameRaw}</div>
+                <div className="text-[10.5px] text-[var(--text-muted)] mt-0.5 truncate max-w-[160px]">{po.projectNameRaw}</div>
               </TableCell>
-              <TableCell muted>{po.vendorName || "—"}</TableCell>
-              <TableCell>
-                <Badge color={po.status === "Approved" ? "green" : "amber"}><span className="whitespace-nowrap">{po.status}</span></Badge>
+              <TableCell muted className="truncate max-w-0 cursor-pointer" onClick={() => setSelected(po)}>{po.vendorName || "—"}</TableCell>
+              <TableCell className="cursor-pointer" onClick={() => setSelected(po)}>
+                <Badge color={statusColor(po.status)}><span className="whitespace-nowrap">{po.status}</span></Badge>
               </TableCell>
-              <TableCell>
-                <div className="flex flex-wrap gap-1">
-                  {po.items.map((it, idx) => (
+              <TableCell className="cursor-pointer" onClick={() => setSelected(po)}>
+                <div className="flex flex-wrap gap-1 items-center">
+                  {po.items.slice(0, ITEMS_PREVIEW_COUNT).map((it, idx) => (
                     <span key={idx} className="text-[11px] border border-[var(--border)] rounded-radius-sm px-1.5 py-0.5 whitespace-nowrap">
                       {it.itemName}: {qty(it.qty)} {it.unit}
                     </span>
                   ))}
+                  {po.items.length > ITEMS_PREVIEW_COUNT && (
+                    <span className="text-[11px] text-[var(--text-muted)] font-semibold whitespace-nowrap">+{po.items.length - ITEMS_PREVIEW_COUNT} more</span>
+                  )}
+                  {po.items.length === 0 && <span className="text-[var(--text-sub)]">—</span>}
                 </div>
               </TableCell>
-              <TableCell muted className="whitespace-nowrap">{po.date || "—"}</TableCell>
-              <TableCell muted className="whitespace-nowrap">{po.deliveryDate || "—"}</TableCell>
+              <TableCell muted className="whitespace-nowrap cursor-pointer" onClick={() => setSelected(po)}>{po.date || "—"}</TableCell>
+              <TableCell muted className="whitespace-nowrap cursor-pointer" onClick={() => setSelected(po)}>{po.deliveryDate || "—"}</TableCell>
             </TableRow>
           ))}
         </Table>
       </Card>
+
+      <PurchaseOrderDetail po={selected} onClose={() => setSelected(null)} />
     </div>
+  );
+}
+
+function PurchaseOrderDetail({ po, onClose }: { po: PurchaseOrder | null; onClose: () => void }) {
+  return (
+    <SidePanel
+      open={!!po}
+      icon={<NavIcon name="package" size={18} />}
+      title={po?.id || ""}
+      desc={po ? (po.projectCode ? `${po.projectCode} — ${po.projectNameRaw}` : `Unmatched — "${po.projectNameRaw}"`) : ""}
+      onClose={onClose}
+      footer={<button className="btn btn-secondary" onClick={onClose}>Close</button>}
+    >
+      {po && (
+        <div className="flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Status</div>
+              <Badge color={statusColor(po.status)}>{po.status}</Badge>
+            </div>
+            <div>
+              <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Vendor</div>
+              <div className="text-[13px] font-medium">{po.vendorName || "—"}</div>
+            </div>
+            <div>
+              <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Order Date</div>
+              <div className="text-[13px]">{po.date || "—"}</div>
+            </div>
+            <div>
+              <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Delivery Date</div>
+              <div className="text-[13px]">{po.deliveryDate || "—"}</div>
+            </div>
+            {po.phase && (
+              <div>
+                <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Phase</div>
+                <div className="text-[13px]">{po.phase}</div>
+              </div>
+            )}
+            {po.workType && (
+              <div>
+                <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Work Type</div>
+                <div className="text-[13px]">{po.workType}</div>
+              </div>
+            )}
+            {po.milestone && (
+              <div className="col-span-2">
+                <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Milestone</div>
+                <div className="text-[13px]">{po.milestone}</div>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-2">Items ({po.items.length})</div>
+            <div className="flex flex-col gap-1.5">
+              {po.items.length === 0 && <div className="text-[13px] text-[var(--text-sub)]">No items recorded.</div>}
+              {po.items.map((it, idx) => (
+                <div key={idx} className="flex items-center justify-between text-[12.5px] border border-[var(--border)] rounded-radius-sm px-2.5 py-2">
+                  <div>
+                    <div className="font-medium">{it.itemName}</div>
+                    {(it.sku || it.category) && <div className="text-[10.5px] text-[var(--text-muted)]">{[it.sku, it.category].filter(Boolean).join(" · ")}</div>}
+                  </div>
+                  <div className="font-semibold whitespace-nowrap">{qty(it.qty)} {it.unit}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {po.remark && (
+            <div>
+              <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Remark</div>
+              <div className="text-[13px]">{po.remark}</div>
+            </div>
+          )}
+        </div>
+      )}
+    </SidePanel>
   );
 }

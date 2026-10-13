@@ -1338,13 +1338,20 @@ async function handleApi(req, res, urlPath) {
     // every financial/PII field (vendor bank details, GST/PAN, contact
     // info, payment amounts) before anything is written — this module is
     // deliberately non-financial, same boundary as progressAnalysis.js.
-    if (!IMS_WEBHOOK_SECRET) return sendJson(res, 501, { error: "IMS_WEBHOOK_SECRET is not configured" });
+    if (!IMS_WEBHOOK_SECRET) {
+      console.warn("[ims-webhook] rejected 501 — IMS_WEBHOOK_SECRET is not set on this server");
+      return sendJson(res, 501, { error: "IMS_WEBHOOK_SECRET is not configured" });
+    }
     if (!timingSafeStringEqual(String(req.headers["x-ims-secret"] || "").trim(), IMS_WEBHOOK_SECRET)) {
+      console.warn("[ims-webhook] rejected 401 — x-ims-secret header " + (req.headers["x-ims-secret"] ? "does not match" : "is missing"));
       return sendJson(res, 401, { error: "Invalid IMS webhook secret" });
     }
     const body = await readBody(req);
     const parsed = sanitizePoEvent(body);
-    if (!parsed.valid) return sendJson(res, 400, { error: parsed.error });
+    if (!parsed.valid) {
+      console.warn("[ims-webhook] rejected 400 — " + parsed.error);
+      return sendJson(res, 400, { error: parsed.error });
+    }
     const qcProjects = await mongoDb.collection("projects").find({}, { projection: { id: 1, code: 1, name: 1 } }).toArray();
     const matched = matchProjectByName(parsed.record.projectNameRaw, qcProjects);
     const rec = {
@@ -1353,6 +1360,7 @@ async function handleApi(req, res, urlPath) {
       projectCode: matched ? matched.code : null
     };
     await mongoDb.collection("purchaseOrders").updateOne({ id: rec.id }, { $set: rec }, { upsert: true });
+    console.log(`[ims-webhook] saved PO ${rec.id} — ${matched ? "linked to project " + matched.code : 'NOT linked: no QC project named "' + rec.projectNameRaw + '"'}`);
     return sendJson(res, 200, { ok: true, matched: !!matched });
   }
   if (req.method === "POST" && urlPath === "/api/photo") {

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useApp, authHeaders } from "../context/AppContext";
 import { API_BASE } from "../services/config";
-import { coll, myProjects, projectFloors, projectUnits } from "../shared/rules";
+import { coll, myProjects, projectFloors, projectUnits, floorUnits } from "../shared/rules";
 import { nextId } from "../shared/helpers";
 import { buildEventOp } from "../shared/eventLog";
 import { hasModuleGrant } from "../shared/permissionMatrix";
@@ -18,10 +18,10 @@ import type { Photo, WorkMeasurement } from "../types";
 
 interface Candidate {
   workOrderNo: string; workOrderCategory: string; itemId: string; itemType: "scopeItem" | "subItem";
-  description: string; unit: string; plannedQty: number; matchedOn: string; matchedEntryCount: number; executedQtyAtLocation: number;
+  description: string; unit: string; plannedQty: number; matchedOn: string; matchedEntryCount: number; executedQtyAtLocation: number; executedQtyTotal?: number;
 }
 interface MatchResponse {
-  available: boolean; reason?: string; status: "unique" | "ambiguous" | "none"; candidates: Candidate[];
+  available: boolean; reason?: string; status: "unique" | "ambiguous" | "none"; candidates: Candidate[]; categoryItems?: Candidate[];
 }
 interface Comparison {
   found: boolean; executedQty?: number; executedUnit?: string; plannedQty?: number; matchedEntryCount?: number;
@@ -349,8 +349,14 @@ function MeasurementPanel({ open, onClose, categories, categoriesNote, existing,
   }, [open]);
 
   const project = projects.find((p) => p.id === projectId) || null;
-  const floorSuggestions = project ? projectFloors(data, project.id).map((f) => f.name) : [];
-  const flatSuggestions = project ? projectUnits(data, project.id).map((u) => u.name) : [];
+  const projectFloorList = project ? projectFloors(data, project.id) : [];
+  // Flat/Unit cascades from the selected Floor (by real QC Floor->Unit
+  // structure) when one is picked; otherwise every unit in the project, so
+  // picking a flat is still possible even if Floor is left blank.
+  const selectedFloorRec = project ? projectFloorList.find((f) => f.name === floor) || null : null;
+  const flatOptionList = project
+    ? (selectedFloorRec ? floorUnits(data, project.id, selectedFloorRec.id) : projectUnits(data, project.id))
+    : [];
   const hasLocation = !!(tower.trim() || floor.trim() || flat.trim() || area.trim());
 
   // Live VMS match preview — debounced; the server re-checks it on save.
@@ -438,13 +444,17 @@ function MeasurementPanel({ open, onClose, categories, categoriesNote, existing,
         </div>
         <div className="field">
           <label>Floor</label>
-          <input className="input" list="wm-floors" value={floor} onChange={(e) => setFloor(e.target.value)} placeholder="e.g. 6th floor" />
-          <datalist id="wm-floors">{floorSuggestions.map((n) => <option key={n} value={n} />)}</datalist>
+          <select className="select" value={floor} disabled={!project} onChange={(e) => { setFloor(e.target.value); setFlat(""); }}>
+            <option value="">Select floor…</option>
+            {projectFloorList.map((f) => <option key={f.id} value={f.name}>{f.name}</option>)}
+          </select>
         </div>
         <div className="field">
           <label>Flat / Unit</label>
-          <input className="input" list="wm-flats" value={flat} onChange={(e) => setFlat(e.target.value)} placeholder="e.g. 602" />
-          <datalist id="wm-flats">{flatSuggestions.map((n) => <option key={n} value={n} />)}</datalist>
+          <select className="select" value={flat} disabled={!project} onChange={(e) => setFlat(e.target.value)}>
+            <option value="">Select flat/unit…</option>
+            {flatOptionList.map((u) => <option key={u.id} value={u.name}>{u.name}</option>)}
+          </select>
         </div>
         <div className="field">
           <label>Area / Plot</label>
@@ -540,6 +550,20 @@ function MatchPreview({ match, matching, ready, choice, setChoice }: {
     <div className={box} style={style}>
       <b>No VMS match — will be saved unlinked.</b>
       <div className="text-[var(--text-muted)] mt-0.5">{(match.reason && REASON[match.reason]) || "Nothing in VMS fits."} You can still record the measurement.</div>
+      {match.categoryItems && match.categoryItems.length > 0 && (
+        <div className="mt-2">
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">VMS items for this category — for reference, not linked</div>
+          <div className="flex flex-col gap-1">
+            {match.categoryItems.slice(0, 6).map((c) => (
+              <div key={c.itemId} className="text-[12px]">
+                <b>{c.workOrderNo}</b> · {c.description}
+                <span className="text-[var(--text-muted)]"> — Planned: {qty(c.plannedQty || 0)} {c.unit} · Executed so far (all locations): {qty(c.executedQtyTotal || 0)} {c.unit}</span>
+              </div>
+            ))}
+            {match.categoryItems.length > 6 && <div className="text-[11px] text-[var(--text-muted)]">+{match.categoryItems.length - 6} more</div>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

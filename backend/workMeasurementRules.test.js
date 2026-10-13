@@ -92,6 +92,16 @@ const draft = (over = {}) => ({
     assert.strictEqual(r.reason, "NO_LOCATION_MATCH");
   });
 
+  await test("MISSING (location): the category's VMS items are still returned for context — planned & total executed — but never as candidates", () => {
+    const items = flattenItems([wo("WO-1", "Civil / RCC", [{ ...si("a", "Plastering work", "sq.ft", [entry(10, { floor: "2nd floor" }), entry(5)]), plannedQty: 500 }])]);
+    const r = matchMeasurement(draft(), items);
+    assert.strictEqual(r.status, "none");
+    assert.deepStrictEqual(r.candidates, []);
+    assert.strictEqual(r.categoryItems.length, 1);
+    assert.strictEqual(r.categoryItems[0].plannedQty, 500);
+    assert.strictEqual(r.categoryItems[0].executedQtyTotal, 15);
+  });
+
   await test("MISSING: progress entries with a blank location are never treated as 'any location'", () => {
     const items = flattenItems([wo("WO-1", "Civil / RCC", [si("a", "Plastering work", "sq.ft", [entry(10), entry(5, { floor: "" })])])]);
     assert.strictEqual(matchMeasurement(draft(), items).status, "none");
