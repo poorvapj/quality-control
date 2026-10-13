@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useApp } from "../context/AppContext";
+import { useApp, authHeaders } from "../context/AppContext";
+import { API_BASE } from "../services/config";
 import { coll, refLabel, myProjects, byId } from "../shared/rules";
 import { type DateRange, DATE_RANGES, isoWeekBounds, dateRangeBounds, ymd, parseYmd } from "../shared/dateRange";
 import NavIcon from "../components/NavIcon";
@@ -28,6 +29,16 @@ const STAGE_BADGE_CLASS: Record<string, string> = {
   approved: "pass",
   returned: "fail"
 };
+
+// Matches QualityInspection.tsx/UnitExecutionWorkflow.tsx's own local
+// declaration of this same /api/vms-work-items response shape — kept as a
+// separate copy rather than a shared import since none of those pages
+// share a module today; plannedQty is this page's own addition to the
+// shared backend response (see backend/vmsWorkItems.js's itemSummary()).
+interface VmsWorkItem { description: string; unit: string; plannedQty: number; executedQty: number }
+interface VmsWorkOrderEntry { workOrderNo: string; items: VmsWorkItem[] }
+interface VmsProjectEntry { projectCode: string; projectName: string; workOrders: VmsWorkOrderEntry[] }
+type VmsWorkItemsResponse = { available: false; reason: string } | { available: true; projects: VmsProjectEntry[] };
 
 function daysSince(ts: number): number {
   return Math.max(0, Math.floor((Date.now() - ts) / 86400000));
@@ -197,19 +208,55 @@ export default function DailyProgressReportPage() {
       .sort((a, b) => b[1] - a[1])
       .map(([workType, entries]) => ({ workType, entries, pct: Math.round((entries / totalEntries) * 100) }));
 
-    const workProgress = allWorkTargets.map((t) => {
+    const workTargetRows = allWorkTargets.map((t) => {
       const completed = rows
         .filter((r) => r.projectId === t.projectId)
         .reduce((a, r) => a + r.workEntries.filter((we) => we.category === t.category && we.qty != null).reduce((b, we) => b + (we.qty || 0), 0), 0);
       return {
         workItem: t.category,
         projectName: byId(coll(data, "projects"), t.projectId)?.name || "—",
+        workOrderNo: "—",
         unit: t.unit,
         planned: t.plannedQty,
         completed,
         pct: t.plannedQty > 0 ? Math.min(100, Math.round((completed / t.plannedQty) * 100)) : 0
       };
-    }).filter((w) => w.planned > 0).sort((a, b) => b.planned - a.planned).slice(0, 15);
+    });
+    // Real VMS Work Order items, pulled live (not synced/stored — always
+    // current) from /api/vms-work-items, same endpoint Quality Inspection's
+    // picker already uses. Both planned and completed here are real VMS
+    // figures: plannedQty from the scope item itself, completed from VMS's
+    // own progress entries (activeQty) — unlike a Work Target row, this
+    // needs no DPR-category matching at all.
+    let workOrderItemRows: { workItem: string; projectName: string; workOrderNo: string; unit: string; planned: number; completed: number; pct: number }[] = [];
+    try {
+      const res: VmsWorkItemsResponse = await fetch(API_BASE + "/api/vms-work-items", { headers: authHeaders() }).then((r) => r.json());
+      if (res.available) {
+        for (const proj of res.projects) {
+          const qcProject = coll(data, "projects").find((p) => p.code === proj.projectCode);
+          if (fProject && qcProject?.id !== fProject) continue;
+          for (const wo of proj.workOrders) {
+            for (const item of wo.items) {
+              if (!(item.plannedQty > 0)) continue;
+              workOrderItemRows.push({
+                workItem: item.description,
+                projectName: qcProject?.name || proj.projectName || "—",
+                workOrderNo: wo.workOrderNo,
+                unit: item.unit,
+                planned: item.plannedQty,
+                completed: item.executedQty,
+                pct: Math.min(100, Math.round((item.executedQty / item.plannedQty) * 100))
+              });
+            }
+          }
+        }
+      }
+    } catch {
+      // Same tolerance as every other optional data source on this page —
+      // a VMS read hiccup must never block generating the rest of the report.
+    }
+    const workProgress = [...workTargetRows, ...workOrderItemRows]
+      .filter((w) => w.planned > 0).sort((a, b) => b.planned - a.planned).slice(0, 15);
 
     const periodLabel = rangeLabel;
     const OVERDUE_DAYS = 3;

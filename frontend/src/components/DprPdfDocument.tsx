@@ -129,9 +129,12 @@ export interface DprPdfData {
     vendorBreakdown: { vendorCode: string; vendorName: string; workType: string; labourCount: number }[];
   }[];
   workTypeSummary: { workType: string; entries: number; pct: number }[];
-  // No Work Order column — QC has no Work Order entity, only a per-
-  // project+category Work Target, so each row is just that.
-  workProgress: { workItem: string; projectName: string; unit: string; planned: number; completed: number; pct: number }[];
+  // workOrderNo is "—" for a QC-native Work Target row, and the real VMS
+  // Work Order number for a synced WorkOrderItem row (see syncWorkOrderToQc
+  // in VMS's syncToQc.js) — the two sources are merged into one table,
+  // distinguished by this column, matching VMS's own equivalent PDF's
+  // column order exactly.
+  workProgress: { workItem: string; projectName: string; workOrderNo: string; unit: string; planned: number; completed: number; pct: number }[];
   drawingRequests: { ticketNo: string; description: string; projectName: string; driName: string; stageLabel: string; requestedOn: string; daysSince: number }[];
   actionItems: { level: "critical" | "warning" | "good"; text: string }[];
 }
@@ -188,9 +191,9 @@ function DprDocument({ data: s }: { data: DprPdfData }) {
 
         <DataTable
           title="Work Progress — Planned vs Completed"
-          columns={["Work Item", "Project", "Unit", "Planned", "Completed", "Progress"]}
-          widths={[1.5, 1.3, 0.6, 0.8, 0.8, 0.7]}
-          rows={s.workProgress.map((w) => [w.workItem, w.projectName, w.unit || "—", w.planned.toLocaleString("en-IN"), w.completed.toLocaleString("en-IN"), `${w.pct}%`])}
+          columns={["Work Item", "Project", "Work Order", "Unit", "Planned", "Completed", "Progress"]}
+          widths={[1.3, 1.1, 0.8, 0.5, 0.7, 0.7, 0.6]}
+          rows={s.workProgress.map((w) => [w.workItem, w.projectName, w.workOrderNo, w.unit || "—", w.planned.toLocaleString("en-IN"), w.completed.toLocaleString("en-IN"), `${w.pct}%`])}
           emptyLabel="No Work Targets set for this filter yet."
         />
 
