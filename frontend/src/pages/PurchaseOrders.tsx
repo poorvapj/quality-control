@@ -12,6 +12,10 @@ import type { PurchaseOrder } from "../types";
 
 const qty = (n: number) => n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
 const ITEMS_PREVIEW_COUNT = 2;
+// IMS sometimes sends a full ISO timestamp ("2026-09-30T10:56:29.266Z")
+// instead of a plain date for these fields — show just the date part so a
+// long timestamp never overflows into the next column.
+const fmtDate = (s?: string) => (s ? s.slice(0, 10) : "—");
 
 function statusColor(status: string): "green" | "amber" | "gray" {
   if (status === "Approved" || status.toLowerCase().includes("fulfilled")) return "green";
@@ -143,8 +147,8 @@ export default function PurchaseOrders() {
                   {po.items.length === 0 && <span className="text-[var(--text-sub)]">—</span>}
                 </div>
               </TableCell>
-              <TableCell muted className="whitespace-nowrap cursor-pointer" onClick={() => setSelected(po)}>{po.date || "—"}</TableCell>
-              <TableCell muted className="whitespace-nowrap cursor-pointer" onClick={() => setSelected(po)}>{po.deliveryDate || "—"}</TableCell>
+              <TableCell muted className="whitespace-nowrap cursor-pointer" onClick={() => setSelected(po)}>{fmtDate(po.date)}</TableCell>
+              <TableCell muted className="whitespace-nowrap cursor-pointer" onClick={() => setSelected(po)}>{fmtDate(po.deliveryDate)}</TableCell>
             </TableRow>
           ))}
         </Table>
@@ -178,11 +182,11 @@ function PurchaseOrderDetail({ po, onClose }: { po: PurchaseOrder | null; onClos
             </div>
             <div>
               <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Order Date</div>
-              <div className="text-[13px]">{po.date || "—"}</div>
+              <div className="text-[13px]">{fmtDate(po.date)}</div>
             </div>
             <div>
               <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Delivery Date</div>
-              <div className="text-[13px]">{po.deliveryDate || "—"}</div>
+              <div className="text-[13px]">{fmtDate(po.deliveryDate)}</div>
             </div>
             {po.phase && (
               <div>

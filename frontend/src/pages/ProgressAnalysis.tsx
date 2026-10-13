@@ -316,7 +316,7 @@ function ProjectDetailPanel({
       {purchaseOrders.length === 0 ? (
         <Card className="mb-5 !py-3"><div className="text-[12px] text-[var(--text-sub)]">No Purchase Orders received from IMS for this project yet.</div></Card>
       ) : (
-        <div className="flex flex-col gap-2 mb-5">
+        <div className="flex flex-col gap-2 mb-5 overflow-y-auto pr-1" style={{ maxHeight: 320 }}>
           {purchaseOrders.map((po) => (
             <Card key={po.id} className="!py-3">
               <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -324,7 +324,7 @@ function ProjectDetailPanel({
                 <Badge color={po.status === "Approved" ? "green" : "amber"}><span className="whitespace-nowrap">{po.status}</span></Badge>
               </div>
               <div className="text-[11px] text-[var(--text-muted)] mt-1">
-                {po.date ? `Ordered ${po.date}` : ""}{po.deliveryDate ? ` · Delivery ${po.deliveryDate}` : ""}{po.milestone ? ` · ${po.milestone}` : ""}
+                {po.date ? `Ordered ${po.date.slice(0, 10)}` : ""}{po.deliveryDate ? ` · Delivery ${po.deliveryDate.slice(0, 10)}` : ""}{po.milestone ? ` · ${po.milestone}` : ""}
               </div>
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {po.items.map((it, idx) => (
