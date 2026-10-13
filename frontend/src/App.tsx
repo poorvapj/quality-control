@@ -10,10 +10,12 @@ import ChecklistModal from "./components/ChecklistModal";
 import RecordModal from "./components/RecordModal";
 import Dashboard from "./pages/Dashboard";
 import MISDashboard from "./pages/MISDashboard";
+import Measurement from "./pages/Measurement";
 import ExecutionReconciliation from "./pages/ExecutionReconciliation";
 import QualityInspection from "./pages/QualityInspection";
 import UnitExecutionWorkflow from "./pages/UnitExecutionWorkflow";
 import ProgressAnalysis from "./pages/ProgressAnalysis";
+import PurchaseOrders from "./pages/PurchaseOrders";
 import MyWork from "./pages/MyWork";
 import TowerBoard from "./pages/TowerBoard";
 import HandoverChecklist from "./pages/HandoverChecklist";
@@ -42,7 +44,9 @@ export default function App() {
     executionReconciliation: <ExecutionReconciliation />,
     qualityInspection: <QualityInspection />,
     unitExecutionWorkflow: <UnitExecutionWorkflow />,
+    measurement: <Measurement />,
     progressAnalysis: <ProgressAnalysis />,
+    purchaseOrders: <PurchaseOrders />,
     work: <MyWork />,
     board: <TowerBoard />,
     handoverChecklist: <HandoverChecklist />,
@@ -85,7 +89,9 @@ export default function App() {
       (activeTab === "drawingRequests" && !isDri && !hasModuleGrant(data, currentUserId, "drawingRequests", "view")) ||
       (activeTab === "qualityInspection" && !hasModuleGrant(data, currentUserId, "qualityInspection", "view")) ||
       (activeTab === "unitExecutionWorkflow" && !hasModuleGrant(data, currentUserId, "qualityInspection", "view")) ||
+      (activeTab === "measurement" && !hasModuleGrant(data, currentUserId, "qualityInspection", "view")) ||
       (activeTab === "progressAnalysis" && !hasModuleGrant(data, currentUserId, "qualityInspection", "view")) ||
+      (activeTab === "purchaseOrders" && !hasModuleGrant(data, currentUserId, "qualityInspection", "view")) ||
       // MIS Dashboard is management/CEO-level cross-project analytics —
       // admin-only, same as Permission Matrix, not additively grantable.
       activeTab === "misDashboard" ||

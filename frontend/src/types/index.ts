@@ -597,6 +597,40 @@ export interface MaterialMeasurement extends BaseRecord {
   createdAt: number;
 }
 
+/* Measurement module — an independently measured quantity for one Work
+   Category at one location, entered WITHOUT a Work Order number. Reference-
+   only: it never changes billing, approvals, quality statuses or VMS
+   production records. The `linked*` fields are set by the SERVER from live
+   VMS data (backend/workMeasurementRules.js), never trusted from the client:
+     auto       — exactly one VMS scope item matched (category + location)
+     confirmed  — several matched and a person chose one
+     ambiguous  — several matched, no choice yet (unlinked, needs confirming)
+     unmatched  — nothing in VMS matched (unlinked); linkNote says why */
+export type WorkMeasurementLinkStatus = "auto" | "confirmed" | "ambiguous" | "unmatched";
+export interface WorkMeasurement extends BaseRecord {
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  location: { tower?: string; floor?: string; flat?: string; area?: string };
+  category: string; // a VMS category name, e.g. "Plastering work"
+  measurementDate: string; // "YYYY-MM-DD"
+  measuredQty: number;
+  measuredUnit: string;
+  dimensions?: { length?: number; width?: number; height?: number; thickness?: number };
+  photos: Photo[];
+  remarks?: string;
+  recordedByUserId: string;
+  recordedByName: string;
+  createdAt: number;
+  linkStatus?: WorkMeasurementLinkStatus;
+  linkNote?: string | null;
+  linkedWorkOrderNo?: string | null;
+  linkedItemId?: string | null;
+  linkedItemType?: "scopeItem" | "subItem" | null;
+  linkedItemDescription?: string | null;
+  linkedItemUnit?: string | null;
+}
+
 /* Synced from IMS's "PO_APPROVED" webhook event (backend/imsWebhook.js
    sanitizes the raw event before it ever reaches this collection) —
    deliberately a narrow, non-financial subset: no vendor GST/PAN/bank
@@ -647,6 +681,7 @@ export interface BoardData {
   formSubmissions: CustomFormSubmission[];
   qualityInspections: QualityInspection[];
   materialMeasurements: MaterialMeasurement[];
+  workMeasurements: WorkMeasurement[];
   purchaseOrders: PurchaseOrder[];
   progress: Record<string, ProgressPatch>;
   events: EventLog[];
@@ -661,7 +696,7 @@ export type Op =
   | { op: "progress"; key: string; patch: Partial<ProgressPatch> }
   | { op: "event"; ev: EventLog };
 
-export type TabKey = "dash" | "misDashboard" | "executionReconciliation" | "qualityInspection" | "unitExecutionWorkflow" | "progressAnalysis" | "work" | "board" | "handoverChecklist" | "handoverInternal" | "handoverOwner" | "snags" | "team" | "masters" | "addUser" | "dpr" | "drawingRequests" | "backups" | "auditLog" | "permissionMatrix";
+export type TabKey = "dash" | "misDashboard" | "executionReconciliation" | "qualityInspection" | "unitExecutionWorkflow" | "measurement" | "progressAnalysis" | "purchaseOrders" | "work" | "board" | "handoverChecklist" | "handoverInternal" | "handoverOwner" | "snags" | "team" | "masters" | "addUser" | "dpr" | "drawingRequests" | "backups" | "auditLog" | "permissionMatrix";
 export type MasterKey = "projects" | "floors" | "units" | "stages" | "qparams" | "checklists" | "stagemap" | "users" | "permissions" | "workTargets" | "teams" | "roles" | "forms";
 
 export type FieldType = "text" | "number" | "date" | "color" | "select" | "ref" | "bool" | "textarea" | "items" | "password" | "permissionGrid" | "formFields";

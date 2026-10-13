@@ -341,8 +341,8 @@ function ProjectDetailPanel({
       <Card padded={false} className="p-[14px]">
         <Table
           columns={["Work Order", "Item", "Planned", "Completed", "% of Plan", "Variance / Sign-off", "Billed / Unbilled", ""]}
-          colWidths={["13%", "20%", "11%", "11%", "9%", "14%", "16%", "6%"]}
           colAligns={["left", "left", "right", "right", "right", "left", "right", "left"]}
+          maxHeight="440px"
           empty="No items match these filters."
         >
           {rows.map(({ workOrderNo, item, completedQty, billedQty, unbilledQty, locations }) => {

@@ -31,7 +31,8 @@ const COLLECTIONS = [
   "formSubmissions",   // Responses to a custom form (public or in-app)
   "qualityInspections", // Work Quality Inspection records (Pass/Fail/Rework Required) against a VMS project/work-order/work-item
   "materialMeasurements", // Unit Execution Workflow's measurement step — measured qty + material consumption, Store integration deferred
-  "purchaseOrders" // Synced from IMS's PO_APPROVED webhook (imsWebhook.js) — sanitized, non-financial subset only; matched to a QC project by exact name, never fuzzy
+  "purchaseOrders", // Synced from IMS's PO_APPROVED webhook (imsWebhook.js) — sanitized, non-financial subset only; matched to a QC project by exact name, never fuzzy
+  "workMeasurements" // Independently measured quantity per Project → Tower/Floor/Flat/Area → Work Category, reference-only link to a VMS scope item (workMeasurementRules.js)
 ];
 
 function blankData() {

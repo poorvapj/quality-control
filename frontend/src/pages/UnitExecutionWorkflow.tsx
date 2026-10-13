@@ -17,7 +17,7 @@ import type { MaterialMeasurement, Unit as QcUnit } from "../types";
 
 interface VmsWorkItem {
   itemId: string; itemType: "scopeItem" | "subItem"; parentItemId: string | null;
-  description: string; unit: string; executedQty: number; locations: string[];
+  description: string; unit: string; plannedQty: number; executedQty: number; locations: string[];
 }
 interface VmsWorkOrderEntry { workOrderNo: string; items: VmsWorkItem[] }
 interface VmsProjectEntry { projectCode: string; projectName: string; workOrders: VmsWorkOrderEntry[] }
@@ -332,7 +332,44 @@ function MeasurementForm({
         <div className="field" />
 
         <div className="field">
-          <label>Measured Quantity *</label>
+          <label>VMS Work Order (optional)</label>
+          {workItems && !workItems.available && (
+            <div className="empty" style={{ marginBottom: 6 }}>VMS work items are unavailable right now ({workItems.reason}).</div>
+          )}
+          <select className="select" value={workOrderNo} disabled={!projectEntry} onChange={(e) => { setWorkOrderNo(e.target.value); setItemId(""); }}>
+            <option value="">— none —</option>
+            {projectEntry?.workOrders.map((w) => <option key={w.workOrderNo} value={w.workOrderNo}>{w.workOrderNo}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label>VMS Work Item (optional)</label>
+          <select
+            className="select"
+            value={itemId}
+            disabled={!workOrderEntry}
+            onChange={(e) => {
+              const id = e.target.value;
+              setItemId(id);
+              const picked = workOrderEntry?.items.find((i) => i.itemId === id);
+              if (picked && !measuredUnit) setMeasuredUnit(picked.unit);
+            }}
+          >
+            <option value="">— not linked to a VMS item —</option>
+            {workOrderEntry?.items.map((i) => <option key={i.itemId} value={i.itemId}>{i.itemType === "subItem" ? "↳ " : ""}{i.description} ({i.unit})</option>)}
+          </select>
+        </div>
+
+        {itemEntry && (
+          <div className="field full" style={{ marginTop: -6 }}>
+            <div className="text-[11.5px] border border-[var(--border)] rounded-radius-sm px-2.5 py-2 bg-[var(--bg-subtle)]">
+              <span className="font-semibold">Planned (VMS):</span> {itemEntry.plannedQty || <span className="text-[var(--text-sub)]">Data unavailable</span>} {itemEntry.unit}
+              {" · "}<span className="font-semibold">Executed so far:</span> {itemEntry.executedQty} {itemEntry.unit}
+            </div>
+          </div>
+        )}
+
+        <div className="field">
+          <label>Actual Measured Quantity *</label>
           <input className="input" type="number" min="0" value={measuredQty} onChange={(e) => setMeasuredQty(e.target.value)} />
         </div>
         <div className="field">

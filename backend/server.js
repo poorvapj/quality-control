@@ -66,6 +66,7 @@ const { getVmsWorkItems } = require("./vmsWorkItems.js");
 const { shouldResolveOriginal } = require("./qualityInspectionRules.js");
 const { validateMeasurement } = require("./materialMeasurementRules.js");
 const { getProgressAnalysis } = require("./progressAnalysis.js");
+const workMeasurements = require("./workMeasurementRules.js");
 const { sanitizePoEvent, matchProjectByName } = require("./imsWebhook.js");
 
 /* ------------------------------------------------------------- passwords
@@ -749,6 +750,18 @@ async function assertOpAllowed(op, session) {
     return;
   }
 
+  if (op.op === "upsert" && op.coll === "workMeasurements" && op.rec) {
+    if (!session) { const e = new Error("Sign-in required"); e.status = 401; throw e; }
+    const err = workMeasurements.validateWorkMeasurement(op.rec);
+    if (err) { const e = new Error(err); e.status = 400; throw e; }
+    // The link is never taken from the client as-is: it is re-derived from
+    // live VMS data here (a client-proposed item is only honoured if it is
+    // one of the verified candidates). Reference-only — nothing is written
+    // to VMS or to any other QC record.
+    Object.assign(op.rec, await workMeasurements.resolveLink(op.rec));
+    return;
+  }
+
   if (op.op === "upsert" && op.coll === "materialMeasurements" && op.rec) {
     if (!session) { const e = new Error("Sign-in required"); e.status = 401; throw e; }
     const err = validateMeasurement(op.rec);
@@ -1398,6 +1411,24 @@ async function handleApi(req, res, urlPath) {
     if (!session) return sendJson(res, 401, { error: "Sign-in required" });
     const result = await getVmsWorkItems();
     return sendJson(res, 200, result);
+  }
+  if (urlPath.startsWith("/api/work-measurements/")) {
+    // Read-only helpers for the Measurement page. Signed-in only, same level
+    // as /api/vms-work-items; no rate/amount is ever read or returned.
+    const session = getSession(req);
+    if (!session) return sendJson(res, 401, { error: "Sign-in required" });
+    if (req.method === "GET" && urlPath === "/api/work-measurements/categories") {
+      return sendJson(res, 200, await workMeasurements.getCategories());
+    }
+    if (req.method === "POST" && urlPath === "/api/work-measurements/match") {
+      const body = await readBody(req);
+      if (!body.projectCode) return sendJson(res, 400, { error: "projectCode is required" });
+      return sendJson(res, 200, await workMeasurements.findMatches(body));
+    }
+    if (req.method === "GET" && urlPath === "/api/work-measurements/comparison") {
+      const rows = await mongoDb.collection("workMeasurements").find({ linkedItemId: { $ne: null } }).toArray();
+      return sendJson(res, 200, await workMeasurements.getComparisons(rows));
+    }
   }
   if (req.method === "GET" && urlPath === "/api/progress-analysis") {
     // Project-wise planned-vs-completed VMS progress, variance/sign-off

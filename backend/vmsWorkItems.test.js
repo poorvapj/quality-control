@@ -24,7 +24,7 @@ async function main() {
           _id: "wo1", workOrderNo: "WO-0001", projectId: "p1", projectName: "Zen Garden",
           scopeItems: [
             {
-              _id: "si1", description: "Plinth Beam", unit: "R.ft", rate: 130,
+              _id: "si1", description: "Plinth Beam", unit: "R.ft", rate: 130, plannedQty: 500,
               progressEntries: [
                 { qtyAdded: 100, tower: "A", floor: "1" },
                 { qtyAdded: 999, invalidated: { done: true, reason: "duplicate" } }
@@ -52,9 +52,11 @@ async function main() {
     assert.ok(!("rate" in scopeItem), "rate must never be exposed on this non-financial endpoint");
     assert.ok(!("amount" in scopeItem));
     assert.strictEqual(scopeItem.executedQty, 100, "excludes the invalidated 999 entry, same rule as Execution Reconciliation");
+    assert.strictEqual(scopeItem.plannedQty, 500, "planned qty is read from VMS's own stored field, for the Measurement form's reference display");
     assert.deepStrictEqual(scopeItem.locations, ["A / 1"]);
     const subItem = wo.items.find((i) => i.itemType === "subItem");
     assert.strictEqual(subItem.parentItemId, "si1");
+    assert.strictEqual(subItem.plannedQty, 0, "a sub-item with no stored plannedQty defaults to 0, never fabricated");
   });
 
   console.log(`\n${passed} passed`);

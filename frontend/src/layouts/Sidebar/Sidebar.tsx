@@ -73,7 +73,9 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
         ...(canViewDrawingRequests ? [{ key: "drawingRequests" as TabKey, icon: "drawing", label: "Drawing Requests" }] : []),
         ...(canViewQualityInspection ? [{ key: "qualityInspection" as TabKey, icon: "eye", label: "Work Quality Inspection" }] : []),
         ...(canViewQualityInspection ? [{ key: "unitExecutionWorkflow" as TabKey, icon: "layers", label: "Unit Execution & Measurement" }] : []),
-        ...(canViewQualityInspection ? [{ key: "progressAnalysis" as TabKey, icon: "trend", label: "Progress Analysis" }] : [])
+        ...(canViewQualityInspection ? [{ key: "measurement" as TabKey, icon: "ruler", label: "Measurement" }] : []),
+        ...(canViewQualityInspection ? [{ key: "progressAnalysis" as TabKey, icon: "trend", label: "Progress Analysis" }] : []),
+        ...(canViewQualityInspection ? [{ key: "purchaseOrders" as TabKey, icon: "package", label: "Purchase Orders" }] : [])
       ]
     },
     {
