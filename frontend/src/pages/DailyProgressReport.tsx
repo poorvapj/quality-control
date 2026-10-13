@@ -195,17 +195,22 @@ export default function DailyProgressReportPage() {
         v.labourCount += r.labourCount || 0;
         r.workEntries.forEach((we) => v.categories.add(we.category));
       }
-      const majorWorkType = Array.from(catCounts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] || "—";
+      // Tie-broken alphabetically — two categories with the same count must
+      // always pick the same winner, regardless of which DPR row happened
+      // to be processed first (that order isn't guaranteed stable, which is
+      // exactly what made this flip between two generations of the same
+      // report with identical underlying counts).
+      const majorWorkType = Array.from(catCounts.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] || "—";
       const prevTotal = prevBounds ? prevRows.filter((r) => r.projectId === project.id).reduce((a, r) => a + (r.labourCount || 0), 0) : null;
       const changePct = prevTotal != null && prevTotal > 0 ? Math.round(((total - prevTotal) / prevTotal) * 100) : null;
       const vendorBreakdown = Array.from(byVendor.values())
-        .sort((a, b) => b.labourCount - a.labourCount)
+        .sort((a, b) => b.labourCount - a.labourCount || a.vendorCode.localeCompare(b.vendorCode))
         .map((v) => ({ vendorCode: v.vendorCode, vendorName: v.vendorName, workType: Array.from(v.categories).join(", ") || "—", labourCount: v.labourCount }));
       return { projectName: project.name, labour: total, contractors: byVendor.size, reportsCount: projRows.length, majorWorkType, changePct, vendorBreakdown };
     });
 
     const workTypeSummary = Array.from(categoryEntryCounts.entries())
-      .sort((a, b) => b[1] - a[1])
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])) // same tie-break reasoning as majorWorkType above
       .map(([workType, entries]) => ({ workType, entries, pct: Math.round((entries / totalEntries) * 100) }));
 
     const workTargetRows = allWorkTargets.map((t) => {
@@ -327,7 +332,7 @@ export default function DailyProgressReportPage() {
       return { project: p, total };
     })
     .filter((x) => x.total > 0)
-    .sort((a, b) => b.total - a.total);
+    .sort((a, b) => b.total - a.total || a.project.name.localeCompare(b.project.name));
   const labourGrandTotal = labourByProject.reduce((a, x) => a + x.total, 0) || 1;
 
   // Planned vs Completed — planned comes from Work Targets (one row per
