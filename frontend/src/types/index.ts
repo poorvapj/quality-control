@@ -156,6 +156,13 @@ export interface User extends BaseRecord {
 export interface Team extends BaseRecord {
   name: string;
   leaderId?: string;
+  // Restricts membership to one Role (built-in or custom, e.g. "Execution")
+  // — set so a team meant for one role can never silently pick up a member
+  // of a different role (AddUser.tsx only offers teams matching the user's
+  // own role, and the team-roster views filter on it too, defensively).
+  // Omitted/undefined = unrestricted, matching every team created before
+  // this field existed.
+  role?: string;
   active?: boolean;
 }
 

@@ -20,7 +20,7 @@ export default function Team() {
   const users = fullAccess
     ? allActiveUsers
     : myTeam
-    ? allActiveUsers.filter((u) => u.teamId === myTeam.id || u.id === myTeam.leaderId)
+    ? allActiveUsers.filter((u) => (u.teamId === myTeam.id && (!myTeam.role || u.role === myTeam.role)) || u.id === myTeam.leaderId)
     : [];
   // Team workload is org-wide, not tied to whichever project happens to be
   // globally selected — same class of bug fixed in My Work: scoping to

@@ -44,7 +44,7 @@ export default function RoleDashboard() {
   const anySection = canQuality || canUnitExecution || canMeasurement || canProgressAnalysis || canPurchaseOrders;
 
   const myTeam = coll(data, "teams").find((t) => t.leaderId === currentUserId) || null;
-  const teamMembers = myTeam ? coll(data, "users").filter((u) => u.teamId === myTeam.id && u.active !== false) : [];
+  const teamMembers = myTeam ? coll(data, "users").filter((u) => u.teamId === myTeam.id && u.active !== false && (!myTeam.role || u.role === myTeam.role)) : [];
   const teamRows = teamMembers.map((u) => {
     const a = coll(data, "assignments").filter((x) => x.assignedTo === u.id && x.status !== "Done" && projectIds.includes(x.projectId));
     const s = coll(data, "snags").filter((x) => x.assignedTo === u.id && x.status !== "Closed" && projectIds.includes(x.projectId));

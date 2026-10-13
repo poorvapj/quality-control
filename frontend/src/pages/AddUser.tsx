@@ -38,7 +38,11 @@ export default function AddUser() {
   const [role, setRole] = useState<Role>("CIVIL");
   const [teamId, setTeamId] = useState("");
   const [active, setActive] = useState(true);
-  const teams = coll(data, "teams").filter((t) => t.active !== false);
+  // Only a team with no role restriction, or one restricted to the exact
+  // role being assigned, is offered — never lets an Execution team pick up
+  // a Quality-role member by accident. Changing Role after picking a Team
+  // clears the Team if it no longer matches (see onChange below).
+  const teams = coll(data, "teams").filter((t) => t.active !== false && (!t.role || t.role === role));
   const [grants, setGrants] = useState<Record<string, Partial<Record<ModuleAction, boolean>>>>({});
   const [saving, setSaving] = useState(false);
 
@@ -122,7 +126,18 @@ export default function AddUser() {
           </div>
           <div>
             <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Role *</div>
-            <select className="select w-full" value={role} onChange={(e) => setRole(e.target.value as Role)}>
+            <select
+              className="select w-full"
+              value={role}
+              onChange={(e) => {
+                const newRole = e.target.value as Role;
+                setRole(newRole);
+                // Drop a Team pick that's restricted to a different role —
+                // never leave a stale, now-mismatched Team selected.
+                const currentTeam = coll(data, "teams").find((t) => t.id === teamId);
+                if (currentTeam?.role && currentTeam.role !== newRole) setTeamId("");
+              }}
+            >
               {roleOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
