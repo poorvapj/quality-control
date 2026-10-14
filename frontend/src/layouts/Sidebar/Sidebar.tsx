@@ -180,7 +180,7 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
                       className={"nx-nav-item" + (isActive || childActive ? " nx-nav-item--active" : "")}
                       title={collapsed ? it.label : undefined}
                       style={{
-                        width: "100%",
+                        width: "calc(100% - 20px)",
                         background: "none",
                         border: "none",
                         cursor: "pointer",
@@ -235,7 +235,7 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
                               onClick={() => { setActiveTab(c.key); onNavigate(); }}
                               className={"nx-nav-item" + (cActive ? " nx-nav-item--active" : "")}
                               style={{
-                                width: "100%",
+                                width: "calc(100% - 20px)",
                                 background: "none",
                                 border: "none",
                                 cursor: "pointer",
