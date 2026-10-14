@@ -177,7 +177,7 @@ export default function DprForm({ isPublic, onDone }: { isPublic: boolean; onDon
 
       <div className="micro-label" style={{ marginBottom: 4 }}>WORK TYPE — CHECK WHAT HAPPENED TODAY</div>
       <div className="card card-pad">
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10, maxHeight: 260, overflowY: "auto", paddingRight: 4 }}>
           {WORK_CATEGORIES.map((cat) => (
             <div key={cat} className="check-row" style={{ padding: "8px 10px", border: "1px solid var(--border)", borderRadius: "var(--radius-md)" }}>
               <input type="checkbox" id={"cat-" + cat} checked={!!checked[cat]} onChange={() => toggleCategory(cat)} />
