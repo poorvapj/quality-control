@@ -123,10 +123,11 @@ export default function DprForm({ isPublic, onDone }: { isPublic: boolean; onDon
       <div className="form-grid" style={{ marginBottom: 20 }}>
         <div className="field">
           <label>Project *</label>
-          <select className="select" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-            <option value="">Choose</option>
-            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          <SearchDropdown
+            value={projectId}
+            onChange={setProjectId}
+            options={[{ value: "", label: "Choose" }, ...projects.map((p) => ({ value: p.id, label: p.name }))]}
+          />
         </div>
         <div className="field">
           <label>Contractor name *</label>
