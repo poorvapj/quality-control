@@ -16,6 +16,28 @@ export function authHeaders(): Record<string, string> {
   }
 }
 
+/* Every background poll re-downloads the ENTIRE state blob (every
+ * collection, full documents) as a fresh JSON.parse, so a plain `setData`
+ * hands every collection array a brand-new reference even when nothing in
+ * it changed — forcing every `useMemo(..., [data])` across the app (DRI
+ * score, MIS dashboard, etc.) to recompute on every single poll tick that
+ * picked up ANYONE's unrelated write. Reusing the previous array reference
+ * per-collection when its content is unchanged lets those memos actually
+ * skip recomputation. Cheap: runs once per poll (every 5s, only when the
+ * revision changed), not on every render. */
+function mergeStableCollections(prev: BoardData | null, next: BoardData): BoardData {
+  if (!prev) return next;
+  const merged: any = { ...next };
+  for (const key of Object.keys(next) as (keyof BoardData)[]) {
+    const prevVal = (prev as any)[key];
+    const nextVal = (next as any)[key];
+    if (prevVal !== undefined && prevVal !== nextVal && JSON.stringify(prevVal) === JSON.stringify(nextVal)) {
+      merged[key] = prevVal;
+    }
+  }
+  return merged;
+}
+
 /* Mirror of the server's op handler so optimistic updates match exactly. */
 function applyOpsLocal(d: BoardData, ops: Op[]) {
   for (const op of ops) {
@@ -201,7 +223,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const j = await r.json();
         if (j.rev !== revRef.current) {
           const s = await (await fetch(API_BASE + "/api/state", { cache: "no-store" })).json();
-          setData(s.data); dataRef.current = s.data;
+          const merged = mergeStableCollections(dataRef.current, s.data);
+          setData(merged); dataRef.current = merged;
           setRev(s.rev); revRef.current = s.rev;
         }
       } catch {

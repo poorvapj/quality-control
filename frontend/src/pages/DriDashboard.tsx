@@ -53,9 +53,14 @@ export default function DriDashboard() {
 
   // My Quality Score — computed from the real Work Quality Inspection
   // records that name me as the responsible DRI (see shared/driQuality.ts).
+  // Scoped to just these two collections (not the whole `data` blob) so an
+  // unrelated write elsewhere (e.g. someone else's DPR submission) doesn't
+  // force this to recompute on every poll tick.
+  const qualityInspections = coll(data, "qualityInspections");
+  const allUsers = coll(data, "users");
   const driResult = useMemo(
-    () => computeDriScores(coll(data, "qualityInspections"), coll(data, "users")),
-    [data]
+    () => computeDriScores(qualityInspections, allUsers),
+    [qualityInspections, allUsers]
   );
   const myScore = driResult.scores.find((s) => s.userId === currentUserId) || null;
 
