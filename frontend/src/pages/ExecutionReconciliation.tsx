@@ -236,7 +236,7 @@ export default function ExecutionReconciliation() {
             <NavIcon name="bug" size={13} /> Unmapped billed lines ({unmappedBilled.length})
           </div>
           <Card padded={false}>
-            <Table columns={["Bill No", "Work Order", "Qty", "Value", "Reason"]}>
+            <Table columns={["Bill No", "Work Order", "Qty", "Value", "Reason"]} maxHeight="360px">
               {unmappedBilled.map((u, i) => (
                 <TableRow key={i}>
                   <TableCell strong>{u.billNo || "—"}</TableCell>
