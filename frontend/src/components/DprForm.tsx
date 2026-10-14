@@ -18,7 +18,9 @@ function slugCode(name: string): string {
 export default function DprForm({ isPublic, onDone }: { isPublic: boolean; onDone: (id: string) => void }) {
   const { data, apply, toast, currentUserId } = useApp();
   const projects = isPublic ? coll(data, "projects").filter((p) => p.active !== false) : myProjects(data, currentUserId);
-  const users = coll(data, "users").filter((u) => u.active !== false);
+  // Only Site In-charges (DRI) and Site Supervisors submit DPRs — not
+  // every active user (e.g. a Quality/Measurement/Execution team member).
+  const users = coll(data, "users").filter((u) => u.active !== false && (u.role === "DRI" || u.role === "SUPERVISOR"));
 
   const [projectId, setProjectId] = useState("");
   const [submittedByName, setSubmittedByName] = useState("");
@@ -131,7 +133,7 @@ export default function DprForm({ isPublic, onDone }: { isPublic: boolean; onDon
           <SearchDropdown
             value={vendorChoice}
             onChange={setVendorChoice}
-            options={[...vendorOptions, { value: OTHER_VENDOR, label: "+ Other (new contractor)" }]}
+            options={[{ value: "", label: "Choose" }, ...vendorOptions, { value: OTHER_VENDOR, label: "+ Other (new contractor)" }]}
           />
           {vendorChoice === OTHER_VENDOR && (
             <input
@@ -147,10 +149,11 @@ export default function DprForm({ isPublic, onDone }: { isPublic: boolean; onDon
           {isPublic ? (
             <input className="input" value={submittedByName} onChange={(e) => setSubmittedByName(e.target.value)} placeholder="Your name" />
           ) : (
-            <select className="select" value={submittedByName} onChange={(e) => setSubmittedByName(e.target.value)}>
-              <option value="">Choose</option>
-              {users.map((u) => <option key={u.id} value={u.name}>{u.name}</option>)}
-            </select>
+            <SearchDropdown
+              value={submittedByName}
+              onChange={setSubmittedByName}
+              options={[{ value: "", label: "Choose" }, ...users.map((u) => ({ value: u.name, label: u.name }))]}
+            />
           )}
           <div className="hint">Always required, independent of the logged-in account — so public submissions work too.</div>
         </div>
