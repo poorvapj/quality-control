@@ -21,7 +21,7 @@ export default function PhotoGroupUploader({ label, photos, onChange, optional }
         <label style={{ fontSize: 11, fontWeight: 700, color: "var(--text-main)" }}>{label}</label>
         {optional && <span style={{ fontSize: 10.5, color: "var(--text-muted)" }}>optional</span>}
       </div>
-      <input ref={inputRef} type="file" accept="image/*" capture="environment" multiple style={{ display: "none" }} onChange={(e) => { handleFiles(e.target.files); e.target.value = ""; }} />
+      <input ref={inputRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={(e) => { handleFiles(e.target.files); e.target.value = ""; }} />
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
         <button
           type="button"
