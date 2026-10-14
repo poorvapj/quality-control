@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, myProjects } from "../shared/rules";
 import { nextId } from "../shared/helpers";
@@ -15,12 +15,77 @@ function slugCode(name: string): string {
   return name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 20) || "VENDOR";
 }
 
+const CategoryGrid = React.memo(function CategoryGrid({ checked, onToggle }: { checked: Record<string, boolean>; onToggle: (cat: string) => void }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10, maxHeight: 260, overflowY: "auto", paddingRight: 4 }}>
+      {WORK_CATEGORIES.map((cat) => (
+        <div key={cat} className="check-row" style={{ padding: "8px 10px", border: "1px solid var(--border)", borderRadius: "var(--radius-md)" }}>
+          <input type="checkbox" id={"cat-" + cat} checked={!!checked[cat]} onChange={() => onToggle(cat)} />
+          <label htmlFor={"cat-" + cat}>{cat}</label>
+        </div>
+      ))}
+    </div>
+  );
+});
+
+type PhotoGroup = "generalPhotos" | "beforePhotos" | "afterPhotos";
+
+// One checked work type's qty/unit + three photo pickers. Memoised so typing
+// a quantity in one work type (or any header field) doesn't re-render the
+// photo thumbnails of every other checked work type.
+const CategoryEntry = React.memo(function CategoryEntry({ cat, entry, target, onQty, onPhotos }: {
+  cat: string; entry: DprWorkEntry | undefined; target: WorkTarget | undefined;
+  onQty: (cat: string, qty: string, unit: string) => void;
+  onPhotos: (cat: string, group: PhotoGroup, photos: Photo[]) => void;
+}) {
+  const onGeneral = useCallback((p: Photo[]) => onPhotos(cat, "generalPhotos", p), [cat, onPhotos]);
+  const onBefore = useCallback((p: Photo[]) => onPhotos(cat, "beforePhotos", p), [cat, onPhotos]);
+  const onAfter = useCallback((p: Photo[]) => onPhotos(cat, "afterPhotos", p), [cat, onPhotos]);
+  return (
+    <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{cat}</div>
+      <div className="form-grid" style={{ marginBottom: 10 }}>
+        <div className="field">
+          <label>Qty done today {target ? `(planned ${target.plannedQty} ${target.unit})` : ""}</label>
+          <input
+            className="input" type="number" min={0} step="any"
+            placeholder={target ? `e.g. in ${target.unit}` : "optional"}
+            value={entry?.qty ?? ""}
+            onChange={(e) => onQty(cat, e.target.value, entry?.unit || target?.unit || "")}
+          />
+        </div>
+        <div className="field">
+          <label>Unit</label>
+          <input
+            className="input" placeholder="e.g. sq.ft, cum, nos"
+            value={entry?.unit ?? target?.unit ?? ""}
+            onChange={(e) => onQty(cat, entry?.qty != null ? String(entry.qty) : "", e.target.value)}
+          />
+        </div>
+      </div>
+      <PhotoGroupUploader label="General / WIP photos" photos={entry?.generalPhotos || NO_PHOTOS} onChange={onGeneral} />
+      <PhotoGroupUploader label="Before photos" photos={entry?.beforePhotos || NO_PHOTOS} onChange={onBefore} />
+      <PhotoGroupUploader label="After photos" photos={entry?.afterPhotos || NO_PHOTOS} onChange={onAfter} />
+    </div>
+  );
+});
+
+const NO_PHOTOS: Photo[] = [];
+
 export default function DprForm({ isPublic, onDone }: { isPublic: boolean; onDone: (id: string) => void }) {
   const { data, apply, toast, currentUserId } = useApp();
-  const projects = isPublic ? coll(data, "projects").filter((p) => p.active !== false) : myProjects(data, currentUserId);
+  const projects = useMemo(
+    () => (isPublic ? coll(data, "projects").filter((p) => p.active !== false) : myProjects(data, currentUserId)),
+    [data, isPublic, currentUserId]
+  );
   // Only Site In-charges (DRI) and Site Supervisors submit DPRs — not
   // every active user (e.g. a Quality/Measurement/Execution team member).
-  const users = coll(data, "users").filter((u) => u.active !== false && (u.role === "DRI" || u.role === "SUPERVISOR"));
+  const users = useMemo(
+    () => coll(data, "users").filter((u) => u.active !== false && (u.role === "DRI" || u.role === "SUPERVISOR")),
+    [data]
+  );
+  const projectOptions = useMemo(() => [{ value: "", label: "Choose" }, ...projects.map((p) => ({ value: p.id, label: p.name }))], [projects]);
+  const userOptions = useMemo(() => [{ value: "", label: "Choose" }, ...users.map((u) => ({ value: u.name, label: u.name }))], [users]);
 
   const [projectId, setProjectId] = useState("");
   const [submittedByName, setSubmittedByName] = useState("");
@@ -33,44 +98,59 @@ export default function DprForm({ isPublic, onDone }: { isPublic: boolean; onDon
   const [entries, setEntries] = useState<Record<string, DprWorkEntry>>({});
   const [saving, setSaving] = useState(false);
 
-  function toggleCategory(cat: string) {
+  const toggleCategory = useCallback((cat: string) => {
     setChecked((c) => ({ ...c, [cat]: !c[cat] }));
     setEntries((e) => {
       if (e[cat]) return e;
       return { ...e, [cat]: { category: cat, generalPhotos: [], beforePhotos: [], afterPhotos: [] } };
     });
-  }
+  }, []);
 
-  function setEntryPhotos(cat: string, group: "generalPhotos" | "beforePhotos" | "afterPhotos", photos: Photo[]) {
+  const setEntryPhotos = useCallback((cat: string, group: PhotoGroup, photos: Photo[]) => {
     setEntries((e) => ({ ...e, [cat]: { ...e[cat], [group]: photos } }));
-  }
+  }, []);
 
-  function setEntryQty(cat: string, qty: string, unit: string) {
+  const setEntryQty = useCallback((cat: string, qty: string, unit: string) => {
     setEntries((e) => ({ ...e, [cat]: { ...e[cat], qty: qty === "" ? undefined : Number(qty), unit: unit || undefined } }));
-  }
+  }, []);
 
   const workTargets = coll(data, "workTargets") as WorkTarget[];
-  function targetFor(cat: string): WorkTarget | undefined {
-    return workTargets.find((t) => t.projectId === projectId && t.category === cat && t.active !== false);
-  }
+  // first active target per category for the chosen project, built once
+  // instead of a find() per category on every render
+  const targetsByCategory = useMemo(() => {
+    const m = new Map<string, WorkTarget>();
+    for (const t of workTargets) if (t.projectId === projectId && t.active !== false && !m.has(t.category)) m.set(t.category, t);
+    return m;
+  }, [workTargets, projectId]);
+  const targetFor = (cat: string): WorkTarget | undefined => targetsByCategory.get(cat);
 
   // Known contractors — the full VMS vendor master (migrated into the
   // "vendors" collection) merged with any vendorCode/vendorName pair seen
   // across past DPR submissions here that isn't in that master yet (e.g. a
   // contractor added via "Other" below). "Other" reveals a free-text field
   // for a contractor that isn't in either list.
-  const vendorByCode = new Map<string, { vendorCode: string; vendorName: string }>();
-  for (const v of coll(data, "vendors")) {
-    if (v.vendorCode) vendorByCode.set(v.vendorCode, { vendorCode: v.vendorCode, vendorName: v.vendorName });
-  }
-  for (const r of coll(data, "dpr")) {
-    if (r.vendorCode && !vendorByCode.has(r.vendorCode)) {
-      vendorByCode.set(r.vendorCode, { vendorCode: r.vendorCode, vendorName: r.vendorName });
+  const vendorsColl = coll(data, "vendors");
+  const dprColl = coll(data, "dpr");
+  // Cached on the two collections themselves: the loop over every vendor and
+  // every past DPR, plus the sort, used to re-run on every keystroke.
+  const { vendorByCode, contractorOptions } = useMemo(() => {
+    const byCode = new Map<string, { vendorCode: string; vendorName: string }>();
+    for (const v of vendorsColl) {
+      if (v.vendorCode) byCode.set(v.vendorCode, { vendorCode: v.vendorCode, vendorName: v.vendorName });
     }
-  }
-  const vendorOptions = Array.from(vendorByCode.values())
-    .sort((a, b) => a.vendorName.localeCompare(b.vendorName))
-    .map((r) => ({ value: r.vendorCode, label: `${r.vendorCode} — ${r.vendorName}` }));
+    for (const r of dprColl) {
+      if (r.vendorCode && !byCode.has(r.vendorCode)) {
+        byCode.set(r.vendorCode, { vendorCode: r.vendorCode, vendorName: r.vendorName });
+      }
+    }
+    const options = Array.from(byCode.values())
+      .sort((a, b) => a.vendorName.localeCompare(b.vendorName))
+      .map((r) => ({ value: r.vendorCode, label: `${r.vendorCode} — ${r.vendorName}` }));
+    return {
+      vendorByCode: byCode,
+      contractorOptions: [{ value: "", label: "Choose" }, ...options, { value: OTHER_VENDOR, label: "+ Other (new contractor)" }]
+    };
+  }, [vendorsColl, dprColl]);
   const resolvedVendor = vendorChoice === OTHER_VENDOR
     ? { vendorCode: slugCode(vendorNameOther), vendorName: vendorNameOther.trim() }
     : vendorByCode.get(vendorChoice) || null;
@@ -126,7 +206,7 @@ export default function DprForm({ isPublic, onDone }: { isPublic: boolean; onDon
           <SearchDropdown
             value={projectId}
             onChange={setProjectId}
-            options={[{ value: "", label: "Choose" }, ...projects.map((p) => ({ value: p.id, label: p.name }))]}
+            options={projectOptions}
           />
         </div>
         <div className="field">
@@ -134,7 +214,7 @@ export default function DprForm({ isPublic, onDone }: { isPublic: boolean; onDon
           <SearchDropdown
             value={vendorChoice}
             onChange={setVendorChoice}
-            options={[{ value: "", label: "Choose" }, ...vendorOptions, { value: OTHER_VENDOR, label: "+ Other (new contractor)" }]}
+            options={contractorOptions}
           />
           {vendorChoice === OTHER_VENDOR && (
             <input
@@ -153,7 +233,7 @@ export default function DprForm({ isPublic, onDone }: { isPublic: boolean; onDon
             <SearchDropdown
               value={submittedByName}
               onChange={setSubmittedByName}
-              options={[{ value: "", label: "Choose" }, ...users.map((u) => ({ value: u.name, label: u.name }))]}
+              options={userOptions}
             />
           )}
           <div className="hint">Always required, independent of the logged-in account — so public submissions work too.</div>
@@ -178,45 +258,11 @@ export default function DprForm({ isPublic, onDone }: { isPublic: boolean; onDon
 
       <div className="micro-label" style={{ marginBottom: 4 }}>WORK TYPE — CHECK WHAT HAPPENED TODAY</div>
       <div className="card card-pad">
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10, maxHeight: 260, overflowY: "auto", paddingRight: 4 }}>
-          {WORK_CATEGORIES.map((cat) => (
-            <div key={cat} className="check-row" style={{ padding: "8px 10px", border: "1px solid var(--border)", borderRadius: "var(--radius-md)" }}>
-              <input type="checkbox" id={"cat-" + cat} checked={!!checked[cat]} onChange={() => toggleCategory(cat)} />
-              <label htmlFor={"cat-" + cat}>{cat}</label>
-            </div>
-          ))}
-        </div>
+        <CategoryGrid checked={checked} onToggle={toggleCategory} />
 
-        {WORK_CATEGORIES.filter((c) => checked[c]).map((cat) => {
-          const target = targetFor(cat);
-          return (
-            <div key={cat} style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{cat}</div>
-              <div className="form-grid" style={{ marginBottom: 10 }}>
-                <div className="field">
-                  <label>Qty done today {target ? `(planned ${target.plannedQty} ${target.unit})` : ""}</label>
-                  <input
-                    className="input" type="number" min={0} step="any"
-                    placeholder={target ? `e.g. in ${target.unit}` : "optional"}
-                    value={entries[cat]?.qty ?? ""}
-                    onChange={(e) => setEntryQty(cat, e.target.value, entries[cat]?.unit || target?.unit || "")}
-                  />
-                </div>
-                <div className="field">
-                  <label>Unit</label>
-                  <input
-                    className="input" placeholder="e.g. sq.ft, cum, nos"
-                    value={entries[cat]?.unit ?? target?.unit ?? ""}
-                    onChange={(e) => setEntryQty(cat, entries[cat]?.qty != null ? String(entries[cat].qty) : "", e.target.value)}
-                  />
-                </div>
-              </div>
-              <PhotoGroupUploader label="General / WIP photos" photos={entries[cat]?.generalPhotos || []} onChange={(p) => setEntryPhotos(cat, "generalPhotos", p)} />
-              <PhotoGroupUploader label="Before photos" photos={entries[cat]?.beforePhotos || []} onChange={(p) => setEntryPhotos(cat, "beforePhotos", p)} />
-              <PhotoGroupUploader label="After photos" photos={entries[cat]?.afterPhotos || []} onChange={(p) => setEntryPhotos(cat, "afterPhotos", p)} />
-            </div>
-          );
-        })}
+        {WORK_CATEGORIES.filter((c) => checked[c]).map((cat) => (
+          <CategoryEntry key={cat} cat={cat} entry={entries[cat]} target={targetsByCategory.get(cat)} onQty={setEntryQty} onPhotos={setEntryPhotos} />
+        ))}
       </div>
 
       <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 20 }} disabled={saving} onClick={submit}>

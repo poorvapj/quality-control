@@ -2,8 +2,9 @@ import React, { useRef, useState } from "react";
 import { uploadPhoto } from "../shared/uploadPhoto";
 import type { Photo } from "../types";
 
-export default function PhotoGroupUploader({ label, photos, onChange, optional }: { label: string; photos: Photo[]; onChange: (photos: Photo[]) => void; optional?: boolean }) {
-  const inputRef = useRef<HTMLInputElement>(null);
+function PhotoGroupUploader({ label, photos, onChange, optional }: { label: string; photos: Photo[]; onChange: (photos: Photo[]) => void; optional?: boolean }) {
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
 
   async function handleFiles(files: FileList | null) {
@@ -21,30 +22,43 @@ export default function PhotoGroupUploader({ label, photos, onChange, optional }
         <label style={{ fontSize: 11, fontWeight: 700, color: "var(--text-main)" }}>{label}</label>
         {optional && <span style={{ fontSize: 10.5, color: "var(--text-muted)" }}>optional</span>}
       </div>
-      <input ref={inputRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={(e) => { handleFiles(e.target.files); e.target.value = ""; }} />
+      {/* Two explicit pickers so the person chooses: Camera opens the camera
+          straight away (capture), Gallery opens the photo library with
+          multi-select. A single plain input leaves it to each phone's browser. */}
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => { handleFiles(e.target.files); e.target.value = ""; }} />
+      <input ref={galleryRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={(e) => { handleFiles(e.target.files); e.target.value = ""; }} />
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => inputRef.current?.click()}
-          style={{
-            width: 56,
-            height: 56,
-            borderRadius: 10,
-            border: "1.5px dashed var(--border-strong)",
-            background: "var(--bg-subtle)",
-            color: "var(--text-muted)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 18,
-            cursor: busy ? "default" : "pointer",
-            flexShrink: 0
-          }}
-          title={busy ? "Uploading…" : "Add photo"}
-        >
-          {busy ? "…" : "📷"}
-        </button>
+        {([
+          { ref: cameraRef, icon: "📷", text: "Camera", title: "Take a photo with the camera" },
+          { ref: galleryRef, icon: "🖼️", text: "Gallery", title: "Choose photos from the gallery" }
+        ] as const).map((b) => (
+          <button
+            key={b.text}
+            type="button"
+            disabled={busy}
+            onClick={() => b.ref.current?.click()}
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: 10,
+              border: "1.5px dashed var(--border-strong)",
+              background: "var(--bg-subtle)",
+              color: "var(--text-muted)",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 2,
+              fontSize: 17,
+              cursor: busy ? "default" : "pointer",
+              flexShrink: 0
+            }}
+            title={busy ? "Uploading…" : b.title}
+          >
+            <span>{busy ? "…" : b.icon}</span>
+            <span style={{ fontSize: 9, fontWeight: 700, lineHeight: 1 }}>{b.text}</span>
+          </button>
+        ))}
         {photos.map((p, i) => (
           <div key={i} style={{ position: "relative", width: 56, height: 56, flexShrink: 0 }}>
             <img
@@ -64,3 +78,5 @@ export default function PhotoGroupUploader({ label, photos, onChange, optional }
     </div>
   );
 }
+
+export default React.memo(PhotoGroupUploader);
