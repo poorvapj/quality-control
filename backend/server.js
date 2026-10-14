@@ -561,6 +561,31 @@ async function getRev() {
   return doc ? doc.value : 0;
 }
 
+// getState() does a full unfiltered scan + JSON.stringify + gzip of every
+// collection — as dpr/purchaseOrders/etc. keep growing, that's real CPU +
+// Atlas round-trips, and every one of N concurrently-polling clients pays
+// it independently even when nothing changed between their requests. Cache
+// the last gzip buffer keyed by `rev`: every real write already calls
+// bumpRev(), so a rev match guarantees identical data — no staleness risk
+// from normal use. The short TTL is only a safety net for the rare
+// out-of-band write that bypasses bumpRev entirely (e.g. an ad-hoc cleanup
+// script run directly against Mongo) — such a change still surfaces within
+// 3s, no worse than today's 5s client poll interval already allows.
+let stateCache = null; // { rev, body (Buffer, gzip), builtAt }
+const STATE_CACHE_TTL_MS = 3000;
+
+async function getStateGzip() {
+  const rev = await getRev();
+  const fresh = stateCache && stateCache.rev === rev && Date.now() - stateCache.builtAt < STATE_CACHE_TTL_MS;
+  if (fresh) return { rev, body: stateCache.body };
+  const state = await getState();
+  const body = await new Promise((resolve, reject) =>
+    zlib.gzip(JSON.stringify(state), (err, buf) => (err ? reject(err) : resolve(buf)))
+  );
+  stateCache = { rev: state.rev, body, builtAt: Date.now() };
+  return { rev: state.rev, body };
+}
+
 async function getState() {
   // Every collection fetch here is an independent round-trip to Atlas —
   // awaiting them one at a time in a loop made total load time the SUM of
@@ -1236,17 +1261,13 @@ async function handleApi(req, res, urlPath) {
     return sendJson(res, 200, { rev: await getRev() });
   }
   if (req.method === "GET" && urlPath === "/api/state") {
-    const state = await getState();
     // The full board snapshot is the largest response this API ever sends
     // (thousands of units/progress/events records) — gzip it when the
     // client supports it (every browser does) instead of shipping raw JSON,
     // which was a big share of how long sign-in felt on slower connections.
-    const body = JSON.stringify(state);
     const acceptsGzip = String(req.headers["accept-encoding"] || "").includes("gzip");
     if (acceptsGzip) {
-      const compressed = await new Promise((resolve, reject) =>
-        zlib.gzip(body, (err, buf) => (err ? reject(err) : resolve(buf)))
-      );
+      const { body: compressed } = await getStateGzip();
       res.writeHead(200, {
         "Content-Type": "application/json; charset=utf-8",
         "Content-Encoding": "gzip",
@@ -1255,6 +1276,7 @@ async function handleApi(req, res, urlPath) {
       });
       return res.end(compressed);
     }
+    const state = await getState();
     return sendJson(res, 200, state);
   }
   if (req.method === "POST" && urlPath === "/api/login") {
