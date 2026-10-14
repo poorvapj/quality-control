@@ -52,6 +52,10 @@ function DataUnavailableTile({ label }: { label: string }) {
   );
 }
 
+// Both tables on this page (unmapped billed lines, reconciliation by work
+// item) scroll inside the same fixed height, so they always line up.
+const TABLE_MAX_HEIGHT = "480px";
+
 export default function ExecutionReconciliation() {
   const [data, setData] = useState<ReconResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -62,6 +66,7 @@ export default function ExecutionReconciliation() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [locationFilter, setLocationFilter] = useState("");
+  const [showZeroUnits, setShowZeroUnits] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -208,20 +213,36 @@ export default function ExecutionReconciliation() {
         />
       </div>
 
-      {totals.byUnit.size > 0 && (
-        <Card className="mb-6">
-          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-2.5">Executed Qty by Unit</div>
-          <div className="flex flex-wrap gap-2">
-            {Array.from(totals.byUnit.entries())
-              .sort((a, b) => b[1].executedQty - a[1].executedQty)
-              .map(([u, v]) => (
+      {totals.byUnit.size > 0 && (() => {
+        // Biggest first; units with nothing executed are tucked behind a toggle
+        // instead of filling the card with "0 …" chips.
+        const all = Array.from(totals.byUnit.entries()).sort((a, b) => b[1].executedQty - a[1].executedQty);
+        const withQty = all.filter(([, v]) => v.executedQty > 0);
+        const zeroCount = all.length - withQty.length;
+        const shown = showZeroUnits ? all : withQty;
+        return (
+          <Card className="mb-6">
+            <div className="flex items-center justify-between gap-3 flex-wrap mb-2.5">
+              <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
+                Executed Qty by Unit <span className="font-medium normal-case tracking-normal">· {withQty.length} unit{withQty.length === 1 ? "" : "s"} with progress</span>
+              </div>
+              {zeroCount > 0 && (
+                <button type="button" className="text-[11.5px] font-semibold text-[var(--theme-primary)]" onClick={() => setShowZeroUnits((v) => !v)}>
+                  {showZeroUnits ? "Hide" : "Show"} {zeroCount} unit{zeroCount === 1 ? "" : "s"} with 0
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2 max-h-[132px] overflow-y-auto pr-1">
+              {shown.map(([u, v]) => (
                 <div key={u} className="text-[12px] border border-[var(--border)] rounded-radius-sm px-2.5 py-1.5 whitespace-nowrap">
-                  <span className="font-semibold">{qty(v.executedQty)}</span> <span className="text-[var(--text-muted)]">{u || "unit"}</span>
+                  <span className="font-semibold tabular-nums">{qty(v.executedQty)}</span> <span className="text-[var(--text-muted)]">{u || "unit"}</span>
                 </div>
               ))}
-          </div>
-        </Card>
-      )}
+              {shown.length === 0 && <div className="text-[12px] text-[var(--text-muted)]">No executed quantity in the current filters.</div>}
+            </div>
+          </Card>
+        );
+      })()}
 
       <div className="text-[9px] font-semibold uppercase tracking-[0.1em] text-[var(--text-sub)] mb-2">QUALITY (NOT LINKED TO EXECUTION DATA)</div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
@@ -239,7 +260,7 @@ export default function ExecutionReconciliation() {
             <Table
               columns={["Bill No", "Work Order", "Qty", "Value", "Reason"]}
               colAligns={["left", "left", "right", "right", "left"]}
-              maxHeight="360px"
+              maxHeight={TABLE_MAX_HEIGHT}
             >
               {unmappedBilled.map((u, i) => (
                 <TableRow key={i}>
@@ -262,7 +283,7 @@ export default function ExecutionReconciliation() {
         <Table
           columns={["Project", "Work Order", "Item", "Unit", "Executed Qty", "Executed Value", "Billed Qty", "Billed Value", "Status", "Location(s)"]}
           colAligns={["left", "left", "left", "left", "right", "right", "right", "right", "left", "left"]}
-          maxHeight="560px"
+          maxHeight={TABLE_MAX_HEIGHT}
         >
           {filteredRows.map((r) => (
             <TableRow key={r.itemId}>
