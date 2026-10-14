@@ -355,6 +355,8 @@ function InspectionForm({
   const [inspectionDate, setInspectionDate] = useState(todayStr());
   const [workType, setWorkType] = useState("");
   const [contractor, setContractor] = useState("");
+  const [customContractor, setCustomContractor] = useState(false);
+  const vendors = coll(data, "vendors").filter((v) => v.status !== "inactive");
   const [checklist, setChecklist] = useState<{ text: string; status: ChecklistStatus | ""; remarks: string }[]>([]);
   const [result, setResult] = useState<QualityInspectionResult>("Pass");
   const [severity, setSeverity] = useState<Severity>("Major");
@@ -379,7 +381,7 @@ function InspectionForm({
       setWorkType(""); setChecklist([]);
     }
     setInspectionDate(todayStr());
-    setContractor("");
+    setContractor(""); setCustomContractor(false);
     setResult("Pass"); setSeverity("Major"); setRemarks(""); setPhotos([]);
     setAssignedToUserId(""); setTargetDate("");
   }, [open, reInspectOf]);
@@ -613,7 +615,25 @@ function InspectionForm({
 
         <div className="field">
           <label>Contractor</label>
-          <input className="input" value={contractor} onChange={(e) => setContractor(e.target.value)} placeholder="Optional" />
+          {!customContractor ? (
+            <select
+              className="select"
+              value={vendors.some((v) => v.vendorName === contractor) ? contractor : ""}
+              onChange={(e) => {
+                if (e.target.value === "__other__") { setCustomContractor(true); setContractor(""); }
+                else setContractor(e.target.value);
+              }}
+            >
+              <option value="">Select contractor…</option>
+              {vendors.map((v) => <option key={v.vendorCode} value={v.vendorName}>{v.vendorName}</option>)}
+              <option value="__other__">Other…</option>
+            </select>
+          ) : (
+            <div className="flex gap-1.5">
+              <input className="input" value={contractor} onChange={(e) => setContractor(e.target.value)} placeholder="Type contractor name" autoFocus />
+              <button type="button" className="btn btn-secondary" style={{ flexShrink: 0 }} onClick={() => { setCustomContractor(false); setContractor(""); }}>List</button>
+            </div>
+          )}
         </div>
 
         <div className="field">
