@@ -235,14 +235,18 @@ export default function ExecutionReconciliation() {
           <div className="text-[13px] font-bold tracking-tight text-[var(--text-sub)] uppercase flex items-center gap-2 mb-2.5">
             <NavIcon name="bug" size={13} /> Unmapped billed lines ({unmappedBilled.length})
           </div>
-          <Card padded={false}>
-            <Table columns={["Bill No", "Work Order", "Qty", "Value", "Reason"]} maxHeight="360px">
+          <Card padded={false} className="p-[18px]">
+            <Table
+              columns={["Bill No", "Work Order", "Qty", "Value", "Reason"]}
+              colAligns={["left", "left", "right", "right", "left"]}
+              maxHeight="360px"
+            >
               {unmappedBilled.map((u, i) => (
                 <TableRow key={i}>
-                  <TableCell strong>{u.billNo || "—"}</TableCell>
-                  <TableCell>{u.workOrderNo || "—"}</TableCell>
-                  <TableCell>{qty(u.qty)}</TableCell>
-                  <TableCell>₹{money(u.value)}</TableCell>
+                  <TableCell strong className="whitespace-nowrap">{u.billNo || "—"}</TableCell>
+                  <TableCell className="whitespace-nowrap">{u.workOrderNo || "—"}</TableCell>
+                  <TableCell className="text-right tabular-nums whitespace-nowrap">{qty(u.qty)}</TableCell>
+                  <TableCell className="text-right tabular-nums whitespace-nowrap">₹{money(u.value)}</TableCell>
                   <TableCell muted>{u.reason}</TableCell>
                 </TableRow>
               ))}
@@ -254,29 +258,30 @@ export default function ExecutionReconciliation() {
       <div className="text-[13px] font-bold tracking-tight text-[var(--text-sub)] uppercase flex items-center gap-2 mb-2.5">
         <NavIcon name="board" size={13} /> Reconciliation — by work item
       </div>
-      <Card padded={false}>
+      <Card padded={false} className="p-[18px]">
         <Table
           columns={["Project", "Work Order", "Item", "Unit", "Executed Qty", "Executed Value", "Billed Qty", "Billed Value", "Status", "Location(s)"]}
+          colAligns={["left", "left", "left", "left", "right", "right", "right", "right", "left", "left"]}
           maxHeight="560px"
         >
           {filteredRows.map((r) => (
             <TableRow key={r.itemId}>
-              <TableCell>{r.projectCode}</TableCell>
-              <TableCell>{r.workOrderNo}</TableCell>
-              <TableCell strong className={r.itemType === "subItem" ? "pl-5" : ""}>
+              <TableCell className="whitespace-nowrap">{r.projectCode}</TableCell>
+              <TableCell className="whitespace-nowrap">{r.workOrderNo}</TableCell>
+              <TableCell strong className={"min-w-[180px] " + (r.itemType === "subItem" ? "pl-5" : "")}>
                 {r.itemType === "subItem" ? "↳ " : ""}{r.description || "—"}
               </TableCell>
-              <TableCell muted>{r.unit || "—"}</TableCell>
-              <TableCell>{qty(r.executedQty)}</TableCell>
-              <TableCell>₹{money(r.executedValue)}</TableCell>
-              <TableCell>{r.billedQty > 0 ? qty(r.billedQty) : "—"}</TableCell>
-              <TableCell>{r.billedValue > 0 ? "₹" + money(r.billedValue) : "—"}</TableCell>
-              <TableCell>
+              <TableCell muted className="whitespace-nowrap">{r.unit || "—"}</TableCell>
+              <TableCell className="text-right tabular-nums whitespace-nowrap">{qty(r.executedQty)}</TableCell>
+              <TableCell className="text-right tabular-nums whitespace-nowrap">₹{money(r.executedValue)}</TableCell>
+              <TableCell className="text-right tabular-nums whitespace-nowrap">{r.billedQty > 0 ? qty(r.billedQty) : "—"}</TableCell>
+              <TableCell className="text-right tabular-nums whitespace-nowrap">{r.billedValue > 0 ? "₹" + money(r.billedValue) : "—"}</TableCell>
+              <TableCell className="whitespace-nowrap">
                 {r.billedQty > 0 || r.billedValue > 0
                   ? <Badge color="green">Billed</Badge>
                   : <Badge color="gray">Not yet billed</Badge>}
               </TableCell>
-              <TableCell muted>{r.locations.join(", ") || "—"}</TableCell>
+              <TableCell muted className="min-w-[120px]">{r.locations.join(", ") || "—"}</TableCell>
             </TableRow>
           ))}
         </Table>
