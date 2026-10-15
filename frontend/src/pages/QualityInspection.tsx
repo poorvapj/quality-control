@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useApp, authHeaders } from "../context/AppContext";
 import { API_BASE } from "../services/config";
-import { coll, myProjects, projectFloors, byId } from "../shared/rules";
+import { coll, myProjects, projectFloors, floorUnits, byId } from "../shared/rules";
 import { nextId } from "../shared/helpers";
 import { buildEventOp } from "../shared/eventLog";
 import { hasModuleGrant } from "../shared/permissionMatrix";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
+import { approvalFor } from "../shared/approval";
+import { ApprovalBadge, ApprovalActions } from "../components/ApprovalControls";
 import PhotoGroupUploader from "../components/PhotoGroupUploader";
 import SidePanel from "../components/SidePanel";
 import StatTile from "../components/StatTile";
@@ -75,6 +77,15 @@ const QC_CHECKLISTS: Record<string, string[]> = {
   ]
 };
 type ChecklistStatus = (typeof CHECKLIST_STATUSES)[number];
+
+// The checklists above run in building order. Material testing, column and
+// RCC slab are structure / floor level; Brickwork Inspection and every
+// checklist after it (plastering, tile work, …) happen flat by flat — so for
+// those the form also asks WHICH flat. Decided by position in the list, so a
+// checklist added later in the sequence is flat-wise automatically.
+const WORK_TYPES = Object.keys(QC_CHECKLISTS);
+const FLAT_WISE_FROM = WORK_TYPES.indexOf("Brickwork Inspection");
+const isFlatWise = (wt: string) => !!wt && FLAT_WISE_FROM >= 0 && WORK_TYPES.indexOf(wt) >= FLAT_WISE_FROM;
 
 // A sentinel, non-real Stage id used ONLY to tag snags that originated from
 // a Work Quality Inspection failure — never a real progression Stage
@@ -216,7 +227,7 @@ export default function QualityInspection() {
                 <TableCell muted className="whitespace-nowrap">{insp.inspectionDate}</TableCell>
                 <TableCell className="whitespace-nowrap">{insp.projectCode}</TableCell>
                 <TableCell strong>
-                  {insp.floorName}
+                  {insp.floorName}{insp.unitName ? ` / ${insp.unitName}` : ""}
                   {insp.workType && <div className="text-[10.5px] text-[var(--text-muted)] font-normal mt-0.5">{insp.workType}</div>}
                 </TableCell>
                 <TableCell muted className="truncate max-w-0">{insp.itemDescription ? `${insp.workOrderNo} · ${insp.itemDescription}` : "—"}</TableCell>
@@ -224,6 +235,8 @@ export default function QualityInspection() {
                   <Badge color={insp.result === "Pass" ? "green" : insp.result === "Fail" ? "red" : "amber"}>
                     <span className="whitespace-nowrap">{insp.result}</span>
                   </Badge>
+                  <div className="mt-1"><ApprovalBadge approval={insp.approval} /></div>
+                  <ApprovalActions collName="qualityInspections" record={insp} />
                 </TableCell>
                 <TableCell muted className="truncate max-w-0">{insp.inspectorName}</TableCell>
                 <TableCell>
@@ -350,6 +363,7 @@ function InspectionForm({
 }) {
   const [projectId, setProjectId] = useState("");
   const [floorId, setFloorId] = useState("");
+  const [unitId, setUnitId] = useState("");
   const [workOrderNo, setWorkOrderNo] = useState("");
   const [itemId, setItemId] = useState("");
   const [inspectionDate, setInspectionDate] = useState(todayStr());
@@ -372,12 +386,13 @@ function InspectionForm({
     if (reInspectOf) {
       setProjectId(reInspectOf.projectId);
       setFloorId(reInspectOf.floorId);
+      setUnitId(reInspectOf.unitId || "");
       setWorkOrderNo(reInspectOf.workOrderNo || "");
       setItemId(reInspectOf.itemId || "");
       setWorkType(reInspectOf.workType || "");
       setChecklist((reInspectOf.workType && QC_CHECKLISTS[reInspectOf.workType] || []).map((text) => ({ text, status: "", remarks: "" })));
     } else {
-      setProjectId(""); setFloorId(""); setWorkOrderNo(""); setItemId("");
+      setProjectId(""); setFloorId(""); setUnitId(""); setWorkOrderNo(""); setItemId("");
       setWorkType(""); setChecklist([]);
     }
     setInspectionDate(todayStr());
@@ -392,6 +407,7 @@ function InspectionForm({
   // for a different checklist, not partial progress on this one).
   function onWorkTypeChange(wt: string) {
     setWorkType(wt);
+    if (!isFlatWise(wt)) setUnitId(""); // floor-level checklist: no flat
     setChecklist((QC_CHECKLISTS[wt] || []).map((text) => ({ text, status: "", remarks: "" })));
   }
   function setItemStatus(idx: number, status: ChecklistStatus) {
@@ -407,6 +423,9 @@ function InspectionForm({
   const project = allProjects.find((p) => p.id === projectId) || null;
   const floors = projectFloors(data, projectId || null);
   const floor = byId(floors, floorId);
+  const flatWise = isFlatWise(workType);
+  const units = flatWise && projectId && floorId ? floorUnits(data, projectId, floorId) : [];
+  const unit = byId(units, unitId);
 
   // VMS Work Order/Item picker is an OPTIONAL manual reference only — a QC
   // Unit has no reliable key back to a VMS scope-item/location (see the
@@ -434,6 +453,7 @@ function InspectionForm({
   async function save() {
     if (!projectId || !floorId) { toast("Project and Floor are required"); return; }
     if (!workType) { toast("Select a checklist (Work Type) first"); return; }
+    if (flatWise && !unitId) { toast("Pick the flat — Brickwork and the work after it is inspected flat by flat"); return; }
     if (checklist.some((row) => !row.status)) { toast("Mark every checklist point as OK / Not OK / N/A"); return; }
     if (result !== "Pass" && !remarks.trim()) { toast("Remarks are required for Fail / Rework Required"); return; }
     if (result !== "Pass" && !assignedToUserId) { toast("A responsible DRI must be assigned for Fail / Rework Required"); return; }
@@ -455,6 +475,8 @@ function InspectionForm({
       id,
       projectId, projectCode: project?.code || "", projectName: project?.name || "",
       floorId, floorName: floor?.name || "",
+      // flat-wise work types also record the flat (this is what turns the flat green on the Tower Board)
+      ...(flatWise && unit ? { unitId: unit.id, unitCode: unit.code, unitName: unit.name } : {}),
       workOrderNo: itemEntry ? workOrderNo : undefined,
       itemId: itemEntry ? itemEntry.itemId : undefined,
       itemType: itemEntry?.itemType,
@@ -473,19 +495,21 @@ function InspectionForm({
         : null,
       linkedSnagId: snagId,
       reInspectionOf: reInspectOf?.id || null,
+      // a team member's inspection waits for their team leader (server re-derives this)
+      approval: approvalFor(data, currentUserId),
       createdAt: Date.now()
     };
 
     const ops: any[] = [
       { op: "upsert", coll: "qualityInspections", rec },
-      buildEventOp(currentUserId, "QUALITY_INSPECTION", id, "", `Quality Inspection · ${result} · ${rec.floorName}`)
+      buildEventOp(currentUserId, "QUALITY_INSPECTION", id, "", `Quality Inspection · ${result} · ${rec.floorName}${rec.unitName ? " / " + rec.unitName : ""}`)
     ];
     if (needsSnag && snagId) {
       // Location always in the title — never just the VMS item description
       // — so the snag/quality observation is unambiguous on the DRI
       // dashboard and in their failure history, even if a VMS item was
       // also picked.
-      const location = rec.floorName;
+      const location = rec.unitName ? `${rec.floorName} / ${rec.unitName}` : rec.floorName;
       const label = itemEntry?.description ? `${location} · ${itemEntry.description}` : location;
       ops.push({
         op: "upsert", coll: "snags",
@@ -493,6 +517,7 @@ function InspectionForm({
           id: snagId,
           projectId,
           floorId,
+          ...(rec.unitId ? { unitId: rec.unitId } : {}),
           stageId: QC_INSPECTION_STAGE_ID,
           qualityInspectionId: id,
           title: `Quality ${result} — ${label}`,
@@ -521,7 +546,7 @@ function InspectionForm({
       wide
       icon={<NavIcon name="eye" size={18} />}
       title={reInspectOf ? "Re-inspect" : "New Inspection"}
-      desc={reInspectOf ? `Re-checking: ${reInspectOf.floorName}` : "Record a Pass/Fail/Rework Required result against a real Floor."}
+      desc={reInspectOf ? `Re-checking: ${reInspectOf.floorName}${reInspectOf.unitName ? " / " + reInspectOf.unitName : ""}` : "Record a Pass/Fail/Rework Required result against a real Floor."}
       onClose={onClose}
       footer={
         <>
@@ -536,7 +561,7 @@ function InspectionForm({
           <SearchDropdown
             value={projectId}
             disabled={!!reInspectOf}
-            onChange={(v) => { setProjectId(v); setFloorId(""); }}
+            onChange={(v) => { setProjectId(v); setFloorId(""); setUnitId(""); }}
             options={[{ value: "", label: "Select project…" }, ...allProjects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))]}
           />
         </div>
@@ -545,7 +570,7 @@ function InspectionForm({
           <SearchDropdown
             value={floorId}
             disabled={!!reInspectOf || !projectId}
-            onChange={setFloorId}
+            onChange={(v) => { setFloorId(v); setUnitId(""); }}
             options={[{ value: "", label: "Select floor…" }, ...floors.map((f) => ({ value: f.id, label: f.name }))]}
           />
         </div>
@@ -574,6 +599,19 @@ function InspectionForm({
             options={[{ value: "", label: "Select checklist…" }, ...Object.keys(QC_CHECKLISTS).map((wt) => ({ value: wt, label: wt }))]}
           />
         </div>
+
+        {flatWise && (
+          <div className="field full">
+            <label>Flat / Unit *</label>
+            <SearchDropdown
+              value={unitId}
+              disabled={!!reInspectOf || !floorId}
+              onChange={setUnitId}
+              options={[{ value: "", label: floorId ? "Select flat…" : "Select a floor first…" }, ...units.map((u) => ({ value: u.id, label: u.name }))]}
+            />
+            <div className="text-[11px] text-[var(--text-muted)] mt-1">{workType} is checked flat by flat — pick the flat this inspection is for.</div>
+          </div>
+        )}
 
         {checklist.length > 0 && (
           <div className="field full">

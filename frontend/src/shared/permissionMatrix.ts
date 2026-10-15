@@ -23,6 +23,8 @@ export const MATRIX_MODULES: MatrixModule[] = [
   { key: "progressAnalysis", label: "Progress Analysis", actions: ["view"] },
   { key: "purchaseOrders", label: "Purchase Orders", actions: ["view"] },
   { key: "masters", label: "Masters", actions: ["view", "create", "edit", "delete"] },
+  { key: "qualityMis", label: "Quality MIS", actions: ["view"] },
+  { key: "executionReconciliation", label: "Execution Reconciliation", actions: ["view"] },
   { key: "backups", label: "Backups", actions: ["view", "create", "delete"] },
   { key: "auditLog", label: "Audit Logs", actions: ["view"] }
 ];
@@ -87,19 +89,21 @@ export const DEFAULT_ROLE_GRANTS: Partial<Record<Role, Record<string, ModuleActi
    ON rather than only working invisibly. */
 export function defaultGrantsForRole(role: Role | null | undefined): Record<string, Partial<Record<ModuleAction, boolean>>> {
   const def = role ? DEFAULT_ROLE_GRANTS[role] : undefined;
-  if (!def) return {};
+  // a role with no built-in defaults (CRM, custom roles) still starts with the normally-open pages On
+  if (!def) return fillDefaultOn({}, role || null);
   const out: Record<string, Partial<Record<ModuleAction, boolean>>> = {};
   for (const [moduleKey, actions] of Object.entries(def)) {
     out[moduleKey] = Object.fromEntries(actions.map((a) => [a, true]));
   }
-  return fillLegacyGrants(out);
+  return fillLegacyGrants(out, role || null);
 }
 
 /* Fills any module that has a LEGACY_FALLBACK but no entry of its own with
    the legacy module's current values (limited to the actions it supports),
    so the matrix toggles show the access a user really has instead of OFF. */
 export function fillLegacyGrants(
-  grants: Record<string, Partial<Record<ModuleAction, boolean>>> | undefined | null
+  grants: Record<string, Partial<Record<ModuleAction, boolean>>> | undefined | null,
+  role?: string | null
 ): Record<string, Partial<Record<ModuleAction, boolean>>> {
   const out = { ...(grants || {}) };
   for (const [key, legacy] of Object.entries(LEGACY_FALLBACK)) {
@@ -109,7 +113,7 @@ export function fillLegacyGrants(
     if (!mod || !from) continue;
     out[key] = Object.fromEntries(mod.actions.filter((a) => a in from).map((a) => [a, !!from[a]]));
   }
-  return out;
+  return role === undefined ? out : fillDefaultOn(out, role);
 }
 
 /* Admin (U-ADMIN) always has every permission — this is an unconditional
@@ -133,6 +137,85 @@ export function hasModuleGrant(
   if (!user) return false;
   const def = DEFAULT_ROLE_GRANTS[user.role]?.[moduleKey];
   return !!def?.includes(action);
+}
+
+/* ---------------------------------------------------------------------------
+   WHO CAN OPEN WHICH PAGE — one table, used by BOTH the sidebar and the page
+   router, so the Permission Matrix is the only thing that decides it (no
+   per-role special cases left in the UI).
+
+   Two kinds of page:
+     "on"    visible to everyone unless an admin switched its "view" Off — for the
+             user's own row or for their whole role. These were open to every
+             signed-in user before the matrix controlled them, so nobody loses
+             access just because the matrix now governs them; only an explicit Off
+             hides one.
+     "grant" visible only with a "view" grant (explicit, role-wide, or the role's
+             built-in default in DEFAULT_ROLE_GRANTS).
+   Admin always sees everything. The Permission Matrix page itself stays
+   admin-only: letting it be granted would let someone grant themselves anything. */
+export type TabAccess = { module: string; mode: "on" | "grant" };
+export const TAB_ACCESS: Record<string, TabAccess> = {
+  dash: { module: "dashboard", mode: "on" },
+  work: { module: "myWork", mode: "on" },
+  board: { module: "towerBoard", mode: "on" },
+  handoverInternal: { module: "handoverInternal", mode: "on" },
+  handoverOwner: { module: "handoverOwner", mode: "on" },
+  snags: { module: "snags", mode: "on" },
+  team: { module: "team", mode: "grant" },
+  dpr: { module: "dpr", mode: "grant" },
+  drawingRequests: { module: "drawingRequests", mode: "grant" },
+  qualityInspection: { module: "qualityInspection", mode: "grant" },
+  unitExecutionWorkflow: { module: "unitExecution", mode: "grant" },
+  measurement: { module: "measurement", mode: "grant" },
+  progressAnalysis: { module: "progressAnalysis", mode: "grant" },
+  purchaseOrders: { module: "purchaseOrders", mode: "grant" },
+  misDashboard: { module: "qualityMis", mode: "grant" },
+  executionReconciliation: { module: "executionReconciliation", mode: "grant" },
+  masters: { module: "masters", mode: "grant" },
+  backups: { module: "backups", mode: "grant" },
+  auditLog: { module: "auditLog", mode: "grant" }
+};
+
+/** Roles whose built-in starting point has a normally-open page hidden
+ *  (CRM has no stage work of its own, so My Work started hidden for it). An
+ *  explicit matrix setting still overrides this either way. */
+const DEFAULT_HIDDEN: Record<string, string[]> = { CRM: ["myWork"] };
+
+export const DEFAULT_ON_MODULES = Object.values(TAB_ACCESS).filter((t) => t.mode === "on").map((t) => t.module);
+
+/** A normally-open page: visible unless "view" was explicitly switched Off. */
+export function canSeeModule(data: BoardData | null, userId: string | null, moduleKey: string): boolean {
+  if (userId === "U-ADMIN") return true;
+  const explicit = explicitGrant(data, userId, moduleKey, "view");
+  if (explicit !== undefined) return explicit;
+  const role = byId(coll(data, "users"), userId)?.role;
+  return !(role && DEFAULT_HIDDEN[role]?.includes(moduleKey));
+}
+
+/** The one question the sidebar and the page router both ask. */
+export function canAccessTab(data: BoardData | null, userId: string | null, tab: string): boolean {
+  if (userId === "U-ADMIN") return true;
+  if (tab === "permissionMatrix") return false;
+  // the create-user screen needs the same right as editing Masters
+  if (tab === "addUser") return hasModuleGrant(data, userId, "masters", "edit");
+  const t = TAB_ACCESS[tab];
+  if (!t) return true;
+  return t.mode === "on" ? canSeeModule(data, userId, t.module) : hasModuleGrant(data, userId, t.module, "view");
+}
+
+/** Switch on the normally-open pages in a grants object for display, so the
+ *  matrix toggles show what a person really has instead of Off. */
+export function fillDefaultOn(
+  grants: Record<string, Partial<Record<ModuleAction, boolean>>>, role: string | null | undefined
+): Record<string, Partial<Record<ModuleAction, boolean>>> {
+  const out = { ...grants };
+  for (const m of DEFAULT_ON_MODULES) {
+    if (out[m]?.view !== undefined) continue;
+    if (role && DEFAULT_HIDDEN[role]?.includes(m)) continue;
+    out[m] = { ...out[m], view: true };
+  }
+  return out;
 }
 
 /* An explicitly saved value for this exact module+action: per-user first,
@@ -167,6 +250,11 @@ export function effectiveRoleGrants(
       const explicit = roleRec?.grants?.[m.key]?.[a];
       out[m.key]![a] = explicit !== undefined ? explicit : !!DEFAULT_ROLE_GRANTS[roleName as Role]?.[m.key]?.includes(a);
     }
+  }
+  // Normally-open pages (Dashboard, My Work, Tower Board, Handover, Snags)
+  // show as On unless switched Off, matching what the role really sees.
+  for (const m of DEFAULT_ON_MODULES) {
+    if (roleRec?.grants?.[m]?.view === undefined && !DEFAULT_HIDDEN[roleName]?.includes(m)) out[m] = { ...out[m], view: true };
   }
   // A module with its own row but nothing saved for it yet shows (and
   // behaves as) its legacy module's value, see LEGACY_FALLBACK.

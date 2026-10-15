@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useApp } from "../../context/AppContext";
 import { coll, myAssignments, myReleases } from "../../shared/rules";
-import { hasModuleGrant } from "../../shared/permissionMatrix";
+import { canAccessTab } from "../../shared/permissionMatrix";
 import NavIcon from "../../components/NavIcon";
 import type { TabKey } from "../../types";
 import "./Sidebar.css";
@@ -11,20 +11,9 @@ interface NavItem { key: TabKey; icon: string; label: string; badge?: number; ch
 export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: { open: boolean; collapsed: boolean; onNavigate: () => void }) {
   const { activeTab, setActiveTab, data, currentUserId, currentProjectId, myRole } = useApp();
   const isAdmin = currentUserId === "U-ADMIN";
-  const isDri = myRole() === "DRI";
-  const isCrm = myRole() === "CRM";
-  const canViewTeam = isAdmin || hasModuleGrant(data, currentUserId, "team", "view") || coll(data, "teams").some((t) => t.leaderId === currentUserId);
-  const canViewMasters = isAdmin || hasModuleGrant(data, currentUserId, "masters", "view");
-  const canViewBackups = isAdmin || hasModuleGrant(data, currentUserId, "backups", "view");
-  const canViewAuditLog = isAdmin || hasModuleGrant(data, currentUserId, "auditLog", "view");
-  // DRI always sees Daily Progress Report and Drawing Requests — the
-  // Permission Matrix grant is only needed for other roles.
-  const canViewDpr = isAdmin || isDri || hasModuleGrant(data, currentUserId, "dpr", "view");
-  const canViewDrawingRequests = isAdmin || isDri || hasModuleGrant(data, currentUserId, "drawingRequests", "view");
-  const canViewQualityInspection = isAdmin || hasModuleGrant(data, currentUserId, "qualityInspection", "view");
-  const canViewUnitExecution = isAdmin || hasModuleGrant(data, currentUserId, "unitExecution", "view");
-  const canViewProgressAnalysis = isAdmin || hasModuleGrant(data, currentUserId, "progressAnalysis", "view");
-  const canViewPurchaseOrders = isAdmin || hasModuleGrant(data, currentUserId, "purchaseOrders", "view");
+  // One question for every item — the Permission Matrix decides (same
+  // function the page router uses), so the menu and the pages can't disagree.
+  const can = (tab: TabKey) => canAccessTab(data, currentUserId, tab);
 
   // Icon-only collapse only ever makes sense on desktop. A stale
   // collapsed=true from localStorage (e.g. set on desktop, then this page
@@ -48,44 +37,44 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
     {
       label: "Overview",
       items: [
-        { key: "dash", icon: "dashboard", label: "Dashboard" },
-        ...(isAdmin ? [{ key: "misDashboard" as TabKey, icon: "trend", label: "Quality MIS" }] : []),
+        ...(can("dash") ? [{ key: "dash" as TabKey, icon: "dashboard", label: "Dashboard" }] : []),
+        ...(can("misDashboard") ? [{ key: "misDashboard" as TabKey, icon: "trend", label: "Quality MIS" }] : []),
         // Cross-project VMS execution/billing reconciliation — admin-only,
         // same reasoning as Quality MIS (management-level financial data,
         // not additively grantable via Permission Matrix).
-        ...(isAdmin ? [{ key: "executionReconciliation" as TabKey, icon: "database", label: "Execution Reconciliation" }] : [])
+        ...(can("executionReconciliation") ? [{ key: "executionReconciliation" as TabKey, icon: "database", label: "Execution Reconciliation" }] : [])
       ]
     },
     {
       label: "Execution",
       items: [
-        // CRM has no stage/gate work of its own to release/acknowledge —
-        // My Work would only ever show empty for them.
-        ...(!isCrm ? [{ key: "work" as TabKey, icon: "work", label: "My Work", badge: workBadge }] : []),
-        { key: "board", icon: "board", label: "Tower Board" },
-        {
-          key: "handoverInternal", icon: "handover", label: "Handover Checklist",
+        ...(can("work") ? [{ key: "work" as TabKey, icon: "work", label: "My Work", badge: workBadge }] : []),
+        ...(can("board") ? [{ key: "board" as TabKey, icon: "board", label: "Tower Board" }] : []),
+        // Hidden when an admin switched "view" off for the user/role in the
+        // Permission Matrix (Internal and Owner Possession are separate rows).
+        ...((can("handoverInternal") || can("handoverOwner")) ? [{
+          key: (can("handoverInternal") ? "handoverInternal" : "handoverOwner") as TabKey, icon: "handover", label: "Handover Checklist",
           children: [
-            { key: "handoverInternal", icon: "handover", label: "Internal Possession" },
-            { key: "handoverOwner", icon: "handover", label: "Owner Possession" }
+            ...(can("handoverInternal") ? [{ key: "handoverInternal" as TabKey, icon: "handover", label: "Internal Possession" }] : []),
+            ...(can("handoverOwner") ? [{ key: "handoverOwner" as TabKey, icon: "handover", label: "Owner Possession" }] : [])
           ]
-        },
-        { key: "snags", icon: "snags", label: "Snags", badge: snagBadge },
-        ...(canViewTeam ? [{ key: "team" as TabKey, icon: "team", label: "Team" }] : []),
-        ...(canViewDpr ? [{ key: "dpr" as TabKey, icon: "dpr", label: "Daily Progress Report" }] : []),
-        ...(canViewDrawingRequests ? [{ key: "drawingRequests" as TabKey, icon: "drawing", label: "Drawing Requests" }] : []),
-        ...(canViewQualityInspection ? [{ key: "qualityInspection" as TabKey, icon: "eye", label: "Quality Inspection" }] : []),
-        ...(canViewUnitExecution ? [{ key: "unitExecutionWorkflow" as TabKey, icon: "layers", label: "Measurement" }] : []),
-        ...(canViewProgressAnalysis ? [{ key: "progressAnalysis" as TabKey, icon: "trend", label: "Progress Analysis" }] : []),
-        ...(canViewPurchaseOrders ? [{ key: "purchaseOrders" as TabKey, icon: "package", label: "Purchase Orders" }] : [])
+        }] : []),
+        ...(can("snags") ? [{ key: "snags" as TabKey, icon: "snags", label: "Snags", badge: snagBadge }] : []),
+        ...(can("team") ? [{ key: "team" as TabKey, icon: "team", label: "Team" }] : []),
+        ...(can("dpr") ? [{ key: "dpr" as TabKey, icon: "dpr", label: "Daily Progress Report" }] : []),
+        ...(can("drawingRequests") ? [{ key: "drawingRequests" as TabKey, icon: "drawing", label: "Drawing Requests" }] : []),
+        ...(can("qualityInspection") ? [{ key: "qualityInspection" as TabKey, icon: "eye", label: "Quality Inspection" }] : []),
+        ...(can("unitExecutionWorkflow") ? [{ key: "unitExecutionWorkflow" as TabKey, icon: "layers", label: "Measurement" }] : []),
+        ...(can("progressAnalysis") ? [{ key: "progressAnalysis" as TabKey, icon: "trend", label: "Progress Analysis" }] : []),
+        ...(can("purchaseOrders") ? [{ key: "purchaseOrders" as TabKey, icon: "package", label: "Purchase Orders" }] : [])
       ]
     },
     {
       label: "Administration",
       items: [
-        ...(canViewMasters ? [{ key: "masters" as TabKey, icon: "masters", label: "Masters" }] : []),
-        ...(canViewBackups ? [{ key: "backups" as TabKey, icon: "database", label: "Backups" }] : []),
-        ...(canViewAuditLog ? [{ key: "auditLog" as TabKey, icon: "clock", label: "Audit Logs" }] : []),
+        ...(can("masters") ? [{ key: "masters" as TabKey, icon: "masters", label: "Masters" }] : []),
+        ...(can("backups") ? [{ key: "backups" as TabKey, icon: "database", label: "Backups" }] : []),
+        ...(can("auditLog") ? [{ key: "auditLog" as TabKey, icon: "clock", label: "Audit Logs" }] : []),
         ...(isAdmin ? [{ key: "permissionMatrix" as TabKey, icon: "permissions", label: "Permission Matrix" }] : [])
       ]
     }

@@ -212,7 +212,8 @@ export const MASTERS: Record<MasterKey, MasterDef> = {
     fields: [
       { k: "name", label: "Role name", type: "text", required: true, hint: "e.g. GM, Architect — this exact text is what gets assigned to a user as their role" },
       { k: "active", label: "Active", type: "bool" },
-      { k: "actsLikeCivil", label: "Site access — same as Civil Engineer (Tower Board stage actions, Assign/Snag lists, Ops Dashboard)", type: "bool", default: false },
+      { k: "boardView", label: "Tower Board view", type: "select", options: ["execution", "quality", "measurement", "all"], hint: "Which lens this role sees on the Tower Board. Leave empty to follow the role name (Execution / Quality / Measurement Engineer); Admin/DRI/CRM see everything with a switcher." },
+      { k: "actsLikeCivil", label: "Site access — same as Civil Engineer (Tower Board stage actions and Assign/Snag lists — the role keeps its own dashboard)", type: "bool", default: false },
       { k: "canScreenStage1", label: "Drawing Requests — can screen at Stage 1", type: "bool", default: false },
       { k: "canProduceStage2", label: "Drawing Requests — can produce at Stage 2", type: "bool", default: false },
       { k: "canCrosscheckStage3", label: "Drawing Requests — can cross-check at Stage 3", type: "bool", default: false },

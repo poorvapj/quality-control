@@ -1,15 +1,20 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, projectFloors, floorUnits, trackStages, prog, floorReleased, floorBelow, unitSummary, myProjects } from "../shared/rules";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
 import Card from "../ui/tw/Card";
+import { executionComplete } from "../shared/misData";
+import { boardLensFor, qualityByUnit, measurementByUnit, LENS_LABEL, type BoardLens } from "../shared/boardLens";
 
 const ALL_FLOORS = "__all__";
-type StatusFilter = "" | "open-snag" | "qc-fail" | "locked" | "handed-over" | "not-started";
+type StatusFilter = "" | "open-snag" | "qc-fail" | "locked" | "handed-over" | "not-started"
+  | "ex-done" | "q-checked" | "q-failed" | "q-pending" | "q-none" | "m-done" | "m-pending" | "m-none";
+const LENSES: BoardLens[] = ["all", "execution", "quality", "measurement"];
+const AMBER = "#f59e0b";
 
 export default function TowerBoard() {
-  const { data, currentProjectId, setCurrentProjectId, currentUserId, openDrawer } = useApp();
+  const { data, currentProjectId, setCurrentProjectId, currentUserId, openDrawer, myRole } = useApp();
   const allProjects = myProjects(data, currentUserId);
   // The filter itself starts unset ("Choose") rather than showing whatever
   // project happens to be globally selected — but the board below still
@@ -20,6 +25,30 @@ export default function TowerBoard() {
   const [fFloor, setFFloor] = useState(ALL_FLOORS);
   const [fStatus, setFStatus] = useState<StatusFilter>("");
   const [q, setQ] = useState("");
+  // The same units, seen the way each team needs them. Execution / Quality /
+  // Measurement people are held to their own lens; everyone else (Admin, DRI,
+  // CRM…) sees the combined board and can flip between the lenses.
+  const roleLens = boardLensFor(data, myRole());
+  const [lensChoice, setLensChoice] = useState<BoardLens>("all");
+  const lens: BoardLens = roleLens !== "all" ? roleLens : lensChoice;
+  const stageLens = lens === "all" || lens === "execution"; // the original stage-progress colouring
+  const inspectionsColl = coll(data, "qualityInspections");
+  const measurementsColl = coll(data, "materialMeasurements");
+  const qualityMap = useMemo(() => qualityByUnit(inspectionsColl), [inspectionsColl]);
+  const measureMap = useMemo(() => measurementByUnit(measurementsColl), [measurementsColl]);
+  const statusOptions = lens === "quality"
+    ? [{ value: "", label: "All Statuses" }, { value: "q-checked", label: "Quality checked" }, { value: "q-failed", label: "Failed / rework" }, { value: "q-pending", label: "Awaiting approval" }, { value: "q-none", label: "Not inspected" }]
+    : lens === "measurement"
+    ? [{ value: "", label: "All Statuses" }, { value: "m-done", label: "Measured" }, { value: "m-pending", label: "Awaiting approval" }, { value: "m-none", label: "Not measured" }]
+    : [
+        { value: "", label: "All Statuses" },
+        ...(lens === "execution" ? [{ value: "ex-done", label: "Work completed" }] : []),
+        { value: "open-snag", label: "Open snag" },
+        { value: "qc-fail", label: "QC fail / rework" },
+        { value: "locked", label: "Structure not released" },
+        { value: "handed-over", label: "Handed over" },
+        { value: "not-started", label: "Not started" }
+      ];
   const boardProjectId = viewProjectId || currentProjectId;
   let floors = projectFloors(data, boardProjectId);
   if (fFloor !== ALL_FLOORS) floors = floors.filter((f) => f.id === fFloor);
@@ -43,10 +72,31 @@ export default function TowerBoard() {
           <div>
             <div className="text-xl font-semibold tracking-tight leading-tight">Tower Quality Matrix</div>
             <div className="text-[12.5px] text-[var(--text-muted)] mt-1 leading-normal">
-              Tap a unit for its trade timeline · tap the floor label for the RCC structure track.
+              {lens === "quality" ? "Quality view — a green flat has passed its quality check. Tap a unit for details."
+                : lens === "measurement" ? "Measurement view — a green flat has been measured. Tap a unit for details."
+                : lens === "execution" ? "Execution view — trade progress by unit. Tap a unit for its trade timeline · tap the floor label for the RCC structure track."
+                : "Tap a unit for its trade timeline · tap the floor label for the RCC structure track. A green tick on a flat means its quality check has passed."}
             </div>
           </div>
         </div>
+        {roleLens === "all" ? (
+          <div className="inline-flex rounded-radius-md border border-[var(--border)] overflow-hidden self-center" role="tablist" aria-label="Board view">
+            {LENSES.map((l) => (
+              <button
+                key={l}
+                type="button"
+                role="tab"
+                aria-selected={lens === l}
+                onClick={() => { setLensChoice(l); setFStatus(""); }}
+                className={"px-3.5 py-1.5 text-[12px] font-semibold " + (lens === l ? "bg-primary-light text-primary" : "text-[var(--text-muted)] hover:bg-[var(--bg-card-hover)]")}
+              >
+                {LENS_LABEL[l]}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <span className="self-center text-[11px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full bg-primary-light text-primary">{LENS_LABEL[lens]} view</span>
+        )}
       </div>
 
       <Card className="flex gap-3 flex-wrap mb-5">
@@ -75,14 +125,7 @@ export default function TowerBoard() {
             searchable={false}
             value={fStatus}
             onChange={(v) => setFStatus(v as StatusFilter)}
-            options={[
-              { value: "", label: "All Statuses" },
-              { value: "open-snag", label: "Open snag" },
-              { value: "qc-fail", label: "QC fail / rework" },
-              { value: "locked", label: "Structure not released" },
-              { value: "handed-over", label: "Handed over" },
-              { value: "not-started", label: "Not started" }
-            ]}
+            options={statusOptions}
             neutralActive
           />
         </div>
@@ -116,8 +159,19 @@ export default function TowerBoard() {
             const hasSnag = s.snags > 0;
             const handedOver = s.complete;
             const notStarted = s.done === 0 && !s.fail;
+            const exDone = lens === "execution" && !!boardProjectId && executionComplete(data, boardProjectId, u.id);
+            const qs = qualityMap.get(u.id)?.state ?? "none";
+            const ms = measureMap.get(u.id)?.state ?? "none";
             const matchesStatus =
               fStatus === "" ? true
+              : fStatus === "ex-done" ? exDone
+              : fStatus === "q-checked" ? qs === "checked"
+              : fStatus === "q-failed" ? qs === "failed"
+              : fStatus === "q-pending" ? qs === "pending"
+              : fStatus === "q-none" ? qs === "none"
+              : fStatus === "m-done" ? ms === "measured"
+              : fStatus === "m-pending" ? ms === "pending"
+              : fStatus === "m-none" ? ms === "none"
               : fStatus === "open-snag" ? hasSnag
               : fStatus === "qc-fail" ? s.fail
               : fStatus === "locked" ? s.locked
@@ -125,43 +179,70 @@ export default function TowerBoard() {
               : notStarted;
             const ql = q.trim().toLowerCase();
             const matchesSearch = !ql || (u.name + " " + u.code).toLowerCase().includes(ql);
-            return { u, s, hasSnag, matches: matchesStatus && matchesSearch };
+            return { u, s, hasSnag, qs, ms, exDone, matches: matchesStatus && matchesSearch };
           });
           if (hasFilter && !unitRows.some((r) => r.matches)) return null;
+
+          // Floor label: the RCC state for the stage views, a done-count for
+          // the quality / measurement views (turns green when every unit is done).
+          const totalUnits = unitRows.length;
+          const doneUnits = lens === "quality" ? unitRows.filter((r) => r.qs === "checked").length
+            : lens === "measurement" ? unitRows.filter((r) => r.ms === "measured").length : 0;
+          const displayLabel = stageLens ? label : lens === "quality" ? `QC ${doneUnits}/${totalUnits}` : `MEASURED ${doneUnits}/${totalUnits}`;
+          const floorAllDone = !stageLens && totalUnits > 0 && doneUnits === totalUnits;
 
           return (
             <div className="floor-row" key={f.id}>
               <div
                 className="floor-label"
                 style={
-                  ffail ? { borderColor: "var(--color-fail)", color: "var(--color-fail)" }
+                  !stageLens ? (floorAllDone ? { background: "var(--color-pass)", borderColor: "var(--color-pass)", color: "#fff" } : undefined)
+                  : ffail ? { borderColor: "var(--color-fail)", color: "var(--color-fail)" }
                   : cured ? { background: "var(--color-pass)", borderColor: "var(--color-pass)", color: "#fff" }
                   : undefined
                 }
                 onClick={() => openDrawer({ kind: "floor", id: f.id })}
               >
-                {f.code}<br /><span style={{ fontSize: 8, opacity: 0.75 }}>{label}</span>
+                {f.code}<br /><span style={{ fontSize: 8, opacity: 0.75 }}>{displayLabel}</span>
               </div>
               <div className="cells-grid">
-                {unitRows.map(({ u, s, hasSnag, matches }) => {
-                  let bg = "var(--bg-subtle)";
-                  if (s.locked) bg = "var(--color-locked)";
-                  else if (s.fail) bg = "var(--color-fail)";
-                  else if (s.complete) bg = "#64748b";
-                  else if (s.done > 0) bg = "var(--color-mep)";
-                  // An open snag is a real alert — flag the whole tile, not
-                  // just a small dot in the corner, so it's obvious at a
-                  // glance even on a locked/not-started (gray) unit.
+                {unitRows.map(({ u, s, hasSnag, qs, ms, exDone, matches }) => {
                   const closedSnags = closedSnagsByUnit.get(u.id) || 0;
-                  const tip = `${u.name} · ${u.type || ""} · ${s.done}/${s.total} stages`
-                    + (hasSnag ? " · " + s.snags + " open snag(s)" : "")
-                    + (closedSnags ? " · " + closedSnags + " resolved snag(s)" : "");
                   const hasResolvedOnly = !hasSnag && closedSnags > 0;
+                  let bg = "var(--bg-subtle)";
+                  let textColor: string | undefined;
+                  let tip = `${u.name} · ${u.type || ""}`;
+                  if (lens === "quality") {
+                    bg = qs === "checked" ? "var(--color-pass)" : qs === "failed" ? "var(--color-fail)" : qs === "pending" ? AMBER : "var(--bg-subtle)";
+                    if (qs === "none") textColor = "var(--text-sub)";
+                    tip += qs === "checked" ? " · quality check passed"
+                      : qs === "failed" ? ` · quality check ${(qualityMap.get(u.id)?.latest?.result || "failed").toLowerCase()}`
+                      : qs === "pending" ? " · quality check passed — awaiting leader approval"
+                      : " · not inspected yet";
+                  } else if (lens === "measurement") {
+                    bg = ms === "measured" ? "var(--color-pass)" : ms === "pending" ? AMBER : "var(--bg-subtle)";
+                    if (ms === "none") textColor = "var(--text-sub)";
+                    const n = measureMap.get(u.id)?.count || 0;
+                    tip += ms === "measured" ? ` · measured (${n} record${n === 1 ? "" : "s"})`
+                      : ms === "pending" ? " · measurement awaiting leader approval"
+                      : " · not measured yet";
+                  } else {
+                    if (s.locked) bg = "var(--color-locked)";
+                    else if (s.fail) bg = "var(--color-fail)";
+                    else if (exDone) bg = "var(--color-pass)";
+                    else if (s.complete) bg = "#64748b";
+                    else if (s.done > 0) bg = "var(--color-mep)";
+                    tip += ` · ${s.done}/${s.total} stages`
+                      + (hasSnag ? " · " + s.snags + " open snag(s)" : "")
+                      + (closedSnags ? " · " + closedSnags + " resolved snag(s)" : "");
+                    if (exDone) tip += " · execution work completed";
+                    if (lens === "all") tip += qs === "checked" ? " · quality checked" : qs === "failed" ? " · quality check failed" : "";
+                  }
                   return (
                     <div
                       key={u.id}
-                      className={"cell" + (s.locked ? " lockedcell" : "") + (s.fail ? " pulse" : "") + (hasSnag ? " has-snag" : "") + (hasResolvedOnly ? " has-resolved-snag" : "")}
-                      style={{ background: bg, opacity: hasFilter && !matches ? 0.25 : 1 }}
+                      className={"cell" + (stageLens && s.locked ? " lockedcell" : "") + (stageLens && s.fail ? " pulse" : "") + (stageLens && hasSnag ? " has-snag" : "") + (stageLens && hasResolvedOnly ? " has-resolved-snag" : "")}
+                      style={{ background: bg, color: textColor, opacity: hasFilter && !matches ? 0.25 : 1 }}
                       title={tip}
                       // Always opens — a "locked" unit can still carry a
                       // real open snag (the has-snag orange override paints
@@ -174,6 +255,12 @@ export default function TowerBoard() {
                       onClick={() => openDrawer({ kind: "unit", id: u.id })}
                     >
                       {u.seq != null ? u.seq : u.code}
+                      {lens === "all" && qs === "checked" && (
+                        <span
+                          aria-label="Quality checked"
+                          style={{ position: "absolute", top: -4, right: -4, width: 13, height: 13, borderRadius: "50%", background: "var(--color-pass)", border: "1.5px solid var(--bg-card)", color: "#fff", fontSize: 8, lineHeight: "10px", textAlign: "center", fontWeight: 800 }}
+                        >✓</span>
+                      )}
                     </div>
                   );
                 })}
@@ -182,13 +269,35 @@ export default function TowerBoard() {
           );
         })}
         <div className="legend-bar">
-          <div className="legend-item"><div className="legend-box" style={{ background: "#64748b" }}></div> Handed over</div>
-          <div className="legend-item"><div className="legend-box" style={{ background: "var(--color-mep)" }}></div> Trades in progress</div>
-          <div className="legend-item"><div className="legend-box" style={{ background: "var(--color-fail)" }}></div> QC fail / rework</div>
-          <div className="legend-item"><div className="legend-box" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}></div> Not started</div>
-          <div className="legend-item"><div className="legend-box" style={{ background: "var(--color-locked)" }}></div> Structure not released</div>
-          <div className="legend-item"><div className="legend-box" style={{ background: "var(--theme-primary)" }}></div> Open snag</div>
-          <div className="legend-item"><div className="legend-box" style={{ background: "var(--color-pass)" }}></div> Resolved snag</div>
+          {(lens === "quality" ? [
+            { c: "var(--color-pass)", t: "Quality check passed" },
+            { c: "var(--color-fail)", t: "Failed / rework" },
+            { c: AMBER, t: "Passed — awaiting approval" },
+            { c: "var(--bg-subtle)", t: "Not inspected", border: true }
+          ] : lens === "execution" ? [
+            { c: "var(--color-pass)", t: "Work completed (all trades done)" },
+            { c: "var(--color-mep)", t: "Trades in progress" },
+            { c: "var(--color-fail)", t: "QC fail / rework" },
+            { c: "var(--bg-subtle)", t: "Not started", border: true },
+            { c: "var(--color-locked)", t: "Structure not released" },
+            { c: "var(--theme-primary)", t: "Open snag" },
+            { c: "#94a3b8", t: "Resolved snag" }
+          ] : lens === "measurement" ? [
+            { c: "var(--color-pass)", t: "Measured" },
+            { c: AMBER, t: "Awaiting approval" },
+            { c: "var(--bg-subtle)", t: "Not measured", border: true }
+          ] : [
+            { c: "#64748b", t: "Handed over" },
+            { c: "var(--color-mep)", t: "Trades in progress" },
+            { c: "var(--color-fail)", t: "QC fail / rework" },
+            { c: "var(--bg-subtle)", t: "Not started", border: true },
+            { c: "var(--color-locked)", t: "Structure not released" },
+            { c: "var(--theme-primary)", t: "Open snag" },
+            { c: "var(--color-pass)", t: "Resolved snag" }
+          ]).map((x) => (
+            <div className="legend-item" key={x.t}><div className="legend-box" style={{ background: x.c, border: (x as any).border ? "1px solid var(--border)" : undefined }}></div> {x.t}</div>
+          ))}
+          {lens === "all" && <div className="legend-item"><div className="legend-box" style={{ background: "var(--color-pass)", borderRadius: "50%" }}></div> ✓ Quality checked</div>}
         </div>
       </Card>
     </div>

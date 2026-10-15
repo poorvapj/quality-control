@@ -28,7 +28,7 @@ import Backups from "./pages/Backups";
 import AuditLog from "./pages/AuditLog";
 import PermissionMatrix from "./pages/PermissionMatrix";
 import AddUser from "./pages/AddUser";
-import { hasModuleGrant } from "./shared/permissionMatrix";
+import { canAccessTab } from "./shared/permissionMatrix";
 import { coll } from "./shared/rules";
 
 export default function App() {
@@ -63,47 +63,23 @@ export default function App() {
     permissionMatrix: <PermissionMatrix />
   };
 
-  // Team, Masters, Backups, and Audit Log are admin-only by default — a
-  // stale activeTab (e.g. from before this restriction existed, or a DRI
-  // who had Masters open when it got locked down) should fall back to
-  // Dashboard, not just hide the nav link while still rendering the page
-  // underneath. Permission Matrix additively grants "view" on these same
-  // 4 tabs (Sidebar.tsx hides/shows the link the same way) — Permission
-  // Matrix itself stays admin-only, since granting it would let a
-  // non-admin grant themselves further access.
-  const isTeamLeader = coll(data, "teams").some((t) => t.leaderId === currentUserId);
-  const isDri = myRole() === "DRI";
-  const restrictedTab =
-    ((activeTab === "team" && !hasModuleGrant(data, currentUserId, "team", "view") && !isTeamLeader) ||
-      (activeTab === "masters" && !hasModuleGrant(data, currentUserId, "masters", "view")) ||
-      (activeTab === "backups" && !hasModuleGrant(data, currentUserId, "backups", "view")) ||
-      (activeTab === "auditLog" && !hasModuleGrant(data, currentUserId, "auditLog", "view")) ||
-      // addUser needs the same "can actually edit Masters" grant Masters.tsx
-      // itself gates its "+ New" button on — matching masters/view here
-      // would let a read-only-granted user reach a create screen they
-      // can't otherwise act from.
-      (activeTab === "addUser" && !hasModuleGrant(data, currentUserId, "masters", "edit")) ||
-      // DRI always sees Daily Progress Report and Drawing Requests — the
-      // Permission Matrix grant is only needed for other roles.
-      (activeTab === "dpr" && !isDri && !hasModuleGrant(data, currentUserId, "dpr", "view")) ||
-      (activeTab === "drawingRequests" && !isDri && !hasModuleGrant(data, currentUserId, "drawingRequests", "view")) ||
-      (activeTab === "qualityInspection" && !hasModuleGrant(data, currentUserId, "qualityInspection", "view")) ||
-      (activeTab === "unitExecutionWorkflow" && !hasModuleGrant(data, currentUserId, "unitExecution", "view")) ||
-      (activeTab === "measurement" && !hasModuleGrant(data, currentUserId, "measurement", "view")) ||
-      (activeTab === "progressAnalysis" && !hasModuleGrant(data, currentUserId, "progressAnalysis", "view")) ||
-      (activeTab === "purchaseOrders" && !hasModuleGrant(data, currentUserId, "purchaseOrders", "view")) ||
-      // MIS Dashboard is management/CEO-level cross-project analytics —
-      // admin-only, same as Permission Matrix, not additively grantable.
-      activeTab === "misDashboard" ||
-      // Same reasoning as Quality MIS — cross-project VMS execution/
-      // billing data, admin-only, not additively grantable.
-      activeTab === "executionReconciliation" ||
-      activeTab === "permissionMatrix") &&
-    !isAdmin;
+  // Every page is controlled by the Permission Matrix (see TAB_ACCESS in
+  // shared/permissionMatrix.ts — the sidebar asks the very same question). A
+  // stale activeTab, a bookmark or a dashboard tile pointing at a page the
+  // person can't open falls back to the Dashboard (or a plain notice if the
+  // Dashboard is switched off for them too) instead of rendering it.
+  const restrictedTab = !canAccessTab(data, currentUserId, activeTab);
+  const canDashboard = canAccessTab(data, currentUserId, "dash");
 
   return (
     <MainLayout>
-      {restrictedTab ? <Dashboard /> : pages[activeTab]}
+      {restrictedTab
+        ? (canDashboard ? <Dashboard /> : (
+            <div className="card card-pad" style={{ margin: 24, textAlign: "center", color: "var(--text-muted)" }}>
+              You don't have access to this page. Ask an admin to turn it on in the Permission Matrix.
+            </div>
+          ))
+        : pages[activeTab]}
 
       <Drawer />
       <AssignModal />

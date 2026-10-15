@@ -54,6 +54,19 @@ function stageDoneTotal(data: BoardData | null, projectId: string, unitId: strin
   return { done, total: 1 };
 }
 
+/** The execution work on this unit is finished: every trade stage (RCC, brick,
+ *  AC, electrical, plastering) is fully done. Possession/handover stages are NOT
+ *  required — this is "construction complete", the same definition the MIS uses. */
+export function executionComplete(data: BoardData | null, projectId: string, unitId: string): boolean {
+  let done = 0, total = 0;
+  for (const stageId of TRADE_STAGE_IDS) {
+    const r = stageDoneTotal(data, projectId, unitId, stageId);
+    done += r.done;
+    total += r.total;
+  }
+  return total > 0 && done === total;
+}
+
 /** Every unit across every project the current user can see, with the MIS
  *  fields the rest of this module builds on. This is the single
  *  computation every section below filters/aggregates from. */
