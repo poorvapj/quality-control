@@ -27,6 +27,11 @@
 
 import type { QualityInspection, User } from "../types";
 
+/** The per-DRI score is switched OFF in the UI for now — dashboards show the
+ *  failures themselves (as snags) instead of a mark. The maths below is kept,
+ *  untouched, so it can be turned back on by flipping this to true. */
+export const SHOW_QUALITY_SCORE = false;
+
 export const DRI_SCORING = {
   base: 100,
   min: 0,

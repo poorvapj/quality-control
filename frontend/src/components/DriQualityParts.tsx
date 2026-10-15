@@ -1,6 +1,6 @@
 import React from "react";
 import Badge from "../ui/tw/Badge";
-import { DRI_SCORING, scoreBand, type DriScore, type DriScoreEvent } from "../shared/driQuality";
+import { DRI_SCORING, SHOW_QUALITY_SCORE, scoreBand, type DriScore, type DriScoreEvent } from "../shared/driQuality";
 
 /* Presentational pieces for the DRI Quality Score, shared by the Quality MIS
    Dashboard (all DRIs) and the DRI's own dashboard (just themselves). All
@@ -54,7 +54,7 @@ const KIND_COLOR = { fail: "red", rework: "amber", recovery: "green" } as const;
 
 /** Every scored inspection for one DRI — each row is one real inspection
  *  record, so the total can be audited line by line. */
-export function ScoreLedger({ events }: { events: DriScoreEvent[] }) {
+export function ScoreLedger({ events, showScore = SHOW_QUALITY_SCORE }: { events: DriScoreEvent[]; showScore?: boolean }) {
   const rows = events.slice().reverse(); // newest first
   return (
     <div className="overflow-x-auto max-h-[320px] overflow-y-auto">
@@ -64,8 +64,8 @@ export function ScoreLedger({ events }: { events: DriScoreEvent[] }) {
             <th className="py-2 pr-4">Date</th>
             <th className="py-2 pr-4">Project · Floor / Unit</th>
             <th className="py-2 pr-4">Inspection result</th>
-            <th className="py-2 pr-4 text-right">Marks</th>
-            <th className="py-2 pr-4 text-right">Score after</th>
+            {showScore && <th className="py-2 pr-4 text-right">Marks</th>}
+            {showScore && <th className="py-2 pr-4 text-right">Score after</th>}
             <th className="py-2">Record</th>
           </tr>
         </thead>
@@ -81,10 +81,12 @@ export function ScoreLedger({ events }: { events: DriScoreEvent[] }) {
                 <Badge color={KIND_COLOR[e.kind] as any}>{KIND_LABEL[e.kind]}</Badge>
                 {e.kind === "recovery" && e.streak && e.streak > 1 && <span className="ml-1.5 text-[11px] text-[var(--text-muted)]">streak ×{e.streak}</span>}
               </td>
-              <td className="py-2 pr-4 text-right tabular-nums font-semibold" style={{ color: e.points < 0 ? "#dc2626" : e.points > 0 ? "#16a34a" : undefined }}>
-                {e.points > 0 ? "+" : e.points < 0 ? "−" : ""}{Math.abs(e.points)}
-              </td>
-              <td className="py-2 pr-4 text-right tabular-nums">{e.scoreAfter}</td>
+              {showScore && (
+                <td className="py-2 pr-4 text-right tabular-nums font-semibold" style={{ color: e.points < 0 ? "#dc2626" : e.points > 0 ? "#16a34a" : undefined }}>
+                  {e.points > 0 ? "+" : e.points < 0 ? "−" : ""}{Math.abs(e.points)}
+                </td>
+              )}
+              {showScore && <td className="py-2 pr-4 text-right tabular-nums">{e.scoreAfter}</td>}
               <td className="py-2 text-[var(--text-muted)]">
                 <span className="font-mono text-[11px]">{e.inspectionId}</span>
                 {e.kind === "recovery"
@@ -93,7 +95,7 @@ export function ScoreLedger({ events }: { events: DriScoreEvent[] }) {
               </td>
             </tr>
           ))}
-          {rows.length === 0 && <tr><td colSpan={6} className="py-5 text-center text-[var(--text-muted)]">No scored inspections yet.</td></tr>}
+          {rows.length === 0 && <tr><td colSpan={showScore ? 6 : 4} className="py-5 text-center text-[var(--text-muted)]">No failed inspections yet.</td></tr>}
         </tbody>
       </table>
     </div>

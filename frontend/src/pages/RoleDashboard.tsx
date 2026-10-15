@@ -1,9 +1,12 @@
 import React, { useMemo } from "react";
 import { useApp } from "../context/AppContext";
-import { coll, myProjects } from "../shared/rules";
+import { coll, myProjects, myAssignments, mySnags, myReleases, isCivilLikeRole } from "../shared/rules";
+import { ROLES } from "../services/config";
+import AssignRow from "../components/AssignRow";
+import SnagRow from "../components/SnagRow";
 import { hasModuleGrant } from "../shared/permissionMatrix";
-import { computeDriScores, DRI_SCORING } from "../shared/driQuality";
-import { ScoreBar, TrendChip, Sparkline } from "../components/DriQualityParts";
+import QualityFailures from "../components/QualityFailures";
+import { ApprovalQueue, SentBackList } from "../components/ApprovalControls";
 import NavIcon from "../components/NavIcon";
 import Card from "../ui/tw/Card";
 import StatTile from "../components/StatTile";
@@ -36,6 +39,17 @@ export default function RoleDashboard() {
   const projects = myProjects(data, currentUserId);
   const projectIds = projects.map((p) => p.id);
 
+  const roleLabel = ROLES[role]?.name || role;
+  // Site roles (Civil Engineer, Site Supervisor, and any custom role with
+  // "Site access" ticked) also act on Tower Board stages, so their dashboard
+  // leads with what is waiting on them personally.
+  const siteRole = isCivilLikeRole(data, role);
+  const asg = projectIds.flatMap((pid) => myAssignments(data, pid, currentUserId));
+  const sng = projectIds.flatMap((pid) => mySnags(data, pid, currentUserId));
+  const releases = siteRole ? projectIds.flatMap((pid) => myReleases(data, pid, currentUserId)) : [];
+  const now = Date.now();
+  const overdueMine = asg.filter((a) => a.dueAt && a.dueAt < now).length + sng.filter((x) => x.dueAt && x.dueAt < now).length;
+
   const canQuality = hasModuleGrant(data, currentUserId, "qualityInspection", "view");
   const canUnitExecution = hasModuleGrant(data, currentUserId, "unitExecution", "view");
   const canMeasurement = hasModuleGrant(data, currentUserId, "measurement", "view");
@@ -60,8 +74,6 @@ export default function RoleDashboard() {
     const snag = i.linkedSnagId ? coll(data, "snags").find((s) => s.id === i.linkedSnagId) : null;
     return snag && snag.status !== "Closed";
   }).length;
-  const driResult = useMemo(() => computeDriScores(coll(data, "qualityInspections"), coll(data, "users")), [data]);
-  const myScore = driResult.scores.find((s) => s.userId === currentUserId) || null;
 
   // --- Measurement section — my own recorded measurements. ---------------
   const myUnitMeasurements = coll(data, "materialMeasurements").filter((m) => m.recordedByUserId === currentUserId && projectIds.includes(m.projectId));
@@ -77,10 +89,27 @@ export default function RoleDashboard() {
         <div>
           <div className="text-xl font-semibold tracking-tight leading-tight">My Dashboard</div>
           <div className="text-[12.5px] text-[var(--text-muted)] mt-1 leading-normal">
-            {role} role · {projects.length} project{projects.length === 1 ? "" : "s"}.
+            {roleLabel} · {projects.length} project{projects.length === 1 ? "" : "s"}.
           </div>
         </div>
       </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        {siteRole && <StatTile label="Stages To Act On" value={releases.length} icon="board" onClick={() => setActiveTab("board" as TabKey)} />}
+        <StatTile label="Open Assignments" value={asg.length} icon="pin" onClick={() => setActiveTab("work" as TabKey)} />
+        <StatTile label="Open Snags" value={sng.length} icon="bug" onClick={() => setActiveTab("snags" as TabKey)} />
+        <StatTile label="Overdue" value={overdueMine} icon="clock" valueClassName={overdueMine > 0 ? "text-[var(--color-fail)]" : undefined} />
+      </div>
+
+      <SectionLabel icon="pin" right={`${asg.length + sng.length} open item${asg.length + sng.length === 1 ? "" : "s"}`}>What Needs Me</SectionLabel>
+      <Card padded={false} className="mb-6">
+        {asg.length + sng.length === 0
+          ? <div className="py-6 px-5 text-center text-[var(--text-muted)] text-[13px]">Nothing assigned to you right now.</div>
+          : <>{asg.slice(0, 5).map((a) => <AssignRow key={a.id} a={a} />)}{sng.slice(0, 5).map((x) => <SnagRow key={x.id} s={x} />)}</>}
+      </Card>
+
+      <ApprovalQueue />
+      <SentBackList />
 
       {canQuality && (
         <>
@@ -91,29 +120,7 @@ export default function RoleDashboard() {
             <StatTile label="Pass Rate" value={myInspections.length ? `${Math.round((myInspections.filter((i) => i.result === "Pass").length / myInspections.length) * 100)}%` : "—"} icon="award" />
           </div>
 
-          <SectionLabel icon="award">My Quality Score</SectionLabel>
-          <Card className="mb-6">
-            {!myScore ? (
-              <div className="text-[13px] text-[var(--text-muted)]">
-                No Work Quality Inspection has named you as the responsible DRI yet, so your score is the starting {DRI_SCORING.base}.
-              </div>
-            ) : (
-              <div className="flex items-center gap-x-8 gap-y-3 flex-wrap">
-                <div>
-                  <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Score</div>
-                  <div className="text-[13px]"><ScoreBar score={myScore.score} /></div>
-                </div>
-                <div>
-                  <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Trend</div>
-                  <div className="text-[13px]"><TrendChip trend={myScore.trend} /></div>
-                </div>
-                <div>
-                  <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">History</div>
-                  <Sparkline events={myScore.events} />
-                </div>
-              </div>
-            )}
-          </Card>
+          <QualityFailures />
 
           <SectionLabel icon="eye" right={`${myInspections.length} total`}>Recent Inspections</SectionLabel>
           <Card padded={false} className="mb-6">
@@ -175,7 +182,7 @@ export default function RoleDashboard() {
         </Card>
       )}
 
-      {!anySection && (
+      {!anySection && !siteRole && (
         <Card className="mb-6">
           <div className="text-[13px] text-[var(--text-muted)]">
             No module is granted to your role yet. An admin can grant access from Masters ▸ Role Master's Permission Matrix.

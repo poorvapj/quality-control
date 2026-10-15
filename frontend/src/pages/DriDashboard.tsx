@@ -6,8 +6,8 @@ import AssignRow from "../components/AssignRow";
 import SnagRow from "../components/SnagRow";
 import Card from "../ui/tw/Card";
 import StatTile from "../components/StatTile";
-import { computeDriScores, DRI_SCORING } from "../shared/driQuality";
-import { ScoreBar, TrendChip, Sparkline, ScoreLedger, ScoringRules } from "../components/DriQualityParts";
+import QualityFailures from "../components/QualityFailures";
+import { ApprovalQueue, SentBackList } from "../components/ApprovalControls";
 import type { TabKey } from "../types";
 
 const STAGE_LABEL: Record<string, string> = {
@@ -51,19 +51,6 @@ export default function DriDashboard() {
   const sng = projectIds.flatMap((pid) => mySnags(data, pid, currentUserId));
   const myOpen = asg.length + sng.length;
 
-  // My Quality Score — computed from the real Work Quality Inspection
-  // records that name me as the responsible DRI (see shared/driQuality.ts).
-  // Scoped to just these two collections (not the whole `data` blob) so an
-  // unrelated write elsewhere (e.g. someone else's DPR submission) doesn't
-  // force this to recompute on every poll tick.
-  const qualityInspections = coll(data, "qualityInspections");
-  const allUsers = coll(data, "users");
-  const driResult = useMemo(
-    () => computeDriScores(qualityInspections, allUsers),
-    [qualityInspections, allUsers]
-  );
-  const myScore = driResult.scores.find((s) => s.userId === currentUserId) || null;
-
   const stats = [
     { label: "MY DRAWING REQUESTS", val: myTickets.length, icon: "drawing", foot: pending.length + " awaiting review", onClick: () => setActiveTab("drawingRequests" as TabKey) },
     { label: "APPROVED", val: approved, icon: "award", foot: "Cleared through all 4 stages" },
@@ -89,43 +76,6 @@ export default function DriDashboard() {
         {stats.map((s) => <StatTile key={s.label} label={s.label} value={s.val} foot={s.foot} icon={s.icon} onClick={s.onClick} />)}
       </div>
 
-      <div className="text-[13px] font-bold tracking-tight text-[var(--text-sub)] uppercase flex items-center gap-2 mb-2.5">
-        <NavIcon name="award" size={13} /> My Quality Score
-      </div>
-      <Card className="mb-6">
-        {!myScore ? (
-          <div className="text-[13px] text-[var(--text-muted)]">
-            No quality inspections are recorded against you yet, so your score is the starting {DRI_SCORING.base}. It changes only when a Work Quality Inspection names you as the responsible DRI.
-          </div>
-        ) : (
-          <>
-            <div className="flex items-center gap-x-8 gap-y-3 flex-wrap mb-4">
-              <div>
-                <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Score</div>
-                <div className="text-[13px]"><ScoreBar score={myScore.score} /></div>
-              </div>
-              <div>
-                <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Trend</div>
-                <div className="text-[13px]"><TrendChip trend={myScore.trend} /></div>
-              </div>
-              <div>
-                <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">History</div>
-                <Sparkline events={myScore.events} />
-              </div>
-              <div className="text-[12.5px] flex gap-5">
-                <span><b style={myScore.fails ? { color: "#dc2626" } : undefined}>{myScore.fails}</b> fail{myScore.fails === 1 ? "" : "s"}</span>
-                <span><b>{myScore.reworks}</b> rework</span>
-                <span><b>{myScore.recoveries}</b> recovered</span>
-                <span><b style={myScore.openFailures ? { color: "#dc2626" } : undefined}>{myScore.openFailures}</b> still open</span>
-              </div>
-            </div>
-            <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Inspections behind my score</div>
-            <ScoreLedger events={myScore.events} />
-          </>
-        )}
-        <div className="mt-3"><ScoringRules /></div>
-      </Card>
-
       <div className="flex items-center justify-between gap-3 flex-wrap mb-2.5">
         <div className="text-[13px] font-bold tracking-tight text-[var(--text-sub)] uppercase flex items-center gap-2">
           <NavIcon name="pin" size={13} /> What Needs Me
@@ -137,6 +87,10 @@ export default function DriDashboard() {
           ? <div className="py-6 px-5 text-center text-[var(--text-muted)] text-[13px]">🎉 Nothing assigned to you right now.</div>
           : <>{asg.slice(0, 5).map((a) => <AssignRow key={a.id} a={a} />)}{sng.slice(0, 5).map((s) => <SnagRow key={s.id} s={s} />)}</>}
       </Card>
+
+      <ApprovalQueue />
+      <SentBackList />
+      <QualityFailures />
 
       {myTeam && (
         <>

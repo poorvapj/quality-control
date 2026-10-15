@@ -7,6 +7,8 @@ import { buildEventOp } from "../shared/eventLog";
 import { hasModuleGrant } from "../shared/permissionMatrix";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
+import { approvalFor } from "../shared/approval";
+import { ApprovalBadge, ApprovalActions } from "../components/ApprovalControls";
 import SidePanel from "../components/SidePanel";
 import StatTile from "../components/StatTile";
 import PhotoGroupUploader from "../components/PhotoGroupUploader";
@@ -201,6 +203,10 @@ export default function Measurement() {
                   {!m.linkedItemId && m.linkNote && <div className="text-[10.5px] text-[var(--text-muted)] mt-1 max-w-[220px] whitespace-normal">{REASON[m.linkNote] || m.linkNote}</div>}
                 </TableCell>
                 <TableCell className="text-right">
+                  <div className="flex flex-col items-end gap-1">
+                    <ApprovalBadge approval={m.approval} />
+                    <ApprovalActions collName="workMeasurements" record={m} />
+                  </div>
                   {m.linkStatus === "ambiguous" && canCreate && <Btn label="Choose link" color="secondary" size="sm" onClick={() => setConfirming(m)} />}
                 </TableCell>
               </TableRow>
@@ -403,6 +409,8 @@ function MeasurementPanel({ open, onClose, categories, categoriesNote, existing,
       remarks: remarks.trim() || undefined,
       recordedByUserId: userId, recordedByName: userName,
       createdAt: Date.now(),
+      // a team member's measurement waits for their team leader (server re-derives this)
+      approval: approvalFor(data, userId),
       // Only a person's explicit pick is proposed; the server decides the link.
       linkedItemId: match?.status === "ambiguous" && choice ? choice : null
     };

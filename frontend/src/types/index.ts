@@ -509,6 +509,23 @@ export type QualityInspectionResult = "Pass" | "Fail" | "Rework Required";
    status — per the read-only audit this session, none of those are a
    reliable quality signal for a specific executed quantity, so this is
    QC's own, independent record. */
+/* Team-leader approval of a team member's inspection / measurement — a
+   review flag only (changes no billing, quality status or production
+   record). Set by the SERVER on save (backend/approvalRules.js): a record by
+   a team member is created "pending" with the team leader as approver; only
+   that leader (or Admin) can approve/reject it, never its author. Rejected
+   work stays rejected with the remark and the member records a new one.
+   Absent = no approval needed (Admin, a team leader, someone on no team, or
+   a record from before this existed). */
+export interface Approval {
+  status: "pending" | "approved" | "rejected";
+  approverUserId: string;
+  approverName?: string;
+  decidedByUserId?: string;
+  decidedAt?: number;
+  remark?: string;
+}
+
 export interface QualityInspection extends BaseRecord {
   projectId: string;
   projectCode: string;
@@ -564,6 +581,7 @@ export interface QualityInspection extends BaseRecord {
   // (server.js), closing the loop instead of leaving it open forever once
   // the issue is actually fixed.
   reInspectionOf?: string | null;
+  approval?: Approval;
   createdAt: number;
 }
 
@@ -615,6 +633,7 @@ export interface MaterialMeasurement extends BaseRecord {
   purchaseOrderRef?: string | null;
   recordedByUserId: string;
   recordedByName: string;
+  approval?: Approval;
   createdAt: number;
 }
 
@@ -650,6 +669,7 @@ export interface WorkMeasurement extends BaseRecord {
   linkedItemType?: "scopeItem" | "subItem" | null;
   linkedItemDescription?: string | null;
   linkedItemUnit?: string | null;
+  approval?: Approval;
 }
 
 /* Synced from IMS's PO lifecycle webhook (backend/imsWebhook.js sanitizes

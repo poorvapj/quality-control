@@ -7,6 +7,8 @@ import { buildEventOp } from "../shared/eventLog";
 import { hasModuleGrant } from "../shared/permissionMatrix";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
+import { approvalFor } from "../shared/approval";
+import { ApprovalBadge, ApprovalActions } from "../components/ApprovalControls";
 import SidePanel from "../components/SidePanel";
 import Card from "../ui/tw/Card";
 import Btn from "../ui/tw/Btn";
@@ -153,7 +155,11 @@ export default function UnitExecutionWorkflow() {
               <TableCell className="text-right tabular-nums whitespace-nowrap">{qty(m.measuredQty)} {m.measuredUnit}</TableCell>
               <TableCell className="text-right tabular-nums whitespace-nowrap">{qty(m.materialConsumedQty)} {m.materialUnit}</TableCell>
               <TableCell muted className="text-right tabular-nums whitespace-nowrap">{qty(m.unusedBalanceQty)} / {qty(m.wastageQty)} {m.materialUnit}</TableCell>
-              <TableCell muted className="whitespace-nowrap">{m.recordedByName}</TableCell>
+              <TableCell muted>
+                <div className="whitespace-nowrap">{m.recordedByName}</div>
+                <div className="mt-1"><ApprovalBadge approval={m.approval} /></div>
+                <ApprovalActions collName="materialMeasurements" record={m} />
+              </TableCell>
             </TableRow>
           ))}
         </Table>
@@ -278,6 +284,8 @@ function MeasurementForm({
       purchaseOrderRef: null, // reserved for IMS integration — see MaterialMeasurement's doc comment
       recordedByUserId: currentUserId || "",
       recordedByName,
+      // a team member's measurement waits for their team leader (server re-derives this)
+      approval: approvalFor(data, currentUserId),
       createdAt: Date.now()
     };
     await apply([

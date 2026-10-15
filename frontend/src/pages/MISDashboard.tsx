@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, myProjects, projectFloors, projectUnits, trackStages } from "../shared/rules";
-import { computeDriScores } from "../shared/driQuality";
+import { computeDriScores, SHOW_QUALITY_SCORE } from "../shared/driQuality";
 import {
   computeTopKpis, computeProjectOverview, computeStageProgress,
   computeSnagAnalysis, computePossessionTracker, computeTradePerformance, computeManagementAlerts,
@@ -325,40 +325,40 @@ export default function MISDashboard() {
       {/* ------------------------------------------------- DRI Quality Score */}
       <Card className="mb-6">
         <div className="flex items-start justify-between gap-3 flex-wrap mb-1">
-          <div className="text-[13px] font-bold">DRI Quality Score</div>
-          <div className="text-[11px] text-[var(--text-muted)]">Lowest score first · click a DRI to see the inspections behind it</div>
+          <div className="text-[13px] font-bold">{SHOW_QUALITY_SCORE ? "DRI Quality Score" : "DRI Quality Failures"}</div>
+          <div className="text-[11px] text-[var(--text-muted)]">{SHOW_QUALITY_SCORE ? "Lowest score first" : "Most failures first"} · click a DRI to see the inspections behind it</div>
         </div>
-        <div className="mb-4"><ScoringRules unattributedPasses={driResult.unattributedPasses} /></div>
+        {SHOW_QUALITY_SCORE && <div className="mb-4"><ScoringRules unattributedPasses={driResult.unattributedPasses} /></div>}
         <div className="overflow-x-auto overflow-y-auto max-h-[440px]">
           <table className="w-full text-[12.5px] border-collapse">
             <thead>
               <tr className="text-left text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] sticky top-0 bg-[var(--bg-card)]">
                 <th className="pb-2 pr-4">DRI</th>
-                <th className="pb-2 pr-4">Score</th>
+                {SHOW_QUALITY_SCORE && <th className="pb-2 pr-4">Score</th>}
                 <th className="pb-2 pr-4">Fails</th>
                 <th className="pb-2 pr-4">Rework</th>
                 <th className="pb-2 pr-4">Recovered</th>
                 <th className="pb-2 pr-4">Open</th>
-                <th className="pb-2 pr-4">Trend</th>
-                <th className="pb-2">History</th>
+                {SHOW_QUALITY_SCORE && <th className="pb-2 pr-4">Trend</th>}
+                {SHOW_QUALITY_SCORE && <th className="pb-2">History</th>}
               </tr>
             </thead>
             <tbody>
-              {driResult.scores.map((d) => (
+              {(SHOW_QUALITY_SCORE ? driResult.scores : [...driResult.scores].sort((a, b) => (b.fails + b.reworks) - (a.fails + a.reworks) || b.openFailures - a.openFailures || a.name.localeCompare(b.name))).map((d) => (
                 <React.Fragment key={d.userId}>
                   <tr className="border-t border-[var(--border)] cursor-pointer hover:bg-[var(--bg-card-hover)]" onClick={() => setOpenDriId(openDriId === d.userId ? null : d.userId)}>
                     <td className="py-2.5 pr-4 font-semibold">{openDriId === d.userId ? "▾" : "▸"} {d.name}</td>
-                    <td className="py-2.5 pr-4"><ScoreBar score={d.score} /></td>
+                    {SHOW_QUALITY_SCORE && <td className="py-2.5 pr-4"><ScoreBar score={d.score} /></td>}
                     <td className="py-2.5 pr-4">{d.fails > 0 ? <span style={{ color: "#dc2626", fontWeight: 700 }}>{d.fails}</span> : 0}</td>
                     <td className="py-2.5 pr-4">{d.reworks}</td>
                     <td className="py-2.5 pr-4">{d.recoveries}</td>
                     <td className="py-2.5 pr-4">{d.openFailures > 0 ? <span style={{ color: "#dc2626", fontWeight: 700 }}>{d.openFailures}</span> : 0}</td>
-                    <td className="py-2.5 pr-4"><TrendChip trend={d.trend} /></td>
-                    <td className="py-2.5"><Sparkline events={d.events} /></td>
+                    {SHOW_QUALITY_SCORE && <td className="py-2.5 pr-4"><TrendChip trend={d.trend} /></td>}
+                    {SHOW_QUALITY_SCORE && <td className="py-2.5"><Sparkline events={d.events} /></td>}
                   </tr>
                   {openDriId === d.userId && (
                     <tr>
-                      <td colSpan={8} className="pb-3 pt-1 bg-[var(--bg-subtle)] px-3">
+                      <td colSpan={SHOW_QUALITY_SCORE ? 8 : 5} className="pb-3 pt-1 bg-[var(--bg-subtle)] px-3">
                         <ScoreLedger events={d.events} />
                       </td>
                     </tr>
@@ -366,7 +366,7 @@ export default function MISDashboard() {
                 </React.Fragment>
               ))}
               {driResult.scores.length === 0 && (
-                <tr><td colSpan={8} className="py-6 text-center text-[var(--text-muted)]">No Fail / Rework inspections with a responsible DRI in the current scope — nothing to score yet.</td></tr>
+                <tr><td colSpan={SHOW_QUALITY_SCORE ? 8 : 5} className="py-6 text-center text-[var(--text-muted)]">No Fail / Rework inspections with a responsible DRI in the current scope.</td></tr>
               )}
             </tbody>
           </table>
