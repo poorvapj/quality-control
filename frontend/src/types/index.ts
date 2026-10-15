@@ -730,9 +730,34 @@ export interface BoardData {
   materialMeasurements: MaterialMeasurement[];
   workMeasurements: WorkMeasurement[];
   purchaseOrders: PurchaseOrder[];
+  teamDailyReports: TeamDailyReport[];
   progress: Record<string, ProgressPatch>;
   events: EventLog[];
   [key: string]: unknown;
+}
+
+/** One Team's end-of-day activity summary (Masters ▸ Teams), generated
+ *  server-side once per team per date (see backend/teamDailyReports.js) and
+ *  signed off by the team's own leader from their dashboard — the sign-off
+ *  is a record only; it doesn't block or gate anything else. */
+export interface TeamDailyReport extends BaseRecord {
+  teamId: string;
+  teamName: string;
+  date: string; // YYYY-MM-DD, IST
+  generatedAt: number;
+  members: {
+    userId: string;
+    userName: string;
+    assignmentsDone: number;
+    snagsClosed: number;
+    qualityInspections: number;
+    measurementsRecorded: number;
+  }[];
+  totals: { assignmentsDone: number; snagsClosed: number; qualityInspections: number; measurementsRecorded: number };
+  status: "Pending" | "Approved";
+  approvedByUserId?: string | null;
+  approvedByName?: string | null;
+  approvedAt?: number | null;
 }
 
 export type CollectionName = keyof Omit<BoardData, "progress" | "events">;

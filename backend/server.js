@@ -70,6 +70,7 @@ const workMeasurements = require("./workMeasurementRules.js");
 const { getVmsDrawingRequests } = require("./vmsDrawingRequests.js");
 const { deriveApprovalOnCreate, resolveApprovalOnUpdate } = require("./approvalRules.js");
 const { sanitizePoEvent, matchProjectByName, isStaleUpdate } = require("./imsWebhook.js");
+const { buildTeamDailyReport, slackSummaryFor } = require("./teamDailyReports.js");
 
 /* ------------------------------------------------------------- passwords
    Node's built-in scrypt is our own hashing scheme going forward. Plaintext
@@ -688,6 +689,28 @@ async function assertOpAllowed(op, session) {
     if (!session) { const e = new Error("Sign-in required"); e.status = 401; throw e; }
     if (!session.isAdmin) { const e = new Error("Admin access required"); e.status = 403; throw e; }
     return;
+  }
+
+  // Daily Team Reports are generated server-side only (/api/team-reports/
+  // generate) — the generic ops endpoint may only ever PATCH the sign-off
+  // fields of an EXISTING one, and only the team's own leader (or an
+  // Admin) may do it. Everything else on the record (members/totals/date)
+  // is forced back to whatever's already stored, so a member can't
+  // fabricate their own team's numbers or sign off on their own behalf.
+  if (op.op === "upsert" && op.coll === "teamDailyReports" && op.rec && op.rec.id) {
+    const existing = await mongoDb.collection("teamDailyReports").findOne({ id: op.rec.id }, { projection: { _id: 0 } });
+    if (!existing) { const e = new Error("Daily Team Reports can't be created directly"); e.status = 400; throw e; }
+    if (!session) { const e = new Error("Sign-in required"); e.status = 401; throw e; }
+    const team = await mongoDb.collection("teams").findOne({ id: existing.teamId });
+    const isLeader = team && team.leaderId === session.userId;
+    if (!session.isAdmin && !isLeader) { const e = new Error("Only this team's leader can approve its report"); e.status = 403; throw e; }
+    const approver = await mongoDb.collection("users").findOne({ id: session.userId }, { projection: { name: 1 } });
+    Object.assign(op.rec, existing, {
+      status: "Approved",
+      approvedByUserId: session.userId,
+      approvedByName: approver ? approver.name : null,
+      approvedAt: Date.now()
+    });
   }
 
   if (op.op === "upsert" && op.coll === "drawingRequests" && op.rec && op.rec.id) {
@@ -1593,6 +1616,40 @@ async function handleApi(req, res, urlPath) {
     if (!timingSafeStringEqual(req.headers["x-cron-secret"], secret)) return sendJson(res, 401, { error: "Invalid cron secret" });
     const doc = await createBackup("scheduled");
     return sendJson(res, 200, summarizeBackup(doc));
+  }
+  if (req.method === "GET" && urlPath === "/api/team-reports/generate") {
+    // Same pattern as /api/backup/scheduled — an external cron pinger hits
+    // this at 6pm IST (Render's free tier sleeps, an in-process setInterval
+    // can't be relied on). Generates today's Daily Team Report for every
+    // Team that has members and doesn't already have one for today, then
+    // Slack-DMs each team's leader a summary. Safe to call more than once a
+    // day — a team that already has today's report is skipped, never
+    // regenerated (so a leader's sign-off is never silently reset).
+    const secret = process.env.TEAM_REPORT_CRON_SECRET;
+    if (!secret) return sendJson(res, 501, { error: "TEAM_REPORT_CRON_SECRET is not configured" });
+    if (!timingSafeStringEqual(req.headers["x-cron-secret"], secret)) return sendJson(res, 401, { error: "Invalid cron secret" });
+    const dateStr = require("./teamDailyReports.js").istDateStrOf(Date.now());
+    const state = await getState();
+    const teams = (state.data.teams || []).filter((t) => t.active !== false);
+    const generated = [];
+    for (const team of teams) {
+      const already = await mongoDb.collection("teamDailyReports").findOne({ teamId: team.id, date: dateStr });
+      if (already) continue;
+      const report = buildTeamDailyReport(state.data, team, dateStr);
+      if (!report) continue; // no members — nothing to report
+      await mongoDb.collection("teamDailyReports").updateOne({ id: report.id }, { $set: report }, { upsert: true });
+      generated.push(report.id);
+      if (team.leaderId) {
+        const leader = await mongoDb.collection("users").findOne({ id: team.leaderId }, { projection: { email: 1, slackId: 1 } });
+        if (leader) {
+          slackUserIdForEmail(leader.email, leader.slackId)
+            .then((uid) => uid && slackPostMessage(uid, slackSummaryFor(report)))
+            .catch((e) => console.error("Daily Team Report Slack DM failed:", team.id, e.message));
+        }
+      }
+    }
+    if (generated.length) await bumpRev();
+    return sendJson(res, 200, { generated });
   }
   return sendJson(res, 404, { error: "Unknown endpoint " + urlPath });
 }

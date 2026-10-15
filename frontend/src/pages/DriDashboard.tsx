@@ -1,14 +1,68 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, myProjects, myAssignments, mySnags } from "../shared/rules";
 import NavIcon from "../components/NavIcon";
 import AssignRow from "../components/AssignRow";
 import SnagRow from "../components/SnagRow";
 import Card from "../ui/tw/Card";
+import Btn from "../ui/tw/Btn";
+import Badge from "../ui/tw/Badge";
 import StatTile from "../components/StatTile";
 import QualityFailures from "../components/QualityFailures";
 import { ApprovalQueue, SentBackList } from "../components/ApprovalControls";
-import type { TabKey } from "../types";
+import type { TabKey, TeamDailyReport } from "../types";
+
+/* One Team's Daily Report, pending or already-signed-off — the leader
+   taps Approve, which is a sign-off record only (doesn't gate anything
+   else; confirmed with whoever asked for this feature). */
+function TeamReportCard({ report }: { report: TeamDailyReport }) {
+  const { apply, toast } = useApp();
+  const [busy, setBusy] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  async function approve() {
+    setBusy(true);
+    try {
+      await apply([{ op: "upsert", coll: "teamDailyReports", rec: { id: report.id } }]);
+      toast("Report approved");
+    } catch {
+      toast("Couldn't approve — try again");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const t = report.totals;
+  return (
+    <Card className="mb-3">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0 cursor-pointer" onClick={() => setExpanded((x) => !x)}>
+          <div className="text-[13px] font-bold">{report.date}</div>
+          <div className="text-[11.5px] text-[var(--text-muted)] mt-0.5">
+            {t.assignmentsDone} assignment{t.assignmentsDone === 1 ? "" : "s"} done · {t.snagsClosed} snag{t.snagsClosed === 1 ? "" : "s"} closed · {t.qualityInspections} inspection{t.qualityInspections === 1 ? "" : "s"} · {t.measurementsRecorded} measurement{t.measurementsRecorded === 1 ? "" : "s"}
+          </div>
+        </div>
+        {report.status === "Approved" ? (
+          <Badge color="green">Approved{report.approvedByName ? ` by ${report.approvedByName}` : ""}</Badge>
+        ) : (
+          <Btn label={busy ? "Approving…" : "Approve"} color="primary" size="sm" onClick={approve} disabled={busy} />
+        )}
+      </div>
+      {expanded && (
+        <div className="mt-3 pt-3 border-t border-[var(--border)]">
+          {report.members.map((m) => (
+            <div key={m.userId} className="flex items-center justify-between gap-3 py-1.5 text-[12px]">
+              <div className="font-semibold">{m.userName}</div>
+              <div className="text-[var(--text-muted)]">
+                {m.assignmentsDone} asg · {m.snagsClosed} snag · {m.qualityInspections} insp · {m.measurementsRecorded} meas
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
 
 const STAGE_LABEL: Record<string, string> = {
   "stage-1-screen": "At Stage 1 — Screening",
@@ -41,6 +95,13 @@ export default function DriDashboard() {
     const overdue = a.filter((x) => x.dueAt && x.dueAt < Date.now()).length + s.filter((x) => x.dueAt && x.dueAt < Date.now()).length;
     return { user: u, assignments: a.length, snags: s.length, overdue };
   }).sort((a, b) => (b.assignments + b.snags) - (a.assignments + a.snags));
+
+  // Daily Team Reports — generated once a day (see backend/
+  // teamDailyReports.js), newest first. Only this team's own leader (or an
+  // Admin) can Approve one (enforced server-side too).
+  const teamReports = myTeam
+    ? coll(data, "teamDailyReports").filter((r) => r.teamId === myTeam.id).sort((a, b) => b.date.localeCompare(a.date))
+    : [];
 
   const myTickets = coll(data, "drawingRequests").filter((r) => r.submittedByUserId === currentUserId);
   const pending = myTickets.filter((r) => r.reviewStatus !== "approved" && r.reviewStatus !== "returned");
@@ -119,6 +180,22 @@ export default function DriDashboard() {
               ))
             )}
           </Card>
+        </>
+      )}
+
+      {myTeam && teamReports.length > 0 && (
+        <>
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-2.5">
+            <div className="text-[13px] font-bold tracking-tight text-[var(--text-sub)] uppercase flex items-center gap-2">
+              <NavIcon name="board" size={13} /> {myTeam.name} — Daily Reports
+            </div>
+            <div className="text-[11px] text-[var(--text-muted)] font-medium">
+              {teamReports.filter((r) => r.status === "Pending").length} pending
+            </div>
+          </div>
+          <div className="mb-6">
+            {teamReports.slice(0, 7).map((r) => <TeamReportCard key={r.id} report={r} />)}
+          </div>
         </>
       )}
 
