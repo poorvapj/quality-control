@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import NavIcon from "./NavIcon";
 
 export interface DropdownOption {
@@ -54,11 +55,37 @@ export default function SearchDropdown({
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const wrapRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const mv = multiValue || [];
+
+  // The panel used to be a plain position:absolute sibling of the button,
+  // which looks right almost everywhere — except inside a scrolling
+  // container (e.g. a Drawer's overflow-y:auto body), where that ancestor
+  // clips it instead of letting it float over whatever comes after it.
+  // Portaling to <body> with a position computed from the button's own
+  // rect fixes that everywhere at once, with no per-usage change needed.
+  const [panelPos, setPanelPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    function place() {
+      const r = wrapRef.current?.getBoundingClientRect();
+      if (r) setPanelPos({ top: r.bottom + 6, left: r.left, width: r.width });
+    }
+    place();
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
+  }, [open]);
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (wrapRef.current?.contains(t)) return;
+      if (panelRef.current?.contains(t)) return;
+      setOpen(false);
     }
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
@@ -106,12 +133,13 @@ export default function SearchDropdown({
         </span>
       </button>
 
-      {open && (
+      {open && panelPos && createPortal(
         <div
+          ref={panelRef}
           style={{
-            position: "absolute", top: "calc(100% + 6px)", left: 0, minWidth: "100%", width: "max-content", maxWidth: 280,
-            background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 10,
-            boxShadow: "0 12px 32px rgba(15, 23, 42, 0.14)", zIndex: 70, overflow: "hidden"
+            position: "fixed", top: panelPos.top, left: panelPos.left, minWidth: panelPos.width, width: "max-content", maxWidth: Math.max(280, panelPos.width),
+            background: "var(--bg-card)", border: "1px solid var(--theme-primary)", borderRadius: 10,
+            boxShadow: "0 12px 32px rgba(15, 23, 42, 0.14)", zIndex: 1000, overflow: "hidden"
           }}
         >
           {searchable && (
@@ -235,7 +263,8 @@ export default function SearchDropdown({
               })
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
