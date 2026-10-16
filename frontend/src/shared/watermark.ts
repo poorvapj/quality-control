@@ -21,7 +21,7 @@ function getGeoText(): Promise<string> {
   return new Promise((resolve) => {
     if (!("geolocation" in navigator)) { resolve(""); return; }
     const settle = (text: string) => { cachedGeo = { text, at: Date.now() }; resolve(text); };
-    const timer = setTimeout(() => settle(""), 6000);
+    const timer = setTimeout(() => settle(""), 3000);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         clearTimeout(timer);
@@ -30,7 +30,13 @@ function getGeoText(): Promise<string> {
         settle(`${lat}°N, ${lon}°E`);
       },
       () => { clearTimeout(timer); settle(""); },
-      { enableHighAccuracy: true, timeout: 5500, maximumAge: 60000 }
+      // enableHighAccuracy forces the GPS chip, which can take several
+      // seconds (worse indoors/multi-storey, exactly where this app is
+      // used) to get a fix. The stamp is only 4-decimal-place (~11m)
+      // precision anyway — network/wifi-based location resolves in under a
+      // second and is accurate enough for "which building this was taken
+      // at", which is all this is for.
+      { enableHighAccuracy: false, timeout: 2500, maximumAge: 120000 }
     );
   });
 }
