@@ -18,7 +18,7 @@ import Card from "../ui/tw/Card";
 import Btn from "../ui/tw/Btn";
 import Badge from "../ui/tw/Badge";
 import Table, { TableRow, TableCell } from "../ui/tw/Table";
-import type { Op, Photo, QualityInspection as QI, QualityInspectionResult, Severity, Snag } from "../types";
+import type { Op, Photo, QualityInspection as QI, QualityInspectionResult, Severity, Snag, TabKey } from "../types";
 
 interface VmsWorkItem { itemId: string; itemType: "scopeItem" | "subItem"; parentItemId: string | null; description: string; unit: string }
 interface VmsWorkOrderEntry { workOrderNo: string; items: VmsWorkItem[] }
@@ -110,7 +110,7 @@ const SLAB_OPTIONS = Array.from({ length: TOTAL_SLABS }, (_, i) => `Slab ${i + 1
 const QC_INSPECTION_STAGE_ID = "STG-QC-INSPECTION";
 
 export default function QualityInspection() {
-  const { data, currentUserId, myRole, apply, toast, me, reInspectQualityId, setReInspectQualityId } = useApp();
+  const { data, currentUserId, myRole, apply, toast, me, reInspectQualityId, setReInspectQualityId, setActiveTab } = useApp();
   const isAdmin = currentUserId === "U-ADMIN";
   const canCreate = isAdmin || hasModuleGrant(data, currentUserId, "qualityInspection", "create");
   const allProjects = myProjects(data, currentUserId);
@@ -334,6 +334,7 @@ This cannot be undone.`)) return;
           ]} neutralActive />
         </div>
         <Btn label={generating ? "Generating…" : "Generate Report"} color="secondary" icon="download" onClick={generateReport} disabled={generating} />
+        <Btn label="Fail Register" color="secondary" icon="bug" onClick={() => setActiveTab("qualityFails" as TabKey)} />
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
