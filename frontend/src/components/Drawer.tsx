@@ -503,9 +503,18 @@ function SnagDrawer({ id }: { id: string }) {
   // existing civil-like pool (CRM doesn't do field/rework, so excluded
   // from both).
   const isQualityFailSnag = s.stageId === "STG-QC-INSPECTION";
-  const users = coll(data, "users").filter((u) =>
+  const assignablePool = coll(data, "users").filter((u) =>
     u.active !== false && (isQualityFailSnag ? u.role === "Execution" : isCivilLikeRole(data, u.role))
   );
+  // Whoever it's CURRENTLY assigned to must still show up as an option even
+  // if they don't match the pool above (e.g. a Quality-Fail snag starts out
+  // assigned to the team's DRI head, who isn't in the Execution-only list
+  // below) — otherwise the dropdown can't find a label for its own current
+  // value and silently falls back to a blank dash.
+  const currentAssignee = s.assignedTo ? byId(coll(data, "users"), s.assignedTo) : null;
+  const users = currentAssignee && !assignablePool.some((u) => u.id === currentAssignee.id)
+    ? [currentAssignee, ...assignablePool]
+    : assignablePool;
 
   const label: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: "#9CA3AF", marginBottom: 4 };
   const value: React.CSSProperties = { fontSize: 14, fontWeight: 500, color: "var(--text-main)", lineHeight: 1.4 };
