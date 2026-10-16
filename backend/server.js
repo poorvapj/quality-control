@@ -63,7 +63,7 @@ const { seedData, blankData, COLLECTIONS } = require("./seed.js");
 const { handleVmsDprSync } = require("./vmsDprApiHandler.js");
 const { getExecutionReconciliation, requiresAdmin } = require("./executionReconciliation.js");
 const { getVmsWorkItems } = require("./vmsWorkItems.js");
-const { shouldResolveOriginal } = require("./qualityInspectionRules.js");
+const { shouldResolveOriginal, enforceResultFromChecklist } = require("./qualityInspectionRules.js");
 const { validateMeasurement } = require("./materialMeasurementRules.js");
 const { getProgressAnalysis } = require("./progressAnalysis.js");
 const workMeasurements = require("./workMeasurementRules.js");
@@ -679,6 +679,7 @@ async function applyApprovalRules(op, session) {
 }
 
 async function assertOpAllowed(op, session) {
+  if (op.op === "upsert" && op.coll === "qualityInspections" && op.rec) enforceResultFromChecklist(op.rec);
   await applyApprovalRules(op, session);
   const needsAdmin = op.op === "delete" || (op.op === "upsert" && (op.coll === "users" || op.coll === "moduleGrants"));
   if (needsAdmin) {

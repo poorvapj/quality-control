@@ -16,7 +16,7 @@ import Card from "../ui/tw/Card";
 import Btn from "../ui/tw/Btn";
 import Badge from "../ui/tw/Badge";
 import Table, { TableRow, TableCell } from "../ui/tw/Table";
-import type { Photo, QualityInspection as QI, QualityInspectionResult, Severity, Snag } from "../types";
+import type { Op, Photo, QualityInspection as QI, QualityInspectionResult, Severity, Snag } from "../types";
 
 interface VmsWorkItem { itemId: string; itemType: "scopeItem" | "subItem"; parentItemId: string | null; description: string; unit: string }
 interface VmsWorkOrderEntry { workOrderNo: string; items: VmsWorkItem[] }
@@ -117,6 +117,30 @@ export default function QualityInspection() {
   }, []);
 
   const inspections = coll(data, "qualityInspections").filter((i) => allowedProjectCodes.has(i.projectCode));
+
+  // Admin only (the server enforces it too): permanently removes a wrongly
+  // entered / test inspection together with the one snag it raised.
+  async function deleteInspection(insp: QI) {
+    if (!isAdmin) return;
+    if (coll(data, "qualityInspections").some((i) => i.reInspectionOf === insp.id)) {
+      toast("Can't delete — a re-inspection was recorded against it. Delete that first.");
+      return;
+    }
+    const snag = insp.linkedSnagId ? byId(coll(data, "snags"), insp.linkedSnagId) : null;
+    const what = `${insp.projectCode} · ${insp.floorName}${insp.unitName ? " / " + insp.unitName : ""}${insp.workType ? " · " + insp.workType : ""} · ${insp.result} · ${insp.inspectionDate}`;
+    if (!window.confirm(`Permanently delete this inspection${snag ? " and the snag it raised" : ""}?
+
+${what}
+
+This cannot be undone.`)) return;
+    const ops: Op[] = [
+      { op: "delete", coll: "qualityInspections", id: insp.id },
+      ...(snag ? [{ op: "delete" as const, coll: "snags" as const, id: snag.id }] : []),
+      buildEventOp(currentUserId, "QUALITY_INSPECTION_DELETE", insp.id, "", `Deleted inspection · ${what}`)
+    ];
+    await apply(ops);
+    toast("Inspection deleted");
+  }
 
   function linkedSnag(insp: QI): Snag | null {
     return insp.linkedSnagId ? byId(snags, insp.linkedSnagId) : null;
@@ -257,6 +281,7 @@ export default function QualityInspection() {
                     {canCreate && insp.result !== "Pass" && snag?.status !== "Closed" && (
                       <Btn label="Re-inspect" color="secondary" size="sm" onClick={() => { setReInspectOf(insp); setPanelOpen(true); }} />
                     )}
+                    {isAdmin && <Btn label="Delete" color="secondary" size="sm" onClick={() => deleteInspection(insp)} />}
                   </div>
                 </TableCell>
               </TableRow>
@@ -412,10 +437,14 @@ function InspectionForm({
   }
   function setItemStatus(idx: number, status: ChecklistStatus) {
     setChecklist((prev) => prev.map((row, i) => (i === idx ? { ...row, status } : row)));
-    // Nudge the overall Result toward Fail the moment anything is marked
-    // Not OK — still just a default the inspector can change, never forced.
-    if (status === "Not OK") setResult((r) => (r === "Pass" ? "Fail" : r));
   }
+  // Any Not OK item forces the overall Result to Fail — locked, not a
+  // default the inspector can override. Un-locks automatically if every
+  // Not OK item is corrected back to OK/N/A before saving.
+  const anyNotOk = checklist.some((c) => c.status === "Not OK");
+  useEffect(() => {
+    if (anyNotOk) setResult("Fail");
+  }, [anyNotOk]);
   function setItemRemarks(idx: number, text: string) {
     setChecklist((prev) => prev.map((row, i) => (i === idx ? { ...row, remarks: text } : row)));
   }
@@ -685,7 +714,9 @@ function InspectionForm({
             value={result}
             onChange={(v) => setResult(v as QualityInspectionResult)}
             options={RESULTS.map((r) => ({ value: r, label: r }))}
+            disabled={anyNotOk}
           />
+          {anyNotOk && <div className="hint">Locked to Fail — a checklist item is marked Not OK.</div>}
         </div>
 
         <div className="field full">

@@ -59,7 +59,7 @@ export function getModuleGrant(
 export const DEFAULT_ROLE_GRANTS: Partial<Record<Role, Record<string, ModuleAction[]>>> = {
   CIVIL: {
     dashboard: ["view"], myWork: ["view"], towerBoard: ["view"],
-    handoverInternal: ["view", "edit"],
+    handoverInternal: ["view", "edit"], handoverOwner: ["view"],
     snags: ["view", "create", "edit", "delete"],
     team: ["view"],
     dpr: ["view", "create"],
@@ -67,15 +67,18 @@ export const DEFAULT_ROLE_GRANTS: Partial<Record<Role, Record<string, ModuleActi
   },
   SUPERVISOR: {
     dashboard: ["view"], myWork: ["view"], towerBoard: ["view"],
-    handoverInternal: ["view", "edit"],
+    handoverInternal: ["view", "edit"], handoverOwner: ["view"],
     snags: ["view", "create", "edit", "delete"],
     team: ["view"],
     dpr: ["view", "create"],
     qualityInspection: ["view", "create", "edit"]
   },
+  CRM: {
+    handoverInternal: ["view"], handoverOwner: ["view"]
+  },
   DRI: {
     dashboard: ["view"], myWork: ["view"], towerBoard: ["view"],
-    handoverInternal: ["view", "edit"],
+    handoverInternal: ["view", "edit"], handoverOwner: ["view"],
     snags: ["view", "create", "edit", "delete"],
     team: ["view", "edit"],
     dpr: ["view", "create"],
@@ -159,8 +162,11 @@ export const TAB_ACCESS: Record<string, TabAccess> = {
   dash: { module: "dashboard", mode: "on" },
   work: { module: "myWork", mode: "on" },
   board: { module: "towerBoard", mode: "on" },
-  handoverInternal: { module: "handoverInternal", mode: "on" },
-  handoverOwner: { module: "handoverOwner", mode: "on" },
+  // Handover Checklist needs a "view" tick (an unticked box in the role form is
+  // simply not stored, so "visible unless explicitly Off" never matched what the
+  // grid shows). The built-in roles that use it have it by default below.
+  handoverInternal: { module: "handoverInternal", mode: "grant" },
+  handoverOwner: { module: "handoverOwner", mode: "grant" },
   snags: { module: "snags", mode: "on" },
   team: { module: "team", mode: "grant" },
   dpr: { module: "dpr", mode: "grant" },

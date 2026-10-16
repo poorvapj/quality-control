@@ -14,4 +14,14 @@ function shouldResolveOriginal(rec) {
   return rec.result === "Pass" && !!rec.reInspectionOf;
 }
 
-module.exports = { shouldResolveOriginal };
+// Any checklist item marked "Not OK" forces the overall result to Fail —
+// never trust the client's own `result` field alone, since the frontend
+// only disables its own dropdown (a determined client could still send
+// anything). Mutates rec in place, same pattern as the server's other
+// write-time field overrides (applyApprovalRules in server.js).
+function enforceResultFromChecklist(rec) {
+  const anyNotOk = Array.isArray(rec.checklistItems) && rec.checklistItems.some((c) => c.status === "Not OK");
+  if (anyNotOk) rec.result = "Fail";
+}
+
+module.exports = { shouldResolveOriginal, enforceResultFromChecklist };
