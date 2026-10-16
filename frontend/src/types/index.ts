@@ -592,6 +592,34 @@ export interface QualityInspection extends BaseRecord {
   createdAt: number;
 }
 
+/* A quality issue written up for reference/training — root cause, what was
+ * done about it, what to do differently next time. Standalone (its own
+ * collection, own create/edit permission reusing qualityInspection's
+ * grant) rather than bolted onto a QualityInspection record, since not
+ * every case study starts from a logged Fail (a near-miss, a recurring
+ * pattern noticed across several floors, etc. may not have one single
+ * inspection behind it) — `linkedInspectionId` is an optional reference
+ * for when one does. */
+export interface CaseStudy extends BaseRecord {
+  title: string;
+  projectId?: string;
+  projectCode?: string;
+  projectName?: string;
+  floorId?: string;
+  floorName?: string;
+  category?: string;
+  description: string;
+  rootCause: string;
+  correctiveAction: string;
+  lessonsLearned: string;
+  photosBefore: Photo[];
+  photosAfter: Photo[];
+  linkedInspectionId?: string | null;
+  createdByUserId: string;
+  createdByName: string;
+  createdAt: number;
+}
+
 /* Unit Execution Workflow, measurement step — anchored to the same real QC
    Project->Floor->Unit as QualityInspection (see that interface's doc
    comment for why a VMS Work Order/scope-item can't be the anchor).
@@ -734,6 +762,7 @@ export interface BoardData {
   forms: CustomFormDef[];
   formSubmissions: CustomFormSubmission[];
   qualityInspections: QualityInspection[];
+  caseStudies: CaseStudy[];
   materialMeasurements: MaterialMeasurement[];
   workMeasurements: WorkMeasurement[];
   purchaseOrders: PurchaseOrder[];
@@ -783,7 +812,7 @@ export type Op =
   | { op: "progress"; key: string; patch: Partial<ProgressPatch> }
   | { op: "event"; ev: EventLog };
 
-export type TabKey = "dash" | "misDashboard" | "executionReconciliation" | "qualityInspection" | "qualityFails" | "unitExecutionWorkflow" | "measurement" | "progressAnalysis" | "purchaseOrders" | "work" | "board" | "handoverChecklist" | "handoverInternal" | "handoverOwner" | "snags" | "team" | "masters" | "addUser" | "dpr" | "drawingRequests" | "backups" | "auditLog" | "permissionMatrix";
+export type TabKey = "dash" | "misDashboard" | "executionReconciliation" | "qualityInspection" | "qualityFails" | "caseStudies" | "unitExecutionWorkflow" | "measurement" | "progressAnalysis" | "purchaseOrders" | "work" | "board" | "handoverChecklist" | "handoverInternal" | "handoverOwner" | "snags" | "team" | "masters" | "addUser" | "dpr" | "drawingRequests" | "backups" | "auditLog" | "permissionMatrix";
 export type MasterKey = "projects" | "floors" | "units" | "stages" | "qparams" | "checklists" | "stagemap" | "users" | "permissions" | "workTargets" | "teams" | "roles" | "forms";
 
 export type FieldType = "text" | "number" | "date" | "color" | "select" | "ref" | "bool" | "textarea" | "items" | "password" | "permissionGrid" | "formFields";

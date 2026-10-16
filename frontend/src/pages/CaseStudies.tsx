@@ -1,0 +1,266 @@
+import React, { useState } from "react";
+import { useApp } from "../context/AppContext";
+import { coll, myProjects, projectFloors } from "../shared/rules";
+import { nextId } from "../shared/helpers";
+import { buildEventOp } from "../shared/eventLog";
+import { hasModuleGrant } from "../shared/permissionMatrix";
+import NavIcon from "../components/NavIcon";
+import SearchDropdown from "../components/SearchDropdown";
+import PhotoGroupUploader from "../components/PhotoGroupUploader";
+import SidePanel from "../components/SidePanel";
+import Card from "../ui/tw/Card";
+import Btn from "../ui/tw/Btn";
+import type { CaseStudy, Photo, Op } from "../types";
+
+/* A quality issue written up for reference/training — not a day-to-day
+ * operational record like Quality Inspection, so this is its own simple
+ * list + form rather than another view bolted onto that page. */
+export default function CaseStudies() {
+  const { data, currentUserId, myRole, apply, toast, me } = useApp();
+  const isAdmin = currentUserId === "U-ADMIN";
+  // Not Quality-only — Execution and Measurement people log these too.
+  const canCreate = isAdmin || ["qualityInspection", "unitExecution", "measurement"].some((m) => hasModuleGrant(data, currentUserId, m, "create"));
+  const allProjects = myProjects(data, currentUserId);
+  const allowedProjectCodes = new Set(allProjects.map((p) => p.code));
+  const caseStudies = coll(data, "caseStudies")
+    .filter((c) => !c.projectCode || allowedProjectCodes.has(c.projectCode))
+    .sort((a, b) => b.createdAt - a.createdAt);
+
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [editing, setEditing] = useState<CaseStudy | null>(null);
+  const [openCase, setOpenCase] = useState<CaseStudy | null>(null);
+
+  async function deleteCase(c: CaseStudy) {
+    if (!isAdmin) return;
+    if (!window.confirm(`Permanently delete this case study?\n\n${c.title}\n\nThis cannot be undone.`)) return;
+    await apply([
+      { op: "delete", coll: "caseStudies", id: c.id },
+      buildEventOp(currentUserId, "CASE_STUDY_DELETE", c.id, "", `Deleted case study · ${c.title}`)
+    ]);
+    toast("Case study deleted");
+    setOpenCase(null);
+  }
+
+  return (
+    <div>
+      <div className="flex items-start justify-between gap-4 flex-wrap mt-0.5 mb-5">
+        <div className="flex gap-3 items-start min-w-0">
+          <div className="w-11 h-11 shrink-0 rounded-radius-md bg-primary-light text-primary flex items-center justify-center">
+            <NavIcon name="award" size={20} />
+          </div>
+          <div>
+            <div className="text-xl font-semibold tracking-tight leading-tight">Case Studies</div>
+            <div className="text-[12.5px] text-[var(--text-muted)] mt-1 leading-normal">
+              Quality issue writeups — root cause, what was done about it, and what to do differently next time.
+            </div>
+          </div>
+        </div>
+        {canCreate && (
+          <Btn label="＋ New Case Study" color="primary" onClick={() => { setEditing(null); setPanelOpen(true); }} />
+        )}
+      </div>
+
+      {caseStudies.length === 0 ? (
+        <Card className="text-center text-[13px] text-[var(--text-muted)] py-10">No case studies recorded yet.</Card>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+          {caseStudies.map((c) => (
+            <Card key={c.id} className="cursor-pointer" onClick={() => setOpenCase(c)}>
+              {c.photosBefore[0] && (
+                <img src={c.photosBefore[0].url} className="w-full h-32 object-cover rounded-radius-sm mb-3" />
+              )}
+              <div className="text-[13.5px] font-bold leading-snug">{c.title}</div>
+              <div className="text-[11px] text-[var(--text-muted)] mt-1">
+                {c.projectCode ? `${c.projectCode} · ` : ""}{c.floorName ? `${c.floorName} · ` : ""}{new Date(c.createdAt).toLocaleDateString("en-IN")}
+              </div>
+              <div className="text-[12px] text-[var(--text-sub)] mt-2 line-clamp-2">{c.description}</div>
+              <div className="text-[10.5px] text-[var(--text-muted)] mt-2">By {c.createdByName}</div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <CaseStudyForm
+        open={panelOpen}
+        onClose={() => setPanelOpen(false)}
+        data={data}
+        allProjects={allProjects}
+        currentUserId={currentUserId}
+        authorName={me()?.name || ""}
+        apply={apply}
+        toast={toast}
+      />
+
+      {openCase && (
+        <SidePanel
+          open={!!openCase}
+          icon={<NavIcon name="award" size={18} />}
+          title={openCase.title}
+          desc={`${openCase.projectName || "—"}${openCase.floorName ? " · " + openCase.floorName : ""} · ${new Date(openCase.createdAt).toLocaleDateString("en-IN")} · by ${openCase.createdByName}`}
+          onClose={() => setOpenCase(null)}
+          footer={isAdmin ? <button className="btn btn-secondary" onClick={() => deleteCase(openCase)}>Delete</button> : undefined}
+        >
+          <div className="flex flex-col gap-4">
+            {openCase.category && (
+              <div><div className="micro-label mb-1">Category</div><div className="text-[13px]">{openCase.category}</div></div>
+            )}
+            <div><div className="micro-label mb-1">What Happened</div><div className="text-[13px] whitespace-pre-wrap">{openCase.description}</div></div>
+            <div><div className="micro-label mb-1">Root Cause</div><div className="text-[13px] whitespace-pre-wrap">{openCase.rootCause}</div></div>
+            <div><div className="micro-label mb-1">Corrective Action Taken</div><div className="text-[13px] whitespace-pre-wrap">{openCase.correctiveAction}</div></div>
+            <div><div className="micro-label mb-1">Lessons Learned</div><div className="text-[13px] whitespace-pre-wrap">{openCase.lessonsLearned}</div></div>
+            {openCase.photosBefore.length > 0 && (
+              <div>
+                <div className="micro-label mb-1">Before</div>
+                <div className="photo-strip">{openCase.photosBefore.map((p: Photo, i: number) => (
+                  <img key={i} className="photo-thumb" src={p.url} onClick={() => window.open(p.url, "_blank")} />
+                ))}</div>
+              </div>
+            )}
+            {openCase.photosAfter.length > 0 && (
+              <div>
+                <div className="micro-label mb-1">After</div>
+                <div className="photo-strip">{openCase.photosAfter.map((p: Photo, i: number) => (
+                  <img key={i} className="photo-thumb" src={p.url} onClick={() => window.open(p.url, "_blank")} />
+                ))}</div>
+              </div>
+            )}
+          </div>
+        </SidePanel>
+      )}
+    </div>
+  );
+}
+
+function CaseStudyForm({
+  open, onClose, data, allProjects, currentUserId, authorName, apply, toast
+}: {
+  open: boolean; onClose: () => void; data: any;
+  allProjects: { id: string; code: string; name: string }[];
+  currentUserId: string | null; authorName: string;
+  apply: (ops: Op[]) => Promise<void>;
+  toast: (msg: string) => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [projectId, setProjectId] = useState("");
+  const [floorId, setFloorId] = useState("");
+  const [category, setCategory] = useState("");
+  const [description, setDescription] = useState("");
+  const [rootCause, setRootCause] = useState("");
+  const [correctiveAction, setCorrectiveAction] = useState("");
+  const [lessonsLearned, setLessonsLearned] = useState("");
+  const [photosBefore, setPhotosBefore] = useState<Photo[]>([]);
+  const [photosAfter, setPhotosAfter] = useState<Photo[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  const floors = projectFloors(data, projectId || null);
+  const project = allProjects.find((p) => p.id === projectId);
+  const floor = floors.find((f) => f.id === floorId);
+
+  function reset() {
+    setTitle(""); setProjectId(""); setFloorId(""); setCategory("");
+    setDescription(""); setRootCause(""); setCorrectiveAction(""); setLessonsLearned("");
+    setPhotosBefore([]); setPhotosAfter([]);
+  }
+
+  async function save() {
+    if (!title.trim()) { toast("Title is required"); return; }
+    if (!description.trim() || !rootCause.trim() || !correctiveAction.trim() || !lessonsLearned.trim()) {
+      toast("Fill in What Happened, Root Cause, Corrective Action, and Lessons Learned"); return;
+    }
+    setSaving(true);
+    const rec: CaseStudy = {
+      id: nextId("CS", coll(data, "caseStudies")),
+      title: title.trim(),
+      projectId: projectId || undefined,
+      projectCode: project?.code,
+      projectName: project?.name,
+      floorId: floorId || undefined,
+      floorName: floor?.name,
+      category: category.trim() || undefined,
+      description: description.trim(),
+      rootCause: rootCause.trim(),
+      correctiveAction: correctiveAction.trim(),
+      lessonsLearned: lessonsLearned.trim(),
+      photosBefore,
+      photosAfter,
+      createdByUserId: currentUserId || "",
+      createdByName: authorName,
+      createdAt: Date.now()
+    };
+    await apply([
+      { op: "upsert", coll: "caseStudies", rec },
+      buildEventOp(currentUserId || "", "CASE_STUDY_CREATE", rec.id, "", `Case study logged · ${rec.title}`)
+    ]);
+    setSaving(false);
+    toast("Case study saved");
+    reset();
+    onClose();
+  }
+
+  return (
+    <SidePanel
+      open={open}
+      wide
+      icon={<NavIcon name="award" size={18} />}
+      title="New Case Study"
+      desc="Write up a quality issue for future reference — root cause, what was done, and what to do differently."
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save Case Study"}</button>
+        </>
+      }
+    >
+      <div className="form-grid">
+        <div className="field full">
+          <label>Title *</label>
+          <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Honeycombing in RCC column, Zen Garden 6th floor" />
+        </div>
+        <div className="field">
+          <label>Project</label>
+          <SearchDropdown
+            value={projectId}
+            onChange={(v) => { setProjectId(v); setFloorId(""); }}
+            options={[{ value: "", label: "Choose" }, ...allProjects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))]}
+          />
+        </div>
+        <div className="field">
+          <label>Floor</label>
+          <SearchDropdown
+            value={floorId}
+            disabled={!projectId}
+            onChange={setFloorId}
+            options={[{ value: "", label: "Choose" }, ...floors.map((f) => ({ value: f.id, label: f.name }))]}
+          />
+        </div>
+        <div className="field full">
+          <label>Category</label>
+          <input className="input" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Optional — e.g. RCC, Waterproofing, Plumbing" />
+        </div>
+        <div className="field full">
+          <label>What Happened *</label>
+          <textarea className="textarea" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe the issue" />
+        </div>
+        <div className="field full">
+          <label>Root Cause *</label>
+          <textarea className="textarea" value={rootCause} onChange={(e) => setRootCause(e.target.value)} placeholder="Why did this happen" />
+        </div>
+        <div className="field full">
+          <label>Corrective Action Taken *</label>
+          <textarea className="textarea" value={correctiveAction} onChange={(e) => setCorrectiveAction(e.target.value)} placeholder="What was done to fix it" />
+        </div>
+        <div className="field full">
+          <label>Lessons Learned *</label>
+          <textarea className="textarea" value={lessonsLearned} onChange={(e) => setLessonsLearned(e.target.value)} placeholder="What to do differently next time" />
+        </div>
+        <div className="field full">
+          <PhotoGroupUploader label="Before photos" photos={photosBefore} onChange={setPhotosBefore} optional />
+        </div>
+        <div className="field full">
+          <PhotoGroupUploader label="After photos" photos={photosAfter} onChange={setPhotosAfter} optional />
+        </div>
+      </div>
+    </SidePanel>
+  );
+}

@@ -34,7 +34,8 @@ const COLLECTIONS = [
   "purchaseOrders", // Synced from IMS's PO_APPROVED webhook (imsWebhook.js) — sanitized, non-financial subset only; matched to a QC project by exact name, never fuzzy
   "workMeasurements", // Independently measured quantity per Project → Tower/Floor/Flat/Area → Work Category, reference-only link to a VMS scope item (workMeasurementRules.js)
   "teamDailyReports", // One per Team per date — end-of-day activity summary, signed off by the team's own leader (teamDailyReports.js)
-  "customSlabNames" // Shared list of slab names typed via Quality Inspection's "Select Slabs" Custom option, so every inspector sees ones others already added
+  "customSlabNames", // Shared list of slab names typed via Quality Inspection's "Select Slabs" Custom option, so every inspector sees ones others already added
+  "caseStudies" // Quality issue writeups (root cause / corrective action / lessons learned) — standalone, optionally linked to a QualityInspection
 ];
 
 function blankData() {

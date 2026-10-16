@@ -176,6 +176,9 @@ export const TAB_ACCESS: Record<string, TabAccess> = {
   // register-style view of the exact same records (every Fail/Rework
   // Required), not a separately grantable module.
   qualityFails: { module: "qualityInspection", mode: "grant" },
+  // caseStudies is handled as a special case in canAccessTab() below (OR'd
+  // across qualityInspection/unitExecution/measurement) — no single-module
+  // entry here since it's not Quality-only.
   unitExecutionWorkflow: { module: "unitExecution", mode: "grant" },
   measurement: { module: "measurement", mode: "grant" },
   progressAnalysis: { module: "progressAnalysis", mode: "grant" },
@@ -209,6 +212,12 @@ export function canAccessTab(data: BoardData | null, userId: string | null, tab:
   if (tab === "permissionMatrix") return false;
   // the create-user screen needs the same right as editing Masters
   if (tab === "addUser") return hasModuleGrant(data, userId, "masters", "edit");
+  // Case Studies isn't Quality-only — Execution and Measurement people log
+  // them too, so it's visible to anyone granted ANY of those three modules
+  // rather than tied to exactly one via TAB_ACCESS's single-module mapping.
+  if (tab === "caseStudies") {
+    return ["qualityInspection", "unitExecution", "measurement"].some((m) => hasModuleGrant(data, userId, m, "view"));
+  }
   const t = TAB_ACCESS[tab];
   if (!t) return true;
   return t.mode === "on" ? canSeeModule(data, userId, t.module) : hasModuleGrant(data, userId, t.module, "view");

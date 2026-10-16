@@ -66,7 +66,8 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
         ...(can("qualityInspection") ? [{ key: "qualityInspection" as TabKey, icon: "eye", label: "Quality Inspection" }] : []),
         ...(can("unitExecutionWorkflow") ? [{ key: "unitExecutionWorkflow" as TabKey, icon: "layers", label: "Measurement" }] : []),
         ...(can("progressAnalysis") ? [{ key: "progressAnalysis" as TabKey, icon: "trend", label: "Progress Analysis" }] : []),
-        ...(can("purchaseOrders") ? [{ key: "purchaseOrders" as TabKey, icon: "package", label: "Purchase Orders" }] : [])
+        ...(can("purchaseOrders") ? [{ key: "purchaseOrders" as TabKey, icon: "package", label: "Purchase Orders" }] : []),
+        ...(can("caseStudies") ? [{ key: "caseStudies" as TabKey, icon: "award", label: "Case Studies" }] : [])
       ]
     },
     {
