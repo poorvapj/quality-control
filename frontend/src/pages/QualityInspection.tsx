@@ -433,6 +433,21 @@ function InspectionForm({
   const [selectedSlabs, setSelectedSlabs] = useState<string[]>([]);
   const [addingCustomSlab, setAddingCustomSlab] = useState(false);
   const [customSlabText, setCustomSlabText] = useState("");
+  // The fixed Slab 1-10 list plus any custom name a past inspector already
+  // saved (CustomSlabName) — so this isn't a one-off, local-to-this-record
+  // value; everyone's Select Slabs picks up what others have added.
+  const savedCustomSlabNames = coll(data, "customSlabNames").map((c: any) => c.name as string);
+  const slabOptions = [...SLAB_OPTIONS, ...savedCustomSlabNames.filter((n) => !SLAB_OPTIONS.includes(n))];
+  function addCustomSlab(rawText: string) {
+    const name = rawText.trim();
+    if (!name) return;
+    setSelectedSlabs((prev) => (prev.includes(name) ? prev : [...prev, name]));
+    setCustomSlabText(""); setAddingCustomSlab(false);
+    const exists = slabOptions.some((s) => s.toLowerCase() === name.toLowerCase());
+    if (!exists) {
+      apply([{ op: "upsert", coll: "customSlabNames", rec: { id: nextId("CSLB", coll(data, "customSlabNames")), name } }]);
+    }
+  }
   const [contractor, setContractor] = useState("");
   const [customContractor, setCustomContractor] = useState(false);
   const vendors = coll(data, "vendors").filter((v) => v.status !== "inactive");
@@ -720,25 +735,19 @@ function InspectionForm({
                 if (vals.includes("__custom__")) { setAddingCustomSlab(true); setSelectedSlabs(vals.filter((v) => v !== "__custom__")); }
                 else setSelectedSlabs(vals);
               }}
-              options={[...SLAB_OPTIONS.map((s) => ({ value: s, label: s })), { value: "__custom__", label: "Custom…" }]}
+              options={[...slabOptions.map((s) => ({ value: s, label: s })), { value: "__custom__", label: "Custom…" }]}
+              onCreate={addCustomSlab}
             />
             {addingCustomSlab && (
               <div className="flex gap-1.5 mt-1.5">
                 <input
                   className="input" autoFocus placeholder="Type a custom slab name"
                   value={customSlabText} onChange={(e) => setCustomSlabText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key !== "Enter" || !customSlabText.trim()) return;
-                    setSelectedSlabs((prev) => (prev.includes(customSlabText.trim()) ? prev : [...prev, customSlabText.trim()]));
-                    setCustomSlabText(""); setAddingCustomSlab(false);
-                  }}
+                  onKeyDown={(e) => { if (e.key === "Enter" && customSlabText.trim()) addCustomSlab(customSlabText.trim()); }}
                 />
                 <button
                   type="button" className="btn btn-secondary" style={{ flexShrink: 0 }}
-                  onClick={() => {
-                    if (customSlabText.trim()) setSelectedSlabs((prev) => (prev.includes(customSlabText.trim()) ? prev : [...prev, customSlabText.trim()]));
-                    setCustomSlabText(""); setAddingCustomSlab(false);
-                  }}
+                  onClick={() => { if (customSlabText.trim()) addCustomSlab(customSlabText.trim()); }}
                 >Add</button>
               </div>
             )}

@@ -548,9 +548,9 @@ export interface QualityInspection extends BaseRecord {
   // Which of the floor's (fixed) 60 structural columns this inspection
   // covers — only meaningful when workType is "Column Inspection".
   columns?: string[];
-  // Which of the floor's (up to 10, or a custom-typed one) RCC slabs this
-  // inspection covers — only meaningful when workType is "R.C.C. Slab
-  // Inspection".
+  // Which of the floor's (up to 10, or a shared custom-typed one — see
+  // CustomSlabName below) RCC slabs this inspection covers — only
+  // meaningful when workType is "R.C.C. Slab Inspection".
   slabs?: string[];
   checklistItems?: { text: string; status: "OK" | "Not OK" | "N/A"; remarks?: string }[];
   // Optional, manually-picked reference to a real VMS scope-item/sub-item —
@@ -738,6 +738,7 @@ export interface BoardData {
   workMeasurements: WorkMeasurement[];
   purchaseOrders: PurchaseOrder[];
   teamDailyReports: TeamDailyReport[];
+  customSlabNames: CustomSlabName[];
   progress: Record<string, ProgressPatch>;
   events: EventLog[];
   [key: string]: unknown;
@@ -765,6 +766,13 @@ export interface TeamDailyReport extends BaseRecord {
   approvedByUserId?: string | null;
   approvedByName?: string | null;
   approvedAt?: number | null;
+}
+
+/** A slab name typed via Select Slabs' "Custom…" option, saved once so
+ *  every future inspector sees it too instead of just the one inspection
+ *  that introduced it — same idea as the Vendor master, just much smaller. */
+export interface CustomSlabName extends BaseRecord {
+  name: string;
 }
 
 export type CollectionName = keyof Omit<BoardData, "progress" | "events">;
