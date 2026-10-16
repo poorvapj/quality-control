@@ -13,6 +13,7 @@ import MISDashboard from "./pages/MISDashboard";
 import Measurement from "./pages/Measurement";
 import ExecutionReconciliation from "./pages/ExecutionReconciliation";
 import QualityInspection from "./pages/QualityInspection";
+import FailRegister from "./pages/FailRegister";
 import UnitExecutionWorkflow from "./pages/UnitExecutionWorkflow";
 import ProgressAnalysis from "./pages/ProgressAnalysis";
 import PurchaseOrders from "./pages/PurchaseOrders";
@@ -43,6 +44,7 @@ export default function App() {
     misDashboard: <MISDashboard />,
     executionReconciliation: <ExecutionReconciliation />,
     qualityInspection: <QualityInspection />,
+    qualityFails: <FailRegister />,
     unitExecutionWorkflow: <UnitExecutionWorkflow />,
     measurement: <Measurement />,
     progressAnalysis: <ProgressAnalysis />,

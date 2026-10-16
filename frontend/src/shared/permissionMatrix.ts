@@ -172,6 +172,10 @@ export const TAB_ACCESS: Record<string, TabAccess> = {
   dpr: { module: "dpr", mode: "grant" },
   drawingRequests: { module: "drawingRequests", mode: "grant" },
   qualityInspection: { module: "qualityInspection", mode: "grant" },
+  // Same module grant as Quality Inspection itself — this is just another,
+  // register-style view of the exact same records (every Fail/Rework
+  // Required), not a separately grantable module.
+  qualityFails: { module: "qualityInspection", mode: "grant" },
   unitExecutionWorkflow: { module: "unitExecution", mode: "grant" },
   measurement: { module: "measurement", mode: "grant" },
   progressAnalysis: { module: "progressAnalysis", mode: "grant" },
