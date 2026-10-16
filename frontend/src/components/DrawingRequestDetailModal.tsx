@@ -119,12 +119,17 @@ export default function DrawingRequestDetailModal({ dr, onClose }: { dr: Drawing
     if (!selectedFiles.length) return;
     setUploading(true);
     setUploadProgress({ done: 0, total: selectedFiles.length });
-    const uploaded = [];
-    for (const f of selectedFiles) {
-      const photo = await uploadPhoto(f, "drawings");
-      uploaded.push({ name: f.name, url: photo.url });
-      setUploadProgress({ done: uploaded.length, total: selectedFiles.length });
-    }
+    // Upload concurrently instead of one at a time (each is an independent
+    // request) — still reports progress as each one finishes.
+    let doneCount = 0;
+    const uploaded = await Promise.all(
+      selectedFiles.map(async (f) => {
+        const photo = await uploadPhoto(f, "drawings");
+        doneCount++;
+        setUploadProgress({ done: doneCount, total: selectedFiles.length });
+        return { name: f.name, url: photo.url };
+      })
+    );
     setUploading(false);
     setUploadProgress(null);
     setSelectedFiles([]);

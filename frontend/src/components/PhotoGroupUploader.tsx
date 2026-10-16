@@ -10,8 +10,10 @@ function PhotoGroupUploader({ label, photos, onChange, optional }: { label: stri
   async function handleFiles(files: FileList | null) {
     if (!files || !files.length) return;
     setBusy(true);
-    const uploaded: Photo[] = [];
-    for (const f of Array.from(files)) uploaded.push(await uploadPhoto(f, "dpr", label));
+    // Uploading one at a time (await in a loop) made a 3-photo submission
+    // take 3x as long as the slowest single upload — each photo is an
+    // independent request, so run them concurrently instead.
+    const uploaded = await Promise.all(Array.from(files).map((f) => uploadPhoto(f, "dpr", label)));
     onChange([...photos, ...uploaded]);
     setBusy(false);
   }

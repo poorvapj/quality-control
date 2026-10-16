@@ -8,18 +8,28 @@
    this app doesn't have configured — raw lat/long (4 decimal places, ~11m
    precision) is honest and needs no external service. */
 
+// A GPS fix is slow (up to the full 6s timeout below on a weak signal) and
+// barely changes between photos taken seconds apart in the same form —
+// submitting several photos used to pay that cost once PER PHOTO, serially,
+// which alone could add tens of seconds to one submission. Cache it for a
+// short window so a whole photo batch shares one fix.
+let cachedGeo: { text: string; at: number } | null = null;
+const GEO_CACHE_MS = 2 * 60 * 1000;
+
 function getGeoText(): Promise<string> {
+  if (cachedGeo && Date.now() - cachedGeo.at < GEO_CACHE_MS) return Promise.resolve(cachedGeo.text);
   return new Promise((resolve) => {
     if (!("geolocation" in navigator)) { resolve(""); return; }
-    const timer = setTimeout(() => resolve(""), 6000);
+    const settle = (text: string) => { cachedGeo = { text, at: Date.now() }; resolve(text); };
+    const timer = setTimeout(() => settle(""), 6000);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         clearTimeout(timer);
         const lat = pos.coords.latitude.toFixed(4);
         const lon = pos.coords.longitude.toFixed(4);
-        resolve(`${lat}°N, ${lon}°E`);
+        settle(`${lat}°N, ${lon}°E`);
       },
-      () => { clearTimeout(timer); resolve(""); },
+      () => { clearTimeout(timer); settle(""); },
       { enableHighAccuracy: true, timeout: 5500, maximumAge: 60000 }
     );
   });

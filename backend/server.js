@@ -1273,6 +1273,29 @@ function sendJson(res, code, obj) {
   res.end(body);
 }
 
+// Every write (POST /api/ops, backup restore/reset, etc.) replies with the
+// fresh full board state so the caller's own change is immediately
+// reflected — but until now that went out uncompressed and bypassed the
+// getStateGzip() cache entirely, on the exact request path a form's Save
+// button is waiting on. A write just bumped rev anyway, so this is always
+// a cache rebuild (never stale), just compressed like every other state
+// response — on a slow/mobile connection this is the difference between a
+// few hundred KB and a few dozen.
+async function sendStateResponse(req, res) {
+  if (String(req.headers["accept-encoding"] || "").includes("gzip")) {
+    const { body: compressed } = await getStateGzip();
+    res.writeHead(200, {
+      "Content-Type": "application/json; charset=utf-8",
+      "Content-Encoding": "gzip",
+      "Content-Length": compressed.length,
+      "Cache-Control": "no-store"
+    });
+    return res.end(compressed);
+  }
+  const state = await getState();
+  return sendJson(res, 200, state);
+}
+
 function sendText(res, code, msg) {
   res.writeHead(code, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
   res.end(msg);
@@ -1312,19 +1335,7 @@ async function handleApi(req, res, urlPath) {
     // (thousands of units/progress/events records) — gzip it when the
     // client supports it (every browser does) instead of shipping raw JSON,
     // which was a big share of how long sign-in felt on slower connections.
-    const acceptsGzip = String(req.headers["accept-encoding"] || "").includes("gzip");
-    if (acceptsGzip) {
-      const { body: compressed } = await getStateGzip();
-      res.writeHead(200, {
-        "Content-Type": "application/json; charset=utf-8",
-        "Content-Encoding": "gzip",
-        "Content-Length": compressed.length,
-        "Cache-Control": "no-store"
-      });
-      return res.end(compressed);
-    }
-    const state = await getState();
-    return sendJson(res, 200, state);
+    return sendStateResponse(req, res);
   }
   if (req.method === "POST" && urlPath === "/api/login") {
     const body = await readBody(req);
@@ -1378,8 +1389,7 @@ async function handleApi(req, res, urlPath) {
       if (e.status) return sendJson(res, e.status, { error: e.message });
       throw e;
     }
-    const state = await getState();
-    return sendJson(res, 200, state);
+    return sendStateResponse(req, res);
   }
   const automationDecisionMatch = /^\/api\/automation\/drawing-requests\/([^/]+)\/decision$/.exec(urlPath);
   if (req.method === "POST" && automationDecisionMatch) {
@@ -1489,8 +1499,7 @@ async function handleApi(req, res, urlPath) {
     if (!session.isAdmin) return sendJson(res, 403, { error: "Admin access required" });
     const body = await readBody(req);
     await resetDb(body.mode === "blank" ? "blank" : "demo", session.userId);
-    const state = await getState();
-    return sendJson(res, 200, state);
+    return sendStateResponse(req, res);
   }
   if (req.method === "POST" && urlPath === "/api/backups") {
     const session = getSession(req);
@@ -1596,8 +1605,7 @@ async function handleApi(req, res, urlPath) {
       if (e.status) return sendJson(res, e.status, { error: e.message });
       throw e;
     }
-    const state = await getState();
-    return sendJson(res, 200, state);
+    return sendStateResponse(req, res);
   }
   if (req.method === "DELETE" && backupIdMatch) {
     const session = getSession(req);
