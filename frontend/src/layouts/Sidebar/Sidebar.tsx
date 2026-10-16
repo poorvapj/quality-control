@@ -38,7 +38,6 @@ export default function Sidebar({ open, collapsed: collapsedProp, onNavigate }: 
       label: "Overview",
       items: [
         ...(can("dash") ? [{ key: "dash" as TabKey, icon: "dashboard", label: "Dashboard" }] : []),
-        ...(can("misDashboard") ? [{ key: "misDashboard" as TabKey, icon: "trend", label: "Quality MIS" }] : []),
         ...(can("userMis") ? [{ key: "userMis" as TabKey, icon: "trend", label: "Users MIS" }] : []),
         // Cross-project VMS execution/billing reconciliation — admin-only,
         // same reasoning as Quality MIS (management-level financial data,
