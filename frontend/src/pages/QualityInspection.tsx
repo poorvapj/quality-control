@@ -409,6 +409,13 @@ function InspectionForm({
   const [targetDate, setTargetDate] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // The responsible DRI for a Fail/Rework is this inspector's own Team
+  // leader (e.g. Quality's leader is fixed as Rishabh Rajput) — never a
+  // free pick, since the team already has exactly one fixed head.
+  const allUsers = coll(data, "users");
+  const myTeam = coll(data, "teams").find((t: any) => t.id === allUsers.find((u: any) => u.id === currentUserId)?.teamId) || null;
+  const myTeamLeader = myTeam?.leaderId ? allUsers.find((u: any) => u.id === myTeam.leaderId) || null : null;
+
   // Pre-fill from the unit/item being re-inspected, once, when the panel opens.
   useEffect(() => {
     if (!open) return;
@@ -427,7 +434,7 @@ function InspectionForm({
     setInspectionDate(todayStr());
     setContractor(""); setCustomContractor(false);
     setResult("Pass"); setSeverity("Major"); setRemarks(""); setPhotos([]);
-    setAssignedToUserId(""); setTargetDate("");
+    setAssignedToUserId(myTeamLeader?.id || ""); setTargetDate("");
   }, [open, reInspectOf]);
 
   // Picking a Work Type (re)seeds the checklist from the master list —
@@ -746,11 +753,17 @@ function InspectionForm({
             </div>
             <div className="field">
               <label>Responsible DRI *</label>
-              <SearchDropdown
-                value={assignedToUserId}
-                onChange={setAssignedToUserId}
-                options={[{ value: "", label: "Select DRI…" }, ...users.map((u) => ({ value: u.id, label: u.name }))]}
-              />
+              {myTeamLeader ? (
+                <div className="input flex items-center" style={{ cursor: "default", color: "var(--text-muted)" }}>
+                  {myTeamLeader.name} <span className="ml-1.5 text-[11px]">(your team's head)</span>
+                </div>
+              ) : (
+                <SearchDropdown
+                  value={assignedToUserId}
+                  onChange={setAssignedToUserId}
+                  options={[{ value: "", label: "Select DRI…" }, ...users.map((u) => ({ value: u.id, label: u.name }))]}
+                />
+              )}
             </div>
             <div className="field">
               <label>Target Date *</label>
