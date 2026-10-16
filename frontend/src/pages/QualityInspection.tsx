@@ -87,6 +87,11 @@ const WORK_TYPES = Object.keys(QC_CHECKLISTS);
 const FLAT_WISE_FROM = WORK_TYPES.indexOf("Brickwork Inspection");
 const isFlatWise = (wt: string) => !!wt && FLAT_WISE_FROM >= 0 && WORK_TYPES.indexOf(wt) >= FLAT_WISE_FROM;
 
+// Fixed across every project/floor — confirmed with the person who asked
+// for this field, not read from any per-floor master data.
+const TOTAL_COLUMNS = 60;
+const COLUMN_OPTIONS = Array.from({ length: TOTAL_COLUMNS }, (_, i) => `Column ${i + 1}`);
+
 // A sentinel, non-real Stage id used ONLY to tag snags that originated from
 // a Work Quality Inspection failure — never a real progression Stage
 // record, so it never appears in / affects floor-release or gate
@@ -266,7 +271,11 @@ This cannot be undone.`)) return;
                 <TableCell className="whitespace-nowrap">{insp.projectCode}</TableCell>
                 <TableCell strong>
                   {insp.floorName}{insp.unitName ? ` / ${insp.unitName}` : ""}
-                  {insp.workType && <div className="text-[10.5px] text-[var(--text-muted)] font-normal mt-0.5">{insp.workType}</div>}
+                  {insp.workType && (
+                    <div className="text-[10.5px] text-[var(--text-muted)] font-normal mt-0.5">
+                      {insp.workType}{insp.columns?.length ? ` · ${insp.columns.length} column${insp.columns.length === 1 ? "" : "s"}` : ""}
+                    </div>
+                  )}
                 </TableCell>
                 <TableCell muted className="truncate max-w-0">{insp.itemDescription ? `${insp.workOrderNo} · ${insp.itemDescription}` : "—"}</TableCell>
                 <TableCell>
@@ -357,6 +366,9 @@ function FloorHistoryPanel({
                 </div>
                 {insp.reInspectionOf && <div className="text-[11px] text-[var(--text-muted)] mt-1">Re-inspection of {insp.reInspectionOf}</div>}
                 {insp.contractor && <div className="text-[11px] text-[var(--text-muted)] mt-1">Contractor: {insp.contractor}</div>}
+                {insp.columns && insp.columns.length > 0 && (
+                  <div className="text-[11px] text-[var(--text-muted)] mt-1">Columns: {insp.columns.join(", ")}</div>
+                )}
                 {insp.checklistItems && insp.checklistItems.length > 0 && (
                   <div className="flex flex-col gap-1 mt-2">
                     {insp.checklistItems.map((c, idx) => (
@@ -407,6 +419,7 @@ function InspectionForm({
   const [itemId, setItemId] = useState("");
   const [inspectionDate, setInspectionDate] = useState(todayStr());
   const [workType, setWorkType] = useState("");
+  const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
   const [contractor, setContractor] = useState("");
   const [customContractor, setCustomContractor] = useState(false);
   const vendors = coll(data, "vendors").filter((v) => v.status !== "inactive");
@@ -436,10 +449,11 @@ function InspectionForm({
       setWorkOrderNo(reInspectOf.workOrderNo || "");
       setItemId(reInspectOf.itemId || "");
       setWorkType(reInspectOf.workType || "");
+      setSelectedColumns(reInspectOf.columns || []);
       setChecklist((reInspectOf.workType && QC_CHECKLISTS[reInspectOf.workType] || []).map((text) => ({ text, status: "", remarks: "" })));
     } else {
       setProjectId(""); setFloorId(""); setUnitId(""); setWorkOrderNo(""); setItemId("");
-      setWorkType(""); setChecklist([]);
+      setWorkType(""); setSelectedColumns([]); setChecklist([]);
     }
     setInspectionDate(todayStr());
     setContractor(""); setCustomContractor(false);
@@ -454,6 +468,7 @@ function InspectionForm({
   function onWorkTypeChange(wt: string) {
     setWorkType(wt);
     if (!isFlatWise(wt)) setUnitId(""); // floor-level checklist: no flat
+    if (wt !== "Column Inspection") setSelectedColumns([]);
     setChecklist((QC_CHECKLISTS[wt] || []).map((text) => ({ text, status: "", remarks: "" })));
   }
   function setItemStatus(idx: number, status: ChecklistStatus) {
@@ -504,6 +519,7 @@ function InspectionForm({
     if (!projectId || !floorId) { toast("Project and Floor are required"); return; }
     if (!workType) { toast("Select a checklist (Work Type) first"); return; }
     if (flatWise && !unitId) { toast("Pick the flat — Brickwork and the work after it is inspected flat by flat"); return; }
+    if (workType === "Column Inspection" && selectedColumns.length === 0) { toast("Select at least one column"); return; }
     if (checklist.some((row) => !row.status)) { toast("Mark every checklist point as OK / Not OK / N/A"); return; }
     if (result !== "Pass" && !remarks.trim()) { toast("Remarks are required for Fail / Rework Required"); return; }
     if (result !== "Pass" && !assignedToUserId) { toast("A responsible DRI must be assigned for Fail / Rework Required"); return; }
@@ -533,6 +549,7 @@ function InspectionForm({
       itemDescription: itemEntry?.description,
       unit: itemEntry?.unit,
       workType,
+      columns: workType === "Column Inspection" ? selectedColumns : undefined,
       contractor: contractor.trim() || undefined,
       checklistItems: checklist.map((row) => ({ text: row.text, status: row.status as "OK" | "Not OK" | "N/A", remarks: row.remarks.trim() || undefined })),
       inspectionDate, result,
@@ -660,6 +677,19 @@ function InspectionForm({
               options={[{ value: "", label: floorId ? "Select flat…" : "Select a floor first…" }, ...units.map((u) => ({ value: u.id, label: u.name }))]}
             />
             <div className="text-[11px] text-[var(--text-muted)] mt-1">{workType} is checked flat by flat — pick the flat this inspection is for.</div>
+          </div>
+        )}
+
+        {workType === "Column Inspection" && (
+          <div className="field full">
+            <label>Select Columns *</label>
+            <SearchDropdown
+              multi
+              multiValue={selectedColumns}
+              onChangeMulti={setSelectedColumns}
+              options={COLUMN_OPTIONS.map((c) => ({ value: c, label: c }))}
+            />
+            <div className="text-[11px] text-[var(--text-muted)] mt-1">{selectedColumns.length} of {TOTAL_COLUMNS} column{selectedColumns.length === 1 ? "" : "s"} selected.</div>
           </div>
         )}
 
