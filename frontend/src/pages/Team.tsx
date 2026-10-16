@@ -10,12 +10,21 @@ export default function Team() {
   const isAdmin = currentUserId === "U-ADMIN";
   const [search, setSearch] = useState("");
   const allActiveUsers = coll(data, "users").filter((u) => u.active !== false);
-  const myTeam = coll(data, "teams").find((t) => t.leaderId === currentUserId) || null;
+  const me = allActiveUsers.find((u) => u.id === currentUserId) || null;
+  const leaderOfTeam = coll(data, "teams").find((t) => t.leaderId === currentUserId) || null;
+  // A plain MEMBER of a team (e.g. Naman on Quality's team) sees only that
+  // team's roster too, not the whole org — even if their role's default
+  // grants happen to include "team view" (e.g. Quality's role grants
+  // include it alongside dpr/drawingRequests). Without this, anyone with
+  // that grant who isn't literally the leader fell through to fullAccess
+  // below and saw every active user on the board.
+  const memberOfTeam = !leaderOfTeam && me?.teamId ? coll(data, "teams").find((t) => t.id === me.teamId) || null : null;
+  const myTeam = leaderOfTeam || memberOfTeam;
   // Admin sees everyone. So does anyone granted the full board via the
   // Permission Matrix / a role default (DRI has "team view" by default) —
-  // UNLESS they lead a team: a Team Leader sees ONLY their own team's
-  // roster (their members + themselves), even if their role would
-  // otherwise give them the whole board.
+  // UNLESS they belong to a team (as its leader or just a member): then
+  // they see ONLY that team's roster, even if their role would otherwise
+  // give them the whole board.
   const fullAccess = isAdmin || (!myTeam && hasModuleGrant(data, currentUserId, "team", "view"));
   const users = fullAccess
     ? allActiveUsers
