@@ -290,14 +290,7 @@ This cannot be undone.`)) return;
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-        <StatTile label="Open Quality Issues" value={openIssues} icon="bug" valueClassName={openIssues > 0 ? "text-[var(--color-fail)]" : undefined} />
-        <StatTile label="Failed Inspections" value={failedCount} icon="bug" />
-        <StatTile label="Overdue Corrective Actions" value={overdueCount} icon="clock" valueClassName={overdueCount > 0 ? "text-[var(--color-fail)]" : undefined} />
-        <StatTile label="Resolved Issues" value={resolvedCount} icon="award" />
-      </div>
-
-      <Card className="flex gap-3.5 flex-wrap mb-5">
+      <div className="flex gap-3.5 flex-wrap mb-5">
         <div className="max-w-[180px]" style={{ position: "relative" }} ref={calendarWrapRef}>
           <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Date Range</div>
           <SearchDropdown
@@ -343,7 +336,14 @@ This cannot be undone.`)) return;
             { value: "", label: "All" }, { value: "open", label: "Open" }, { value: "overdue", label: "Overdue" }, { value: "closed", label: "Closed" }
           ]} neutralActive />
         </div>
-      </Card>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+        <StatTile label="Open Quality Issues" value={openIssues} icon="bug" valueClassName={openIssues > 0 ? "text-[var(--color-fail)]" : undefined} />
+        <StatTile label="Failed Inspections" value={failedCount} icon="bug" />
+        <StatTile label="Overdue Corrective Actions" value={overdueCount} icon="clock" valueClassName={overdueCount > 0 ? "text-[var(--color-fail)]" : undefined} />
+        <StatTile label="Resolved Issues" value={resolvedCount} icon="award" />
+      </div>
 
       <Card padded={false} className="p-[18px]">
         <Table
