@@ -282,15 +282,12 @@ This cannot be undone.`)) return;
             </div>
           </div>
         </div>
-        <div className="flex gap-2 shrink-0">
-          <Btn label={generating ? "Generating…" : "Generate Report"} color="secondary" icon="download" onClick={generateReport} disabled={generating} />
-          {canCreate && (
-            <Btn label="＋ New Inspection" color="primary" onClick={() => { setReInspectOf(null); setPanelOpen(true); }} />
-          )}
-        </div>
+        {canCreate && (
+          <Btn label="＋ New Inspection" color="primary" onClick={() => { setReInspectOf(null); setPanelOpen(true); }} />
+        )}
       </div>
 
-      <div className="flex gap-3.5 flex-wrap mb-5">
+      <div className="flex gap-3.5 flex-wrap items-end mb-5">
         <div className="max-w-[180px]" style={{ position: "relative" }} ref={calendarWrapRef}>
           <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Date Range</div>
           <SearchDropdown
@@ -336,6 +333,7 @@ This cannot be undone.`)) return;
             { value: "", label: "All" }, { value: "open", label: "Open" }, { value: "overdue", label: "Overdue" }, { value: "closed", label: "Closed" }
           ]} neutralActive />
         </div>
+        <Btn label={generating ? "Generating…" : "Generate Report"} color="secondary" icon="download" onClick={generateReport} disabled={generating} />
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
