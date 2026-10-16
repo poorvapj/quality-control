@@ -1,4 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { type DateRange, DATE_RANGES, dateRangeBounds } from "../shared/dateRange";
+import CalendarRangePicker from "../components/CalendarRangePicker";
 import { useApp, authHeaders } from "../context/AppContext";
 import { API_BASE } from "../services/config";
 import { coll, myProjects, projectFloors, floorUnits, byId } from "../shared/rules";
@@ -176,16 +178,32 @@ This cannot be undone.`)) return;
   const [fResult, setFResult] = useState("");
   const [fDri, setFDri] = useState("");
   const [fSnagStatus, setFSnagStatus] = useState(""); // "", "open", "overdue", "closed"
+  const [fRange, setFRange] = useState<DateRange>("all");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const calendarWrapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!calendarOpen) return;
+    function onDocClick(e: MouseEvent) {
+      if (calendarWrapRef.current && !calendarWrapRef.current.contains(e.target as Node)) setCalendarOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [calendarOpen]);
+  const dateBounds = fRange === "custom"
+    ? (customFrom || customTo ? { from: customFrom || "0000-01-01", to: customTo || "9999-12-31" } : null)
+    : dateRangeBounds(fRange);
 
   const fFloors = projectFloors(data, fProjectId || null);
 
   const filtered = useMemo(() => {
-    const today = todayStr();
     return inspections.filter((i) => {
       if (fProjectId && i.projectId !== fProjectId) return false;
       if (fFloorId && i.floorId !== fFloorId) return false;
       if (fResult && i.result !== fResult) return false;
       if (fDri && i.correctiveAction?.assignedToUserId !== fDri) return false;
+      if (dateBounds) { const d = i.inspectionDate; if (d < dateBounds.from || d > dateBounds.to) return false; }
       if (fSnagStatus) {
         const snag = linkedSnag(i);
         const overdue = !!snag && snag.status !== "Closed" && !!snag.dueAt && snag.dueAt < Date.now();
@@ -196,7 +214,7 @@ This cannot be undone.`)) return;
       return true;
     }).sort((a, b) => b.createdAt - a.createdAt);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inspections, fProjectId, fFloorId, fResult, fDri, fSnagStatus, snags]);
+  }, [inspections, fProjectId, fFloorId, fResult, fDri, fSnagStatus, dateBounds, snags]);
 
   const openIssues = inspections.filter((i) => { const s = linkedSnag(i); return s && s.status !== "Closed"; }).length;
   const failedCount = inspections.filter((i) => i.result === "Fail").length;
@@ -205,6 +223,50 @@ This cannot be undone.`)) return;
 
   const projectOptions = allProjects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }));
   const driOptions = users.filter((u) => inspections.some((i) => i.correctiveAction?.assignedToUserId === u.id)).map((u) => ({ value: u.id, label: u.name }));
+
+  const [generating, setGenerating] = useState(false);
+  async function generateReport() {
+    setGenerating(true);
+    try {
+      const { downloadQcInspectionPdf } = await import("../components/QcInspectionPdfDocument");
+      const rangeLabel = fRange === "custom"
+        ? (dateBounds ? `${dateBounds.from} → ${dateBounds.to}` : "All Time")
+        : DATE_RANGES.find((r) => r.key === fRange)?.label || "All Time";
+      const filterLabels: string[] = [];
+      if (fProjectId) filterLabels.push(`Project: ${byId(allProjects, fProjectId)?.name || fProjectId}`);
+      if (fFloorId) filterLabels.push(`Floor: ${byId(fFloors, fFloorId)?.name || fFloorId}`);
+      if (fResult) filterLabels.push(`Result: ${fResult}`);
+      if (fDri) filterLabels.push(`DRI: ${byId(users, fDri)?.name || fDri}`);
+      if (fSnagStatus) filterLabels.push(`Snag: ${fSnagStatus}`);
+      const total = filtered.length;
+      const pass = filtered.filter((i) => i.result === "Pass").length;
+      const fail = filtered.filter((i) => i.result === "Fail").length;
+      const rework = filtered.filter((i) => i.result === "Rework Required").length;
+      const overdue = filtered.filter((i) => { const s = linkedSnag(i); return s && s.status !== "Closed" && s.dueAt && s.dueAt < Date.now(); }).length;
+      await downloadQcInspectionPdf({
+        scopeLabel: filterLabels.length ? filterLabels.join(" · ") : "All projects",
+        periodLabel: rangeLabel,
+        generatedAt: Date.now(),
+        generatedBy: me()?.name || "—",
+        kpis: { total, pass, fail, rework, passRate: total ? Math.round((pass / total) * 100) : 0, overdue },
+        rows: filtered.map((i) => {
+          const snag = linkedSnag(i);
+          const overdueRow = !!snag && snag.status !== "Closed" && !!snag.dueAt && snag.dueAt < Date.now();
+          return {
+            date: i.inspectionDate,
+            projectCode: i.projectCode,
+            floor: i.floorName + (i.unitName ? ` / ${i.unitName}` : ""),
+            workType: i.workType || "—",
+            result: i.result,
+            inspector: i.inspectorName,
+            snagStatus: !snag ? "—" : snag.status === "Closed" ? "Resolved" : overdueRow ? "Overdue" : snag.status
+          };
+        })
+      });
+    } finally {
+      setGenerating(false);
+    }
+  }
 
   return (
     <div>
@@ -220,9 +282,12 @@ This cannot be undone.`)) return;
             </div>
           </div>
         </div>
-        {canCreate && (
-          <Btn label="＋ New Inspection" color="primary" onClick={() => { setReInspectOf(null); setPanelOpen(true); }} />
-        )}
+        <div className="flex gap-2 shrink-0">
+          <Btn label={generating ? "Generating…" : "Generate Report"} color="secondary" icon="download" onClick={generateReport} disabled={generating} />
+          {canCreate && (
+            <Btn label="＋ New Inspection" color="primary" onClick={() => { setReInspectOf(null); setPanelOpen(true); }} />
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
@@ -233,6 +298,29 @@ This cannot be undone.`)) return;
       </div>
 
       <Card className="flex gap-3.5 flex-wrap mb-5">
+        <div className="max-w-[180px]" style={{ position: "relative" }} ref={calendarWrapRef}>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Date Range</div>
+          <SearchDropdown
+            icon="calendar"
+            searchable={false}
+            scrollable={false}
+            value={fRange}
+            onChange={(v) => { setFRange(v as DateRange); if (v === "custom") setCalendarOpen(true); }}
+            options={DATE_RANGES.map((r) => ({ value: r.key, label: r.label }))}
+            neutralActive
+          />
+          {fRange === "custom" && customFrom && customTo && (
+            <div className="text-[11px] text-[var(--text-muted)] mt-1">{customFrom} → {customTo}</div>
+          )}
+          {fRange === "custom" && calendarOpen && (
+            <CalendarRangePicker
+              from={customFrom}
+              to={customTo}
+              onCancel={() => setCalendarOpen(false)}
+              onApply={(from, to) => { setCustomFrom(from); setCustomTo(to); setCalendarOpen(false); }}
+            />
+          )}
+        </div>
         <div className="max-w-[220px]">
           <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Project</div>
           <SearchDropdown value={fProjectId} onChange={(v) => { setFProjectId(v); setFFloorId(""); }} options={[{ value: "", label: "All projects" }, ...projectOptions]} neutralActive />
