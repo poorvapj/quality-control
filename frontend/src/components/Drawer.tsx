@@ -496,8 +496,16 @@ function SnagDrawer({ id }: { id: string }) {
 
   const d = dueLabel(s.dueAt);
   const closed = s.status === "Closed";
-  // CRM doesn't do field/rework — snags shouldn't be reassignable to them.
-  const users = coll(data, "users").filter((u) => u.active !== false && isCivilLikeRole(data, u.role));
+  // A Quality-Fail snag (sentinel stageId — see QualityInspection.tsx's
+  // QC_INSPECTION_STAGE_ID) needs to go to the Execution team to actually
+  // get fixed, not any civil-like user — Quality/Civil/Supervisor people
+  // aren't who does the corrective work. Every other snag keeps the
+  // existing civil-like pool (CRM doesn't do field/rework, so excluded
+  // from both).
+  const isQualityFailSnag = s.stageId === "STG-QC-INSPECTION";
+  const users = coll(data, "users").filter((u) =>
+    u.active !== false && (isQualityFailSnag ? u.role === "Execution" : isCivilLikeRole(data, u.role))
+  );
 
   const label: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: "#9CA3AF", marginBottom: 4 };
   const value: React.CSSProperties = { fontSize: 14, fontWeight: 500, color: "var(--text-main)", lineHeight: 1.4 };
@@ -573,7 +581,7 @@ function SnagDrawer({ id }: { id: string }) {
         <SearchDropdown
           value={assignee}
           onChange={setAssignee}
-          options={users.map((u) => ({ value: u.id, label: `${u.name} · ${u.role}` }))}
+          options={[{ value: "", label: "Select Supervisor…" }, ...users.map((u) => ({ value: u.id, label: `${u.name} · ${u.role}` }))]}
         />
       </div>
       <div className="drawer-footer">

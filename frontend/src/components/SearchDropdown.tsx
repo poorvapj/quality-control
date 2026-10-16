@@ -29,8 +29,11 @@ export interface DropdownOption {
  *  Fully inline-styled (no shared CSS classes) so each usage is
  *  self-contained, same pattern as DropdownMenu.tsx. */
 export default function SearchDropdown({
-  value, onChange, multi = false, multiValue, onChangeMulti, options, searchable = true, icon, scrollable = true, pill = false, neutralActive = false, disabled = false, onCreate
+  value, onChange, multi = false, multiValue, onChangeMulti, options, searchable = true, searchPlaceholder = "Search...", icon, scrollable = true, pill = false, neutralActive = false, disabled = false, onCreate
 }: {
+  /** Text shown in the search box before typing — e.g. "Search by name or
+   *  vendor code..." for a contractor picker. Defaults to a plain "Search...". */
+  searchPlaceholder?: string;
   /** When set, typing something that isn't in `options` offers an
    *  '＋ Add "…"' row at the top of the list; picking it calls this with the
    *  typed text (the parent decides how to store it). */
@@ -147,7 +150,7 @@ export default function SearchDropdown({
               <NavIcon name="search" size={13} />
               <input
                 autoFocus
-                placeholder="Search..."
+                placeholder={searchPlaceholder}
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 style={{ flex: 1, border: "none", outline: "none", background: "none", fontSize: 13, color: "var(--text-main)" }}

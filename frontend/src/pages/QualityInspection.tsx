@@ -615,7 +615,7 @@ function InspectionForm({
             options={[{ value: "", label: "Select project…" }, ...allProjects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))]}
           />
         </div>
-        <div className="field full">
+        <div className="field">
           <label>Floor *</label>
           <SearchDropdown
             value={floorId}
@@ -704,18 +704,19 @@ function InspectionForm({
         <div className="field">
           <label>Contractor</label>
           {!customContractor ? (
-            <select
-              className="select"
+            <SearchDropdown
               value={vendors.some((v) => v.vendorName === contractor) ? contractor : ""}
-              onChange={(e) => {
-                if (e.target.value === "__other__") { setCustomContractor(true); setContractor(""); }
-                else setContractor(e.target.value);
+              searchPlaceholder="Search by name or vendor code…"
+              onChange={(v) => {
+                if (v === "__other__") { setCustomContractor(true); setContractor(""); }
+                else setContractor(v);
               }}
-            >
-              <option value="">Select contractor…</option>
-              {vendors.map((v) => <option key={v.vendorCode} value={v.vendorName}>{v.vendorName}</option>)}
-              <option value="__other__">Other…</option>
-            </select>
+              options={[
+                { value: "", label: "Select contractor…" },
+                ...vendors.map((v) => ({ value: v.vendorName, label: `${v.vendorName} (${v.vendorCode})` })),
+                { value: "__other__", label: "Other…" }
+              ]}
+            />
           ) : (
             <div className="flex gap-1.5">
               <input className="input" value={contractor} onChange={(e) => setContractor(e.target.value)} placeholder="Type contractor name" autoFocus />
