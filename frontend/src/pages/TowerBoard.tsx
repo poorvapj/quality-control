@@ -5,7 +5,7 @@ import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
 import Card from "../ui/tw/Card";
 import { executionComplete } from "../shared/misData";
-import { boardLensFor, qualityByUnit, measurementByUnit, LENS_LABEL, type BoardLens } from "../shared/boardLens";
+import { boardLensFor, qualityByUnit, qualityByFloor, measurementByUnit, LENS_LABEL, type BoardLens } from "../shared/boardLens";
 
 const ALL_FLOORS = "__all__";
 type StatusFilter = "" | "open-snag" | "qc-fail" | "locked" | "handed-over" | "not-started"
@@ -35,6 +35,7 @@ export default function TowerBoard() {
   const inspectionsColl = coll(data, "qualityInspections");
   const measurementsColl = coll(data, "materialMeasurements");
   const qualityMap = useMemo(() => qualityByUnit(inspectionsColl), [inspectionsColl]);
+  const qualityByFloorMap = useMemo(() => qualityByFloor(inspectionsColl), [inspectionsColl]);
   const measureMap = useMemo(() => measurementByUnit(measurementsColl), [measurementsColl]);
   const statusOptions = lens === "quality"
     ? [{ value: "", label: "All Statuses" }, { value: "q-checked", label: "Quality checked" }, { value: "q-failed", label: "Failed / rework" }, { value: "q-pending", label: "Awaiting approval" }, { value: "q-none", label: "Not inspected" }]
@@ -160,7 +161,7 @@ export default function TowerBoard() {
             const handedOver = s.complete;
             const notStarted = s.done === 0 && !s.fail;
             const exDone = lens === "execution" && !!boardProjectId && executionComplete(data, boardProjectId, u.id);
-            const qs = qualityMap.get(u.id)?.state ?? "none";
+            const qs = qualityMap.get(u.id)?.state ?? qualityByFloorMap.get(f.id)?.state ?? "none";
             const ms = measureMap.get(u.id)?.state ?? "none";
             const matchesStatus =
               fStatus === "" ? true
@@ -227,7 +228,14 @@ export default function TowerBoard() {
                       : ms === "pending" ? " · measurement awaiting leader approval"
                       : " · not measured yet";
                   } else {
-                    if (s.locked) bg = "var(--color-locked)";
+                    // A Work Quality Inspection Fail/Rework paints the
+                    // whole tile red here too, highest priority — stays
+                    // red until a passing re-inspection of that same
+                    // checklist clears it (qualityByUnit/qualityByFloor's
+                    // own "latest per work type" logic), independent of
+                    // Stage/QC-gate status.
+                    if (qs === "failed") bg = "var(--color-fail)";
+                    else if (s.locked) bg = "var(--color-locked)";
                     else if (s.fail) bg = "var(--color-fail)";
                     else if (exDone) bg = "var(--color-pass)";
                     else if (s.complete) bg = "#64748b";

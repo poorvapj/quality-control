@@ -59,6 +59,36 @@ export function qualityByUnit(inspections: QualityInspection[]): Map<string, Uni
   return out;
 }
 
+/** Same combine rule as qualityByUnit, but keyed on Floor instead of Unit —
+ *  Work Quality Inspection moved to Floor-level this cycle (unitId is now
+ *  optional, left blank by every new inspection; only kept on old records
+ *  for backward display), so a NEW inspection naming no unit fell through
+ *  qualityByUnit entirely (it explicitly requires a unitId) and never
+ *  painted a tile at all. A floor-level Fail applies to every unit on
+ *  that floor — the caller (Tower Board) falls back to this per-floor
+ *  result for any unit qualityByUnit has nothing for. */
+export function qualityByFloor(inspections: QualityInspection[]): Map<string, UnitQuality> {
+  const latest = new Map<string, QualityInspection>(); // floorId|workType -> newest inspection
+  for (const i of inspections) {
+    if (i.unitId || !i.floorId || !counts(i.approval)) continue; // unit-scoped ones are qualityByUnit's job
+    const key = i.floorId + "|" + ((i as any).workType || "");
+    const cur = latest.get(key);
+    const newer = !cur || (i.inspectionDate || "").localeCompare(cur.inspectionDate || "") > 0
+      || ((i.inspectionDate || "") === (cur.inspectionDate || "") && (i.createdAt || 0) > (cur.createdAt || 0));
+    if (newer) latest.set(key, i);
+  }
+  const byFloor = new Map<string, QualityInspection[]>();
+  for (const i of latest.values()) byFloor.set(i.floorId as string, [...(byFloor.get(i.floorId as string) || []), i]);
+  const out = new Map<string, UnitQuality>();
+  for (const [floorId, list] of byFloor) {
+    const failed = list.find((i) => i.result !== "Pass");
+    const pending = list.find((i) => awaiting(i.approval));
+    const newest = [...list].sort((x, y) => (y.inspectionDate || "").localeCompare(x.inspectionDate || "") || (y.createdAt || 0) - (x.createdAt || 0))[0];
+    out.set(floorId, { state: failed ? "failed" : pending ? "pending" : "checked", latest: failed || pending || newest });
+  }
+  return out;
+}
+
 export type MeasureState = "measured" | "pending" | "none";
 export interface UnitMeasure { state: MeasureState; count: number }
 
