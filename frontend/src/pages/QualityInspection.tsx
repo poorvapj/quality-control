@@ -261,7 +261,7 @@ This cannot be undone.`)) return;
             const snag = linkedSnag(insp);
             const overdue = !!snag && snag.status !== "Closed" && !!snag.dueAt && snag.dueAt < Date.now();
             return (
-              <TableRow key={insp.id}>
+              <TableRow key={insp.id} onClick={() => setHistoryFloor({ floorId: insp.floorId, floorLabel: insp.floorName })}>
                 <TableCell muted className="whitespace-nowrap">{insp.inspectionDate}</TableCell>
                 <TableCell className="whitespace-nowrap">{insp.projectCode}</TableCell>
                 <TableCell strong>
@@ -274,7 +274,7 @@ This cannot be undone.`)) return;
                     <span className="whitespace-nowrap">{insp.result}</span>
                   </Badge>
                   <div className="mt-1"><ApprovalBadge approval={insp.approval} /></div>
-                  <ApprovalActions collName="qualityInspections" record={insp} />
+                  <div onClick={(e) => e.stopPropagation()}><ApprovalActions collName="qualityInspections" record={insp} /></div>
                 </TableCell>
                 <TableCell muted className="truncate max-w-0">{insp.inspectorName}</TableCell>
                 <TableCell>
@@ -290,7 +290,7 @@ This cannot be undone.`)) return;
                   )}
                 </TableCell>
                 <TableCell>
-                  <div className="flex flex-col gap-1.5 items-start">
+                  <div className="flex flex-col gap-1.5 items-start" onClick={(e) => e.stopPropagation()}>
                     <Btn label="History" color="secondary" size="sm" onClick={() => setHistoryFloor({ floorId: insp.floorId, floorLabel: insp.floorName })} />
                     {canCreate && insp.result !== "Pass" && snag?.status !== "Closed" && (
                       <Btn label="Re-inspect" color="secondary" size="sm" onClick={() => { setReInspectOf(insp); setPanelOpen(true); }} />

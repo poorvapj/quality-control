@@ -60,8 +60,15 @@ export default function Table({
   );
 }
 
-export function TableRow({ children }: { children: React.ReactNode }) {
-  return <tr className="border-t border-[var(--border)]">{children}</tr>;
+export function TableRow({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) {
+  return (
+    <tr
+      className={"border-t border-[var(--border)]" + (onClick ? " cursor-pointer hover:bg-[var(--bg-card-hover)]" : "")}
+      onClick={onClick}
+    >
+      {children}
+    </tr>
+  );
 }
 
 export function TableCell({
