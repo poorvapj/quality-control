@@ -89,6 +89,30 @@ export function qualityByFloor(inspections: QualityInspection[]): Map<string, Un
   return out;
 }
 
+export interface UnitCheck { insp: QualityInspection; scope: "flat" | "floor" }
+
+/** Every quality check that applies to ONE flat, so its drawer can say WHY it is
+ *  red/green: its own inspections (flat-wise work types) plus the floor-level ones
+ *  for its floor (those apply to every flat on the floor). Newest per work type
+ *  (rejected records ignored), failures first. */
+export function checksForUnit(inspections: QualityInspection[], unit: { id: string; floorId: string }): UnitCheck[] {
+  const latest = new Map<string, UnitCheck>();
+  for (const i of inspections) {
+    if (!counts(i.approval)) continue;
+    const scope: "flat" | "floor" | null = i.unitId === unit.id ? "flat" : (!i.unitId && i.floorId === unit.floorId ? "floor" : null);
+    if (!scope) continue;
+    const key = scope + "|" + ((i as any).workType || "");
+    const cur = latest.get(key);
+    const newer = !cur || (i.inspectionDate || "").localeCompare(cur.insp.inspectionDate || "") > 0
+      || ((i.inspectionDate || "") === (cur.insp.inspectionDate || "") && (i.createdAt || 0) > (cur.insp.createdAt || 0));
+    if (newer) latest.set(key, { insp: i, scope });
+  }
+  return [...latest.values()].sort((a, b) =>
+    Number(b.insp.result !== "Pass") - Number(a.insp.result !== "Pass")
+    || (b.insp.inspectionDate || "").localeCompare(a.insp.inspectionDate || "")
+    || (b.insp.createdAt || 0) - (a.insp.createdAt || 0));
+}
+
 export type MeasureState = "measured" | "pending" | "none";
 export interface UnitMeasure { state: MeasureState; count: number }
 

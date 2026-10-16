@@ -10,6 +10,7 @@ import NavIcon from "./NavIcon";
 import SearchDropdown from "./SearchDropdown";
 import PossessionForm, { type PossessionActiveForm } from "./PossessionForm";
 import { ACTION_LABEL } from "../pages/AuditLog";
+import { checksForUnit } from "../shared/boardLens";
 import "./SharpPanel.css";
 
 type UnitTab = "overview" | "gates" | "snags" | "possession" | "documents" | "activity";
@@ -39,6 +40,60 @@ export default function Drawer() {
           : drawer.kind === "snag"
           ? <SnagDrawer id={drawer.id} />
           : <UserDrawer id={drawer.id} />}
+      </div>
+    </>
+  );
+}
+
+/* Why a flat is red (or green) for quality: every quality check that applies to
+   it — its own and the floor-level ones — with the checklist it was for, who
+   checked it and when, the exact points marked Not OK, and the snag it raised. */
+function UnitQualityChecks({ unitId, floorId }: { unitId: string; floorId: string }) {
+  const { data } = useApp();
+  const checks = checksForUnit(coll(data, "qualityInspections"), { id: unitId, floorId });
+  const snags = coll(data, "snags");
+  return (
+    <>
+      <div className="micro-label" style={{ marginBottom: 6 }}>QUALITY INSPECTIONS</div>
+      <div className="card card-pad" style={{ marginBottom: 14 }}>
+        {checks.length === 0 && <div style={{ fontSize: 12.5, color: "var(--text-muted)" }}>No quality inspection recorded for this flat or its floor yet.</div>}
+        {checks.map(({ insp, scope }, idx) => {
+          const pass = insp.result === "Pass";
+          const color = pass ? "var(--color-pass)" : insp.result === "Fail" ? "var(--color-fail)" : "#d97706";
+          const failedPoints = (insp.checklistItems || []).filter((c) => c.status === "Not OK");
+          const snag = insp.linkedSnagId ? snags.find((sn) => sn.id === insp.linkedSnagId) : null;
+          return (
+            <div key={insp.id} style={{ padding: "8px 0", borderTop: idx === 0 ? "none" : "1px solid var(--border)", fontSize: 12.5 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
+                <span style={{ fontWeight: 700 }}>
+                  {insp.workType || "Inspection"}
+                  {scope === "floor" && <span style={{ fontWeight: 600, fontSize: 10.5, color: "var(--text-muted)", marginLeft: 6 }}>WHOLE FLOOR</span>}
+                </span>
+                <span style={{ color, fontWeight: 800 }}>{pass ? "✓ Pass" : insp.result === "Fail" ? "✕ Fail" : "◐ Rework required"}</span>
+              </div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
+                {insp.inspectionDate} · {insp.inspectorName}
+                {insp.approval?.status === "pending" ? " · awaiting approval" : ""}
+              </div>
+              {failedPoints.length > 0 && (
+                <ul style={{ margin: "6px 0 0", paddingLeft: 16, color: "var(--color-fail)" }}>
+                  {failedPoints.map((c, i) => (
+                    <li key={i}>
+                      {c.text}
+                      {c.remarks && <div style={{ color: "var(--text-muted)" }}>{c.remarks}</div>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {!pass && insp.remarks && <div style={{ marginTop: 4, color: "var(--text-sub)" }}>{insp.remarks}</div>}
+              {snag && (
+                <div style={{ marginTop: 4, fontSize: 11, color: "var(--text-muted)" }}>
+                  Snag {snag.id} · {snag.status}{snag.assignedTo ? " · " + (byId(coll(data, "users"), snag.assignedTo)?.name || snag.assignedTo) : ""}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </>
   );
@@ -350,6 +405,8 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
                 {projectName} · {floorName} · {summary.done}/{summary.total} stages complete
               </div>
             </div>
+
+            {kind === "unit" && <UnitQualityChecks unitId={id} floorId={(rec as any)?.floorId || ""} />}
 
             <div className="micro-label" style={{ marginBottom: 6 }}>QC GATES</div>
             <div className="card card-pad" style={{ marginBottom: 14 }}>

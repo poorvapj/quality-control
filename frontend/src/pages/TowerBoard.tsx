@@ -216,8 +216,9 @@ export default function TowerBoard() {
                   if (lens === "quality") {
                     bg = qs === "checked" ? "var(--color-pass)" : qs === "failed" ? "var(--color-fail)" : qs === "pending" ? AMBER : "var(--bg-subtle)";
                     if (qs === "none") textColor = "var(--text-sub)";
+                    const failing = (qualityMap.get(u.id) ?? qualityByFloorMap.get(f.id))?.latest;
                     tip += qs === "checked" ? " · quality check passed"
-                      : qs === "failed" ? ` · quality check ${(qualityMap.get(u.id)?.latest?.result || "failed").toLowerCase()}`
+                      : qs === "failed" ? ` · quality check ${(failing?.result || "failed").toLowerCase()}${failing?.workType ? " — " + failing.workType : ""}${failing && !failing.unitId ? " (whole floor)" : ""}`
                       : qs === "pending" ? " · quality check passed — awaiting leader approval"
                       : " · not inspected yet";
                   } else if (lens === "measurement") {
