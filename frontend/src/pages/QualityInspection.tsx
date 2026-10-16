@@ -431,6 +431,8 @@ function InspectionForm({
   const [workType, setWorkType] = useState("");
   const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
   const [selectedSlabs, setSelectedSlabs] = useState<string[]>([]);
+  const [addingCustomSlab, setAddingCustomSlab] = useState(false);
+  const [customSlabText, setCustomSlabText] = useState("");
   const [contractor, setContractor] = useState("");
   const [customContractor, setCustomContractor] = useState(false);
   const vendors = coll(data, "vendors").filter((v) => v.status !== "inactive");
@@ -481,7 +483,7 @@ function InspectionForm({
     setWorkType(wt);
     if (!isFlatWise(wt)) setUnitId(""); // floor-level checklist: no flat
     if (wt !== "Column Inspection") setSelectedColumns([]);
-    if (wt !== "R.C.C. Slab Inspection") setSelectedSlabs([]);
+    if (wt !== "R.C.C. Slab Inspection") { setSelectedSlabs([]); setAddingCustomSlab(false); setCustomSlabText(""); }
     setChecklist((QC_CHECKLISTS[wt] || []).map((text) => ({ text, status: "", remarks: "" })));
   }
   function setItemStatus(idx: number, status: ChecklistStatus) {
@@ -714,13 +716,33 @@ function InspectionForm({
             <SearchDropdown
               multi
               multiValue={selectedSlabs}
-              onChangeMulti={setSelectedSlabs}
-              options={SLAB_OPTIONS.map((s) => ({ value: s, label: s }))}
-              onCreate={(text) => setSelectedSlabs((prev) => (prev.includes(text) ? prev : [...prev, text]))}
+              onChangeMulti={(vals) => {
+                if (vals.includes("__custom__")) { setAddingCustomSlab(true); setSelectedSlabs(vals.filter((v) => v !== "__custom__")); }
+                else setSelectedSlabs(vals);
+              }}
+              options={[...SLAB_OPTIONS.map((s) => ({ value: s, label: s })), { value: "__custom__", label: "Custom…" }]}
             />
-            <div className="text-[11px] text-[var(--text-muted)] mt-1">
-              {selectedSlabs.length} slab{selectedSlabs.length === 1 ? "" : "s"} selected. Type a name and pick "＋ Add" for one not in the list.
-            </div>
+            {addingCustomSlab && (
+              <div className="flex gap-1.5 mt-1.5">
+                <input
+                  className="input" autoFocus placeholder="Type a custom slab name"
+                  value={customSlabText} onChange={(e) => setCustomSlabText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter" || !customSlabText.trim()) return;
+                    setSelectedSlabs((prev) => (prev.includes(customSlabText.trim()) ? prev : [...prev, customSlabText.trim()]));
+                    setCustomSlabText(""); setAddingCustomSlab(false);
+                  }}
+                />
+                <button
+                  type="button" className="btn btn-secondary" style={{ flexShrink: 0 }}
+                  onClick={() => {
+                    if (customSlabText.trim()) setSelectedSlabs((prev) => (prev.includes(customSlabText.trim()) ? prev : [...prev, customSlabText.trim()]));
+                    setCustomSlabText(""); setAddingCustomSlab(false);
+                  }}
+                >Add</button>
+              </div>
+            )}
+            <div className="text-[11px] text-[var(--text-muted)] mt-1">{selectedSlabs.length} slab{selectedSlabs.length === 1 ? "" : "s"} selected.</div>
           </div>
         )}
 
