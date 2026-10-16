@@ -20,16 +20,22 @@ export default function Team() {
   // below and saw every active user on the board.
   const memberOfTeam = !leaderOfTeam && me?.teamId ? coll(data, "teams").find((t) => t.id === me.teamId) || null : null;
   const myTeam = leaderOfTeam || memberOfTeam;
+  // A role can be split across several Team records (e.g. Execution is 3
+  // separate sub-teams under Ayush/Saurabh/Deepti, one per leader) — anyone
+  // in any one of them should see the combined roster of all of them, not
+  // just their own sub-team's 1-2 people. A team with no `role` set is its
+  // own group of one (unchanged from before).
+  const myRoleTeams = myTeam ? (myTeam.role ? coll(data, "teams").filter((t) => t.role === myTeam.role) : [myTeam]) : [];
   // Admin sees everyone. So does anyone granted the full board via the
   // Permission Matrix / a role default (DRI has "team view" by default) —
   // UNLESS they belong to a team (as its leader or just a member): then
-  // they see ONLY that team's roster, even if their role would otherwise
-  // give them the whole board.
+  // they see ONLY that team's (or that role's combined) roster, even if
+  // their role would otherwise give them the whole board.
   const fullAccess = isAdmin || (!myTeam && hasModuleGrant(data, currentUserId, "team", "view"));
   const users = fullAccess
     ? allActiveUsers
-    : myTeam
-    ? allActiveUsers.filter((u) => (u.teamId === myTeam.id && (!myTeam.role || u.role === myTeam.role)) || u.id === myTeam.leaderId)
+    : myRoleTeams.length
+    ? allActiveUsers.filter((u) => myRoleTeams.some((t) => (u.teamId === t.id && (!t.role || u.role === t.role)) || u.id === t.leaderId))
     : [];
   // Team workload is org-wide, not tied to whichever project happens to be
   // globally selected — same class of bug fixed in My Work: scoping to
@@ -62,7 +68,9 @@ export default function Team() {
         <div className="page-header-left">
           <div className="page-icon"><NavIcon name="team" size={20} /></div>
           <div>
-            <div className="page-title">{fullAccess ? "Team Workload" : myTeam ? `${myTeam.name} — My Team` : "Team Workload"}</div>
+            <div className="page-title">
+              {fullAccess ? "Team Workload" : myRoleTeams.length > 1 ? `${myTeam?.role} — My Team` : myTeam ? `${myTeam.name} — My Team` : "Team Workload"}
+            </div>
             <div className="page-desc">Open assignments and snags per person. Tap a person to see their board.</div>
           </div>
         </div>
