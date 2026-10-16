@@ -581,7 +581,7 @@ function SnagDrawer({ id }: { id: string }) {
         <SearchDropdown
           value={assignee}
           onChange={setAssignee}
-          options={[{ value: "", label: "Select Supervisor…" }, ...users.map((u) => ({ value: u.id, label: `${u.name} · ${u.role}` }))]}
+          options={[{ value: "", label: "Choose" }, ...users.map((u) => ({ value: u.id, label: `${u.name} · ${u.role}` }))]}
         />
       </div>
       <div className="drawer-footer">

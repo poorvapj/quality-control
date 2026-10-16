@@ -67,12 +67,26 @@ export default function SearchDropdown({
   // clips it instead of letting it float over whatever comes after it.
   // Portaling to <body> with a position computed from the button's own
   // rect fixes that everywhere at once, with no per-usage change needed.
-  const [panelPos, setPanelPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  // Flips the panel above the button (and caps how tall it's allowed to
+  // get) when there isn't enough room below — without this, a trigger near
+  // the bottom of a short mobile viewport (or inside a scrolled drawer)
+  // opened a panel that ran off the bottom of the screen with no way to
+  // reach the rest of it, since position:fixed doesn't scroll with the page.
+  const [panelPos, setPanelPos] = useState<{ top?: number; bottom?: number; left: number; width: number; maxOptionsHeight: number } | null>(null);
   useEffect(() => {
     if (!open) return;
     function place() {
       const r = wrapRef.current?.getBoundingClientRect();
-      if (r) setPanelPos({ top: r.bottom + 6, left: r.left, width: r.width });
+      if (!r) return;
+      const margin = 8;
+      const chromeHeight = (searchable ? 44 : 0) + 10; // search box + border/padding
+      const spaceBelow = window.innerHeight - r.bottom - margin;
+      const spaceAbove = r.top - margin;
+      const openBelow = spaceBelow >= 160 || spaceBelow >= spaceAbove;
+      const available = Math.min(openBelow ? spaceBelow : spaceAbove, 400);
+      const maxOptionsHeight = Math.max(80, available - chromeHeight);
+      if (openBelow) setPanelPos({ top: r.bottom + 6, left: r.left, width: r.width, maxOptionsHeight });
+      else setPanelPos({ bottom: window.innerHeight - r.top + 6, left: r.left, width: r.width, maxOptionsHeight });
     }
     place();
     window.addEventListener("scroll", place, true);
@@ -81,7 +95,7 @@ export default function SearchDropdown({
       window.removeEventListener("scroll", place, true);
       window.removeEventListener("resize", place);
     };
-  }, [open]);
+  }, [open, searchable]);
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
@@ -140,7 +154,7 @@ export default function SearchDropdown({
         <div
           ref={panelRef}
           style={{
-            position: "fixed", top: panelPos.top, left: panelPos.left, minWidth: panelPos.width, width: "max-content", maxWidth: Math.max(280, panelPos.width),
+            position: "fixed", top: panelPos.top, bottom: panelPos.bottom, left: panelPos.left, minWidth: panelPos.width, width: "max-content", maxWidth: Math.max(280, panelPos.width),
             background: "var(--bg-card)", border: "1px solid var(--theme-primary)", borderRadius: 10,
             boxShadow: "0 12px 32px rgba(15, 23, 42, 0.14)", zIndex: 1000, overflow: "hidden"
           }}
@@ -157,7 +171,7 @@ export default function SearchDropdown({
               />
             </div>
           )}
-          <div style={{ maxHeight: scrollable ? 203 : "none", overflowY: scrollable ? "auto" : "visible", padding: 4 }}>
+          <div style={{ maxHeight: scrollable ? Math.min(203, panelPos.maxOptionsHeight) : "none", overflowY: scrollable ? "auto" : "visible", padding: 4 }}>
             {onCreate && q.trim() && !options.some((o) => o.label.trim().toLowerCase() === q.trim().toLowerCase()) && (
               <button
                 type="button"
