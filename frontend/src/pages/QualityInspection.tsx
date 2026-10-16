@@ -240,7 +240,11 @@ This cannot be undone.`)) return;
       <Card padded={false} className="p-[18px]">
         <Table
           columns={["Date", "Project", "Floor", "VMS Reference", "Result", "Inspector", "Snag / Corrective Action", ""]}
-          colWidths={["9%", "9%", "15%", "16%", "13%", "12%", "17%", "9%"]}
+          // Fixed px widths (not %) so the table keeps its natural size on a
+          // narrow/mobile screen and scrolls horizontally (Table's own
+          // overflow-x-auto wrapper) instead of squeezing every column down
+          // to an unreadable, overlapping sliver.
+          colWidths={["100px", "90px", "160px", "190px", "140px", "130px", "200px", "150px"]}
           maxHeight="560px"
         >
           {filtered.map((insp) => {
