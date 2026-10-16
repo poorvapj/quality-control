@@ -6,6 +6,7 @@ import CalendarRangePicker from "../components/CalendarRangePicker";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
 import Card from "../ui/tw/Card";
+import Btn from "../ui/tw/Btn";
 import Badge from "../ui/tw/Badge";
 import StatTile from "../components/StatTile";
 import Table, { TableRow, TableCell } from "../ui/tw/Table";
@@ -68,18 +69,50 @@ export default function FailRegister() {
 
   const projectOptions = allProjects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }));
 
+  function downloadCsv() {
+    const header = ["Date", "Project", "Floor", "Checklist", "Result", "Inspector", "Contractor", "Assigned DRI", "Target Date", "Snag Status", "Remarks"];
+    // Excel/Sheets both choke on a bare comma/quote/newline inside a field
+    // without this — wrap every value in quotes and double up any quote
+    // already inside it, the standard CSV escaping rule.
+    const esc = (v: string | number | undefined | null) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const lines = [header.map(esc).join(",")];
+    for (const insp of filtered) {
+      const snag = insp.linkedSnagId ? byId(snags, insp.linkedSnagId) : null;
+      const overdue = !!snag && snag.status !== "Closed" && !!snag.dueAt && snag.dueAt < Date.now();
+      const assignedDri = insp.correctiveAction?.assignedToName || byId(users, insp.correctiveAction?.assignedToUserId || null)?.name || "";
+      const snagStatus = !snag ? "" : snag.status === "Closed" ? "Resolved" : overdue ? "Overdue" : snag.status;
+      lines.push([
+        insp.inspectionDate, insp.projectCode, insp.floorName + (insp.unitName ? ` / ${insp.unitName}` : ""),
+        insp.workType || "", insp.result, insp.inspectorName, insp.contractor || "",
+        assignedDri, insp.correctiveAction?.targetDate || "", snagStatus, insp.remarks || ""
+      ].map(esc).join(","));
+    }
+    const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Fail-Register-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div>
-      <div className="flex items-start gap-3 mt-0.5 mb-5">
-        <div className="w-11 h-11 shrink-0 rounded-radius-md bg-primary-light text-primary flex items-center justify-center">
-          <NavIcon name="bug" size={20} />
-        </div>
-        <div>
-          <div className="text-xl font-semibold tracking-tight leading-tight">Fail Register</div>
-          <div className="text-[12.5px] text-[var(--text-muted)] mt-1 leading-normal">
-            Every Work Quality Inspection that came back Fail or Rework Required, across all projects — a standing record, not filtered to "right now".
+      <div className="flex items-start justify-between gap-4 flex-wrap mt-0.5 mb-5">
+        <div className="flex gap-3 items-start min-w-0">
+          <div className="w-11 h-11 shrink-0 rounded-radius-md bg-primary-light text-primary flex items-center justify-center">
+            <NavIcon name="bug" size={20} />
+          </div>
+          <div>
+            <div className="text-xl font-semibold tracking-tight leading-tight">Fail Register</div>
+            <div className="text-[12.5px] text-[var(--text-muted)] mt-1 leading-normal">
+              Every Work Quality Inspection that came back Fail or Rework Required, across all projects — a standing record, not filtered to "right now".
+            </div>
           </div>
         </div>
+        <Btn label="Download CSV" color="secondary" icon="download" onClick={downloadCsv} />
       </div>
 
       <div className="flex gap-3.5 flex-wrap mb-5">
