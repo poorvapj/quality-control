@@ -92,6 +92,11 @@ const isFlatWise = (wt: string) => !!wt && FLAT_WISE_FROM >= 0 && WORK_TYPES.ind
 const TOTAL_COLUMNS = 60;
 const COLUMN_OPTIONS = Array.from({ length: TOTAL_COLUMNS }, (_, i) => `Column ${i + 1}`);
 
+// "Up to 10" per the person who asked — not a hard ceiling, a bigger floor
+// can still add a custom one via the "Other…" option below.
+const TOTAL_SLABS = 10;
+const SLAB_OPTIONS = Array.from({ length: TOTAL_SLABS }, (_, i) => `Slab ${i + 1}`);
+
 // A sentinel, non-real Stage id used ONLY to tag snags that originated from
 // a Work Quality Inspection failure — never a real progression Stage
 // record, so it never appears in / affects floor-release or gate
@@ -273,7 +278,9 @@ This cannot be undone.`)) return;
                   {insp.floorName}{insp.unitName ? ` / ${insp.unitName}` : ""}
                   {insp.workType && (
                     <div className="text-[10.5px] text-[var(--text-muted)] font-normal mt-0.5">
-                      {insp.workType}{insp.columns?.length ? ` · ${insp.columns.length} column${insp.columns.length === 1 ? "" : "s"}` : ""}
+                      {insp.workType}
+                      {insp.columns?.length ? ` · ${insp.columns.length} column${insp.columns.length === 1 ? "" : "s"}` : ""}
+                      {insp.slabs?.length ? ` · ${insp.slabs.length} slab${insp.slabs.length === 1 ? "" : "s"}` : ""}
                     </div>
                   )}
                 </TableCell>
@@ -369,6 +376,9 @@ function FloorHistoryPanel({
                 {insp.columns && insp.columns.length > 0 && (
                   <div className="text-[11px] text-[var(--text-muted)] mt-1">Columns: {insp.columns.join(", ")}</div>
                 )}
+                {insp.slabs && insp.slabs.length > 0 && (
+                  <div className="text-[11px] text-[var(--text-muted)] mt-1">Slabs: {insp.slabs.join(", ")}</div>
+                )}
                 {insp.checklistItems && insp.checklistItems.length > 0 && (
                   <div className="flex flex-col gap-1 mt-2">
                     {insp.checklistItems.map((c, idx) => (
@@ -420,6 +430,7 @@ function InspectionForm({
   const [inspectionDate, setInspectionDate] = useState(todayStr());
   const [workType, setWorkType] = useState("");
   const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
+  const [selectedSlabs, setSelectedSlabs] = useState<string[]>([]);
   const [contractor, setContractor] = useState("");
   const [customContractor, setCustomContractor] = useState(false);
   const vendors = coll(data, "vendors").filter((v) => v.status !== "inactive");
@@ -450,10 +461,11 @@ function InspectionForm({
       setItemId(reInspectOf.itemId || "");
       setWorkType(reInspectOf.workType || "");
       setSelectedColumns(reInspectOf.columns || []);
+      setSelectedSlabs(reInspectOf.slabs || []);
       setChecklist((reInspectOf.workType && QC_CHECKLISTS[reInspectOf.workType] || []).map((text) => ({ text, status: "", remarks: "" })));
     } else {
       setProjectId(""); setFloorId(""); setUnitId(""); setWorkOrderNo(""); setItemId("");
-      setWorkType(""); setSelectedColumns([]); setChecklist([]);
+      setWorkType(""); setSelectedColumns([]); setSelectedSlabs([]); setChecklist([]);
     }
     setInspectionDate(todayStr());
     setContractor(""); setCustomContractor(false);
@@ -469,6 +481,7 @@ function InspectionForm({
     setWorkType(wt);
     if (!isFlatWise(wt)) setUnitId(""); // floor-level checklist: no flat
     if (wt !== "Column Inspection") setSelectedColumns([]);
+    if (wt !== "R.C.C. Slab Inspection") setSelectedSlabs([]);
     setChecklist((QC_CHECKLISTS[wt] || []).map((text) => ({ text, status: "", remarks: "" })));
   }
   function setItemStatus(idx: number, status: ChecklistStatus) {
@@ -520,6 +533,7 @@ function InspectionForm({
     if (!workType) { toast("Select a checklist (Work Type) first"); return; }
     if (flatWise && !unitId) { toast("Pick the flat — Brickwork and the work after it is inspected flat by flat"); return; }
     if (workType === "Column Inspection" && selectedColumns.length === 0) { toast("Select at least one column"); return; }
+    if (workType === "R.C.C. Slab Inspection" && selectedSlabs.length === 0) { toast("Select at least one slab"); return; }
     if (checklist.some((row) => !row.status)) { toast("Mark every checklist point as OK / Not OK / N/A"); return; }
     if (result !== "Pass" && !remarks.trim()) { toast("Remarks are required for Fail / Rework Required"); return; }
     if (result !== "Pass" && !assignedToUserId) { toast("A responsible DRI must be assigned for Fail / Rework Required"); return; }
@@ -550,6 +564,7 @@ function InspectionForm({
       unit: itemEntry?.unit,
       workType,
       columns: workType === "Column Inspection" ? selectedColumns : undefined,
+      slabs: workType === "R.C.C. Slab Inspection" ? selectedSlabs : undefined,
       contractor: contractor.trim() || undefined,
       checklistItems: checklist.map((row) => ({ text: row.text, status: row.status as "OK" | "Not OK" | "N/A", remarks: row.remarks.trim() || undefined })),
       inspectionDate, result,
@@ -690,6 +705,22 @@ function InspectionForm({
               options={COLUMN_OPTIONS.map((c) => ({ value: c, label: c }))}
             />
             <div className="text-[11px] text-[var(--text-muted)] mt-1">{selectedColumns.length} of {TOTAL_COLUMNS} column{selectedColumns.length === 1 ? "" : "s"} selected.</div>
+          </div>
+        )}
+
+        {workType === "R.C.C. Slab Inspection" && (
+          <div className="field full">
+            <label>Select Slabs *</label>
+            <SearchDropdown
+              multi
+              multiValue={selectedSlabs}
+              onChangeMulti={setSelectedSlabs}
+              options={SLAB_OPTIONS.map((s) => ({ value: s, label: s }))}
+              onCreate={(text) => setSelectedSlabs((prev) => (prev.includes(text) ? prev : [...prev, text]))}
+            />
+            <div className="text-[11px] text-[var(--text-muted)] mt-1">
+              {selectedSlabs.length} slab{selectedSlabs.length === 1 ? "" : "s"} selected. Type a name and pick "＋ Add" for one not in the list.
+            </div>
           </div>
         )}
 

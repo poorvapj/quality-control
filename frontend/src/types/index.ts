@@ -548,6 +548,10 @@ export interface QualityInspection extends BaseRecord {
   // Which of the floor's (fixed) 60 structural columns this inspection
   // covers — only meaningful when workType is "Column Inspection".
   columns?: string[];
+  // Which of the floor's (up to 10, or a custom-typed one) RCC slabs this
+  // inspection covers — only meaningful when workType is "R.C.C. Slab
+  // Inspection".
+  slabs?: string[];
   checklistItems?: { text: string; status: "OK" | "Not OK" | "N/A"; remarks?: string }[];
   // Optional, manually-picked reference to a real VMS scope-item/sub-item —
   // never auto-matched to the Unit above. See the interface doc comment.
