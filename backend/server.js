@@ -71,6 +71,7 @@ const { getVmsDrawingRequests } = require("./vmsDrawingRequests.js");
 const { deriveApprovalOnCreate, resolveApprovalOnUpdate } = require("./approvalRules.js");
 const { sanitizePoEvent, matchProjectByName, isStaleUpdate } = require("./imsWebhook.js");
 const { buildTeamDailyReport, slackSummaryFor } = require("./teamDailyReports.js");
+const { verifySlackSignature, parseSlackActionPayload, parseActionId, snagCloseBlocks, teamReportApproveBlocks } = require("./slackActions.js");
 
 /* ------------------------------------------------------------- passwords
    Node's built-in scrypt is our own hashing scheme going forward. Plaintext
@@ -166,6 +167,14 @@ const IMS_WEBHOOK_SECRET = (process.env.IMS_WEBHOOK_SECRET || "").trim();
    Both env vars optional — everything below is a no-op with either unset. */
 const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN || "";
 const SLACK_CHANNEL_ID = process.env.SLACK_CHANNEL_ID || "";
+// Separate from the bot token — this is the Slack app's "Signing Secret"
+// (Basic Information page), used only to verify that a POST to
+// /api/slack/actions genuinely came from Slack. Required for the
+// Close Snag / Approve Report buttons below to work at all; that endpoint
+// 501s without it. Also needs Slack's own "Interactivity & Shortcuts" On
+// with its Request URL pointed at /api/slack/actions — a one-time setup
+// step only the Slack app's owner can do.
+const SLACK_SIGNING_SECRET = process.env.SLACK_SIGNING_SECRET || "";
 
 // email -> Slack user id | null. Small and long-lived (emails rarely change
 // Slack accounts) — avoids one lookupByEmail call per notification.
@@ -193,19 +202,46 @@ async function slackUserIdForEmail(email, knownSlackId) {
   }
 }
 
-async function slackPostMessage(channel, text) {
+async function slackPostMessage(channel, text, blocks) {
   if (!SLACK_BOT_TOKEN || !channel) return;
   try {
     const res = await fetch("https://slack.com/api/chat.postMessage", {
       method: "POST",
       headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json; charset=utf-8" },
-      body: JSON.stringify({ channel, text })
+      body: JSON.stringify(blocks ? { channel, text, blocks } : { channel, text })
     });
     const json = await res.json();
     if (!json.ok) console.error("Slack chat.postMessage:", json.error, channel);
   } catch (e) {
     console.error("Slack chat.postMessage failed:", e.message);
   }
+}
+
+// Reverse of slackUserIdForEmail — given the Slack user id who clicked an
+// interactive button, finds which app User that is, by their Slack
+// profile's email. Needed because Slack's action payload only ever carries
+// its own internal user id, never anything of ours. Small/long-lived
+// cache, same reasoning as slackUserIdByEmail above.
+const emailBySlackUserId = new Map();
+async function appUserForSlackUserId(slackUserId) {
+  if (!SLACK_BOT_TOKEN || !slackUserId) return null;
+  let email = emailBySlackUserId.get(slackUserId);
+  if (email === undefined) {
+    try {
+      const res = await fetch(`https://slack.com/api/users.info?user=${encodeURIComponent(slackUserId)}`, {
+        headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` }
+      });
+      const json = await res.json();
+      email = json.ok ? json.user?.profile?.email || null : null;
+      if (!json.ok) console.error("Slack users.info:", json.error, slackUserId);
+    } catch (e) {
+      console.error("Slack users.info failed:", e.message);
+      email = null;
+    }
+    emailBySlackUserId.set(slackUserId, email);
+  }
+  if (!email) return null;
+  return mongoDb.collection("users").findOne({ email: new RegExp("^" + email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$", "i") });
 }
 
 /* One line of Slack copy per event type, plus who the DM goes to. Returning
@@ -230,10 +266,15 @@ function slackMessageFor(eventType, payload) {
         recipientSlackId: payload.assignedToSlackId,
         who: payload.assignedToName
       };
-    case "snag_assigned":
-      return { text: `🐞 Snag *${payload.title}* assigned to *${payload.assignedToName}*.`, recipientEmail: payload.assignedToEmail, recipientSlackId: payload.assignedToSlackId, who: payload.assignedToName };
+    case "snag_assigned": {
+      const text = `🐞 Snag *${payload.title}* (${payload.projectName || "—"}) — raised by *${payload.raisedByName || "—"}* — assigned to *${payload.assignedToName}*.`;
+      return {
+        text, recipientEmail: payload.assignedToEmail, recipientSlackId: payload.assignedToSlackId, who: payload.assignedToName,
+        blocks: snagCloseBlocks(text, payload.id)
+      };
+    }
     case "snag_reopened":
-      return { text: `⚠️ Snag *${payload.title}* was *reopened* — assigned to *${payload.assignedToName}*, needs attention.`, recipientEmail: payload.assignedToEmail, recipientSlackId: payload.assignedToSlackId, who: payload.assignedToName };
+      return { text: `⚠️ Snag *${payload.title}* (${payload.projectName || "—"}) was *reopened* — assigned to *${payload.assignedToName}*, needs attention.`, recipientEmail: payload.assignedToEmail, recipientSlackId: payload.assignedToSlackId, who: payload.assignedToName };
     default:
       return null;
   }
@@ -247,11 +288,11 @@ async function notifySlack(eventType, payload) {
     const tasks = [];
     if (msg.recipientEmail || msg.recipientSlackId) {
       tasks.push(
-        slackUserIdForEmail(msg.recipientEmail, msg.recipientSlackId).then((uid) => uid && slackPostMessage(uid, msg.text))
+        slackUserIdForEmail(msg.recipientEmail, msg.recipientSlackId).then((uid) => uid && slackPostMessage(uid, msg.text, msg.blocks))
       );
     }
     if (SLACK_CHANNEL_ID) {
-      tasks.push(slackPostMessage(SLACK_CHANNEL_ID, msg.text));
+      tasks.push(slackPostMessage(SLACK_CHANNEL_ID, msg.text, msg.blocks));
     }
     await Promise.all(tasks);
   } catch (e) {
@@ -416,13 +457,19 @@ async function notifyAssignmentTarget(eventType, rec) {
 async function notifySnagTarget(eventType, rec, existing) {
   try {
     const assignedTo = rec.assignedTo || existing?.assignedTo || null;
-    const assignee = assignedTo
-      ? await mongoDb.collection("users").findOne({ id: assignedTo }, { projection: { name: 1, email: 1, slackId: 1 } })
-      : null;
+    const raisedBy = rec.raisedBy || existing?.raisedBy || null;
+    const projectId = rec.projectId || existing?.projectId || null;
+    const [assignee, raiser, project] = await Promise.all([
+      assignedTo ? mongoDb.collection("users").findOne({ id: assignedTo }, { projection: { name: 1, email: 1, slackId: 1 } }) : null,
+      raisedBy ? mongoDb.collection("users").findOne({ id: raisedBy }, { projection: { name: 1 } }) : null,
+      projectId ? mongoDb.collection("projects").findOne({ id: projectId }, { projection: { name: 1 } }) : null
+    ]);
     notifyEvent(eventType, {
       id: rec.id,
       title: rec.title || existing?.title || "",
-      projectId: rec.projectId || existing?.projectId || null,
+      projectId,
+      projectName: project?.name || null,
+      raisedByName: raiser?.name || null,
       assignedToId: assignedTo,
       assignedToName: assignee?.name || assignedTo,
       assignedToEmail: assignee?.email || null,
@@ -1327,6 +1374,24 @@ function readBody(req) {
   });
 }
 
+// Slack's interactive-message POST must be signature-verified against its
+// exact raw bytes before any parsing — readBody() above already JSON-
+// parses (and Slack's body isn't JSON anyway, it's urlencoded), so this is
+// a separate reader that hands back the untouched string.
+function readRawBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on("data", (c) => {
+      size += c.length;
+      if (size > MAX_BODY) { reject(new Error("Payload too large")); req.destroy(); return; }
+      chunks.push(c);
+    });
+    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    req.on("error", reject);
+  });
+}
+
 async function handleApi(req, res, urlPath) {
   if (req.method === "GET" && urlPath === "/api/rev") {
     return sendJson(res, 200, { rev: await getRev() });
@@ -1476,6 +1541,79 @@ async function handleApi(req, res, urlPath) {
     await mongoDb.collection("purchaseOrders").updateOne({ id: rec.id }, { $set: rec }, { upsert: true });
     console.log(`[ims-webhook] saved PO ${rec.id} (deleted=${rec.deleted}) — ${projectCode ? "linked to project " + projectCode : "NOT linked to any QC project"}`);
     return sendJson(res, 200, { ok: true, matched: !!projectCode });
+  }
+  if (req.method === "POST" && urlPath === "/api/slack/actions") {
+    // Slack's "Interactivity & Shortcuts" Request URL — a button click
+    // (Close Snag / Approve Report) posts here. Verified via Slack's own
+    // request signature (SLACK_SIGNING_SECRET), never a static shared
+    // secret like the other automation endpoints, since Slack itself is
+    // the caller here, not a workflow tool we configure.
+    if (!SLACK_SIGNING_SECRET) return sendJson(res, 501, { error: "SLACK_SIGNING_SECRET is not configured" });
+    const rawBody = await readRawBody(req);
+    const ok = verifySlackSignature({
+      signingSecret: SLACK_SIGNING_SECRET,
+      timestamp: req.headers["x-slack-request-timestamp"],
+      rawBody,
+      signature: req.headers["x-slack-signature"]
+    });
+    if (!ok) return sendJson(res, 401, { error: "Invalid Slack signature" });
+
+    const payload = parseSlackActionPayload(rawBody);
+    const action = payload?.actions?.[0];
+    const parsed = action ? parseActionId(action.action_id) : null;
+
+    async function respond(text) {
+      if (!payload?.response_url) return;
+      try {
+        await fetch(payload.response_url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ replace_original: true, text })
+        });
+      } catch (e) {
+        console.error("Slack response_url post failed:", e.message);
+      }
+    }
+
+    if (parsed) {
+      // Slack needs an HTTP response within 3 seconds — ack immediately
+      // below and do the actual write + response_url follow-up in the
+      // background, same "never block the triggering request" pattern
+      // notifySlack/notifyEvent already use elsewhere in this file.
+      (async () => {
+        try {
+          const actor = await appUserForSlackUserId(payload.user?.id);
+          if (parsed.kind === "snag_close") {
+            const snag = await mongoDb.collection("snags").findOne({ id: parsed.entityId });
+            if (!snag) { await respond("⚠️ That snag no longer exists."); return; }
+            if (snag.status === "Closed") { await respond(`✅ Already closed.`); return; }
+            await mongoDb.collection("snags").updateOne(
+              { id: parsed.entityId },
+              { $set: { status: "Closed", closedAt: Date.now(), closedBy: actor?.id || null } }
+            );
+            await bumpRev();
+            await respond(`✅ Snag *${snag.title}* closed${actor ? ` by ${actor.name}` : " via Slack"}.`);
+          } else if (parsed.kind === "team_report_approve") {
+            const report = await mongoDb.collection("teamDailyReports").findOne({ id: parsed.entityId });
+            if (!report) { await respond("⚠️ That report no longer exists."); return; }
+            if (report.status === "Approved") { await respond(`✅ Already approved by ${report.approvedByName || "someone"}.`); return; }
+            const team = await mongoDb.collection("teams").findOne({ id: report.teamId });
+            const isLeader = !!actor && !!team && team.leaderId === actor.id;
+            const isAdmin = !!actor && actor.id === ADMIN_USER_ID;
+            if (!actor || (!isLeader && !isAdmin)) { await respond("🚫 Only this team's leader can approve its report."); return; }
+            await mongoDb.collection("teamDailyReports").updateOne(
+              { id: parsed.entityId },
+              { $set: { status: "Approved", approvedByUserId: actor.id, approvedByName: actor.name, approvedAt: Date.now() } }
+            );
+            await bumpRev();
+            await respond(`✅ *${report.teamName}*'s report for ${report.date} approved by ${actor.name}.`);
+          }
+        } catch (e) {
+          console.error("Slack action handling failed:", e.message);
+        }
+      })();
+    }
+    return sendJson(res, 200, {});
   }
   if (req.method === "POST" && urlPath === "/api/photo") {
     const body = await readBody(req);
@@ -1651,8 +1789,9 @@ async function handleApi(req, res, urlPath) {
       if (team.leaderId) {
         const leader = await mongoDb.collection("users").findOne({ id: team.leaderId }, { projection: { email: 1, slackId: 1 } });
         if (leader) {
+          const summaryText = slackSummaryFor(report);
           slackUserIdForEmail(leader.email, leader.slackId)
-            .then((uid) => uid && slackPostMessage(uid, slackSummaryFor(report)))
+            .then((uid) => uid && slackPostMessage(uid, summaryText, teamReportApproveBlocks(summaryText, report.id)))
             .catch((e) => console.error("Daily Team Report Slack DM failed:", team.id, e.message));
         }
       }
