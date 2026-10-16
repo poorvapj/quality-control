@@ -228,14 +228,7 @@ export default function TowerBoard() {
                       : ms === "pending" ? " · measurement awaiting leader approval"
                       : " · not measured yet";
                   } else {
-                    // A Work Quality Inspection Fail/Rework paints the
-                    // whole tile red here too, highest priority — stays
-                    // red until a passing re-inspection of that same
-                    // checklist clears it (qualityByUnit/qualityByFloor's
-                    // own "latest per work type" logic), independent of
-                    // Stage/QC-gate status.
-                    if (qs === "failed") bg = "var(--color-fail)";
-                    else if (s.locked) bg = "var(--color-locked)";
+                    if (s.locked) bg = "var(--color-locked)";
                     else if (s.fail) bg = "var(--color-fail)";
                     else if (exDone) bg = "var(--color-pass)";
                     else if (s.complete) bg = "#64748b";
