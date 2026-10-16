@@ -486,12 +486,16 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
 }
 
 function SnagDrawer({ id }: { id: string }) {
-  const { data, closeDrawer } = useApp();
+  const { data, closeDrawer, toast } = useApp();
   const { setSnagStatus, saveSnagAssignee, capturePhoto } = useActions();
   const fileRef = useRef<HTMLInputElement>(null);
   const s = byId(coll(data, "snags"), id);
-  const [assignee, setAssignee] = React.useState(s?.assignedTo || "");
-  React.useEffect(() => setAssignee(s?.assignedTo || ""), [s?.assignedTo]);
+  // Starts neutral ("Choose") rather than pre-filled with the current
+  // assignee — who it's presently assigned to already shows separately
+  // above (the "Assigned DRI" field); this control is only for picking
+  // someone new to hand it to.
+  const [assignee, setAssignee] = React.useState("");
+  React.useEffect(() => setAssignee(""), [s?.id]);
   if (!s) return null;
 
   const d = dueLabel(s.dueAt);
@@ -595,7 +599,10 @@ function SnagDrawer({ id }: { id: string }) {
       </div>
       <div className="drawer-footer">
         <button className="btn btn-secondary btn-sm" onClick={() => fileRef.current?.click()}>📸 Add photo</button>
-        <button className="btn btn-secondary btn-sm" onClick={() => saveSnagAssignee(s.id, assignee)}>Save assignee</button>
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={() => { if (!assignee) { toast("Choose someone first"); return; } saveSnagAssignee(s.id, assignee); setAssignee(""); }}
+        >Save assignee</button>
         {closed ? (
           <button className="btn btn-secondary btn-sm" onClick={() => setSnagStatus(s.id, "Open")}>Reopen</button>
         ) : (
