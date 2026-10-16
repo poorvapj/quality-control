@@ -1629,6 +1629,10 @@
       justify-content: flex-end;
     }
 
+    .drawer-footer > button {
+      flex: 1 1 calc(50% - 4px);
+    }
+
     /* centred modal for master record editing */
     .modal-shell {
       position: fixed;
