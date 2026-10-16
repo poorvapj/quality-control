@@ -106,16 +106,20 @@ export default function FailRegister() {
             <NavIcon name="bug" size={20} />
           </div>
           <div>
-            <div className="text-xl font-semibold tracking-tight leading-tight">Fail Register</div>
+            <div
+              className="text-xl font-semibold tracking-tight leading-tight flex items-center gap-1.5 cursor-pointer w-fit"
+              onClick={() => setActiveTab("qualityInspection" as TabKey)}
+              title="Back to Quality Inspection"
+            >
+              <NavIcon name="chevronsLeft" size={16} />
+              Fail Register
+            </div>
             <div className="text-[12.5px] text-[var(--text-muted)] mt-1 leading-normal">
               Every Work Quality Inspection that came back Fail or Rework Required, across all projects — a standing record, not filtered to "right now".
             </div>
           </div>
         </div>
-        <div className="flex gap-2 shrink-0">
-          <Btn label="Back" color="secondary" icon="chevronsLeft" onClick={() => setActiveTab("qualityInspection" as TabKey)} />
-          <Btn label="Download CSV" color="secondary" icon="download" onClick={downloadCsv} />
-        </div>
+        <Btn label="Download CSV" color="secondary" icon="download" onClick={downloadCsv} />
       </div>
 
       <div className="flex gap-3.5 flex-wrap mb-5">
