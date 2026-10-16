@@ -24,6 +24,7 @@ export const MATRIX_MODULES: MatrixModule[] = [
   { key: "purchaseOrders", label: "Purchase Orders", actions: ["view"] },
   { key: "masters", label: "Masters", actions: ["view", "create", "edit", "delete"] },
   { key: "qualityMis", label: "Quality MIS", actions: ["view"] },
+  { key: "userMis", label: "Users MIS", actions: ["view"] },
   { key: "executionReconciliation", label: "Execution Reconciliation", actions: ["view"] },
   { key: "backups", label: "Backups", actions: ["view", "create", "delete"] },
   { key: "auditLog", label: "Audit Logs", actions: ["view"] }
@@ -184,6 +185,7 @@ export const TAB_ACCESS: Record<string, TabAccess> = {
   progressAnalysis: { module: "progressAnalysis", mode: "grant" },
   purchaseOrders: { module: "purchaseOrders", mode: "grant" },
   misDashboard: { module: "qualityMis", mode: "grant" },
+  userMis: { module: "userMis", mode: "grant" },
   executionReconciliation: { module: "executionReconciliation", mode: "grant" },
   masters: { module: "masters", mode: "grant" },
   backups: { module: "backups", mode: "grant" },

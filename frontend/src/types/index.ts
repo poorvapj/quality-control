@@ -816,7 +816,7 @@ export type Op =
   | { op: "progress"; key: string; patch: Partial<ProgressPatch> }
   | { op: "event"; ev: EventLog };
 
-export type TabKey = "dash" | "misDashboard" | "executionReconciliation" | "qualityInspection" | "qualityFails" | "caseStudies" | "unitExecutionWorkflow" | "measurement" | "progressAnalysis" | "purchaseOrders" | "work" | "board" | "handoverChecklist" | "handoverInternal" | "handoverOwner" | "snags" | "team" | "masters" | "addUser" | "dpr" | "drawingRequests" | "backups" | "auditLog" | "permissionMatrix";
+export type TabKey = "dash" | "misDashboard" | "userMis" | "executionReconciliation" | "qualityInspection" | "qualityFails" | "caseStudies" | "unitExecutionWorkflow" | "measurement" | "progressAnalysis" | "purchaseOrders" | "work" | "board" | "handoverChecklist" | "handoverInternal" | "handoverOwner" | "snags" | "team" | "masters" | "addUser" | "dpr" | "drawingRequests" | "backups" | "auditLog" | "permissionMatrix";
 export type MasterKey = "projects" | "floors" | "units" | "stages" | "qparams" | "checklists" | "stagemap" | "users" | "permissions" | "workTargets" | "teams" | "roles" | "forms";
 
 export type FieldType = "text" | "number" | "date" | "color" | "select" | "ref" | "bool" | "textarea" | "items" | "password" | "permissionGrid" | "formFields";

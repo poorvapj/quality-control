@@ -10,6 +10,7 @@ import ChecklistModal from "./components/ChecklistModal";
 import RecordModal from "./components/RecordModal";
 import Dashboard from "./pages/Dashboard";
 import MISDashboard from "./pages/MISDashboard";
+import UserMIS from "./pages/UserMIS";
 import Measurement from "./pages/Measurement";
 import ExecutionReconciliation from "./pages/ExecutionReconciliation";
 import QualityInspection from "./pages/QualityInspection";
@@ -43,6 +44,7 @@ export default function App() {
   const pages: Record<string, React.ReactNode> = {
     dash: <Dashboard />,
     misDashboard: <MISDashboard />,
+    userMis: <UserMIS />,
     executionReconciliation: <ExecutionReconciliation />,
     qualityInspection: <QualityInspection />,
     qualityFails: <FailRegister />,
