@@ -112,7 +112,10 @@ export default function FailRegister() {
             </div>
           </div>
         </div>
-        <Btn label="Download CSV" color="secondary" icon="download" onClick={downloadCsv} />
+        <div className="flex gap-2 shrink-0">
+          <Btn label="Back" color="secondary" icon="chevronsLeft" onClick={() => setActiveTab("qualityInspection" as TabKey)} />
+          <Btn label="Download CSV" color="secondary" icon="download" onClick={downloadCsv} />
+        </div>
       </div>
 
       <div className="flex gap-3.5 flex-wrap mb-5">
