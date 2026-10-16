@@ -15,7 +15,7 @@ import type { TabKey, TeamDailyReport } from "../types";
 /* One Team's Daily Report, pending or already-signed-off — the leader
    taps Approve, which is a sign-off record only (doesn't gate anything
    else; confirmed with whoever asked for this feature). */
-function TeamReportCard({ report }: { report: TeamDailyReport }) {
+function TeamReportCard({ report, canApprove }: { report: TeamDailyReport; canApprove: boolean }) {
   const { apply, toast } = useApp();
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -44,8 +44,10 @@ function TeamReportCard({ report }: { report: TeamDailyReport }) {
         </div>
         {report.status === "Approved" ? (
           <Badge color="green">Approved{report.approvedByName ? ` by ${report.approvedByName}` : ""}</Badge>
-        ) : (
+        ) : canApprove ? (
           <Btn label={busy ? "Approving…" : "Approve"} color="primary" size="sm" onClick={approve} disabled={busy} />
+        ) : (
+          <Badge color="amber">Pending</Badge>
         )}
       </div>
       {expanded && (
@@ -88,7 +90,17 @@ export default function DriDashboard() {
   // Team.tsx itself shows, just surfaced here too so a team leader doesn't
   // have to leave their dashboard to see it.
   const myTeam = coll(data, "teams").find((t) => t.leaderId === currentUserId) || null;
-  const teamMembers = myTeam ? coll(data, "users").filter((u) => u.teamId === myTeam.id && u.active !== false && (!myTeam.role || u.role === myTeam.role)) : [];
+  // A role can be split across several Team records (e.g. Execution is 3
+  // sub-teams under Ayush/Saurabh/Deepti) — a level above them (e.g.
+  // Akhilesh, leading his own Execution-tagged team with no direct
+  // members of his own) sees the combined roster/reports of every team
+  // sharing that role, same grouping Team.tsx itself uses. A team with no
+  // role set is its own group of one, unchanged from before.
+  const myRoleTeams = myTeam ? (myTeam.role ? coll(data, "teams").filter((t) => t.role === myTeam.role) : [myTeam]) : [];
+  const myRoleTeamIds = new Set(myRoleTeams.map((t) => t.id));
+  const teamMembers = myRoleTeams.length
+    ? coll(data, "users").filter((u) => u.active !== false && myRoleTeams.some((t) => (u.teamId === t.id && (!t.role || u.role === t.role)) || u.id === t.leaderId) && u.id !== currentUserId)
+    : [];
   const teamRows = teamMembers.map((u) => {
     const a = coll(data, "assignments").filter((x) => x.assignedTo === u.id && x.status !== "Done" && projectIds.includes(x.projectId));
     const s = coll(data, "snags").filter((x) => x.assignedTo === u.id && x.status !== "Closed" && projectIds.includes(x.projectId));
@@ -97,11 +109,15 @@ export default function DriDashboard() {
   }).sort((a, b) => (b.assignments + b.snags) - (a.assignments + a.snags));
 
   // Daily Team Reports — generated once a day (see backend/
-  // teamDailyReports.js), newest first. Only this team's own leader (or an
-  // Admin) can Approve one (enforced server-side too).
-  const teamReports = myTeam
-    ? coll(data, "teamDailyReports").filter((r) => r.teamId === myTeam.id).sort((a, b) => b.date.localeCompare(a.date))
+  // teamDailyReports.js), newest first, combined across every team sharing
+  // this role. Approve is still restricted to that specific report's own
+  // team leader (or an Admin) — a level-above viewer like Akhilesh can see
+  // every sub-team's report but can't sign off on one that isn't his own
+  // (enforced server-side too; the button itself is hidden for them here).
+  const teamReports = myRoleTeamIds.size
+    ? coll(data, "teamDailyReports").filter((r) => myRoleTeamIds.has(r.teamId)).sort((a, b) => b.date.localeCompare(a.date))
     : [];
+  const teamById = new Map(coll(data, "teams").map((t: any) => [t.id, t]));
 
   const myTickets = coll(data, "drawingRequests").filter((r) => r.submittedByUserId === currentUserId);
   const pending = myTickets.filter((r) => r.reviewStatus !== "approved" && r.reviewStatus !== "returned");
@@ -157,7 +173,7 @@ export default function DriDashboard() {
         <>
           <div className="flex items-center justify-between gap-3 flex-wrap mb-2.5">
             <div className="text-[13px] font-bold tracking-tight text-[var(--text-sub)] uppercase flex items-center gap-2">
-              <NavIcon name="team" size={13} /> {myTeam.name} — My Team's Work
+              <NavIcon name="team" size={13} /> {myRoleTeams.length > 1 ? myTeam.role : myTeam.name} — My Team's Work
             </div>
             <div className="text-[11px] text-[var(--text-muted)] font-medium">{teamRows.length} member{teamRows.length === 1 ? "" : "s"}</div>
           </div>
@@ -187,14 +203,18 @@ export default function DriDashboard() {
         <>
           <div className="flex items-center justify-between gap-3 flex-wrap mb-2.5">
             <div className="text-[13px] font-bold tracking-tight text-[var(--text-sub)] uppercase flex items-center gap-2">
-              <NavIcon name="board" size={13} /> {myTeam.name} — Daily Reports
+              <NavIcon name="board" size={13} /> {myRoleTeams.length > 1 ? myTeam.role : myTeam.name} — Daily Reports
             </div>
             <div className="text-[11px] text-[var(--text-muted)] font-medium">
               {teamReports.filter((r) => r.status === "Pending").length} pending
             </div>
           </div>
           <div className="mb-6">
-            {teamReports.slice(0, 7).map((r) => <TeamReportCard key={r.id} report={r} />)}
+            {teamReports.slice(0, 7).map((r) => {
+              const reportTeam = teamById.get(r.teamId);
+              const canApprove = !!reportTeam && reportTeam.leaderId === currentUserId;
+              return <TeamReportCard key={r.id} report={r} canApprove={canApprove} />;
+            })}
           </div>
         </>
       )}
