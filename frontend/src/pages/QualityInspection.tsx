@@ -98,7 +98,7 @@ const isFlatWise = (wt: string) => !!wt && FLAT_WISE_FROM >= 0 && WORK_TYPES.ind
 const QC_INSPECTION_STAGE_ID = "STG-QC-INSPECTION";
 
 export default function QualityInspection() {
-  const { data, currentUserId, myRole, apply, toast, me } = useApp();
+  const { data, currentUserId, myRole, apply, toast, me, reInspectQualityId, setReInspectQualityId } = useApp();
   const isAdmin = currentUserId === "U-ADMIN";
   const canCreate = isAdmin || hasModuleGrant(data, currentUserId, "qualityInspection", "create");
   const allProjects = myProjects(data, currentUserId);
@@ -149,6 +149,16 @@ This cannot be undone.`)) return;
   const [panelOpen, setPanelOpen] = useState(false);
   const [reInspectOf, setReInspectOf] = useState<QI | null>(null);
   const [historyFloor, setHistoryFloor] = useState<{ floorId: string; floorLabel: string } | null>(null);
+
+  // A dashboard's Recent Inspections row set this (then switched to this
+  // tab) to jump straight into Re-inspect for one exact failed record,
+  // instead of making the inspector find it again in the list below.
+  useEffect(() => {
+    if (!reInspectQualityId) return;
+    const insp = inspections.find((i) => i.id === reInspectQualityId);
+    if (insp) { setReInspectOf(insp); setPanelOpen(true); }
+    setReInspectQualityId(null);
+  }, [reInspectQualityId]);
 
   // --- filters for the list ------------------------------------------------
   const [fProjectId, setFProjectId] = useState("");

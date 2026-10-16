@@ -88,6 +88,10 @@ interface AppContextValue {
   // Requests tab, consumed (and cleared) by that page on mount so a direct
   // link from the dashboard doesn't just land on the unfiltered list.
   openDrawingRequestId: string | null;
+  // Same one-shot pattern as openDrawingRequestId above, for "Re-inspect
+  // this exact failed inspection" from a dashboard's Recent Inspections
+  // row — consumed (and cleared) by QualityInspection.tsx on mount.
+  reInspectQualityId: string | null;
 
   setCurrentUserId: (id: string) => void;
   setCurrentProjectId: (id: string) => void;
@@ -104,6 +108,7 @@ interface AppContextValue {
   openRecordModal: (s: RecordModalState) => void;
   closeRecordModal: () => void;
   setOpenDrawingRequestId: (id: string | null) => void;
+  setReInspectQualityId: (id: string | null) => void;
   login: (email: string, password: string) => Promise<string | null>;
   logout: () => void;
   toast: (msg: string) => void;
@@ -139,6 +144,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [checklistModal, setChecklistModal] = useState<ChecklistModalState | null>(null);
   const [recordModal, setRecordModal] = useState<RecordModalState | null>(null);
   const [openDrawingRequestId, setOpenDrawingRequestId] = useState<string | null>(null);
+  const [reInspectQualityId, setReInspectQualityId] = useState<string | null>(null);
 
   const dataRef = useRef<BoardData | null>(null);
   dataRef.current = data;
@@ -339,10 +345,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const value: AppContextValue = {
     data, rev, mode, loggedIn, currentUserId, currentProjectId, activeTab, activeMaster, drawer, toastMsg,
-    assignModal, snagModal, checklistModal, recordModal, openDrawingRequestId,
+    assignModal, snagModal, checklistModal, recordModal, openDrawingRequestId, reInspectQualityId,
     setCurrentUserId, setCurrentProjectId, setActiveTab, setActiveMaster, openDrawer, closeDrawer,
     openAssignModal, closeAssignModal, openSnagModal, closeSnagModal,
-    openChecklistModal, closeChecklistModal, openRecordModal, closeRecordModal, setOpenDrawingRequestId,
+    openChecklistModal, closeChecklistModal, openRecordModal, closeRecordModal, setOpenDrawingRequestId, setReInspectQualityId,
     login, logout, toast, apply, me, myRole
   };
 

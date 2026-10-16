@@ -7,6 +7,7 @@ import { useActions } from "../hooks/useActions";
 import AssignRow from "./AssignRow";
 import SnagRow from "./SnagRow";
 import NavIcon from "./NavIcon";
+import SearchDropdown from "./SearchDropdown";
 import PossessionForm, { type PossessionActiveForm } from "./PossessionForm";
 import { ACTION_LABEL } from "../pages/AuditLog";
 import "./SharpPanel.css";
@@ -546,7 +547,7 @@ function SnagDrawer({ id }: { id: string }) {
           <Field><div style={label}>Stage</div><div style={value}>{s.itemId ? rccItemLabel(data, s.itemId) : refLabel(data, "stages", s.stageId)}</div></Field>
           <Field><div style={label}>Parameter</div><div style={s.paramId ? value : empty}>{s.paramId ? refLabel(data, "qparams", s.paramId) : "—"}</div></Field>
           <Field><div style={label}>Raised By</div><div style={value}>{refLabel(data, "users", s.raisedBy)}<div style={{ fontSize: 11.5, color: "var(--text-sub)", marginTop: 2 }}>{ago(s.raisedAt)}</div></div></Field>
-          <Field><div style={label}>Assigned To</div><div style={value}>{refLabel(data, "users", s.assignedTo)}</div></Field>
+          <Field><div style={label}>Assigned DRI</div><div style={value}>{refLabel(data, "users", s.assignedTo)}</div></Field>
           {s.closedAt && (
             <Field full><div style={label}>Closed</div><div style={value}>{fmtDT(s.closedAt)} by {refLabel(data, "users", s.closedBy)}</div></Field>
           )}
@@ -568,10 +569,12 @@ function SnagDrawer({ id }: { id: string }) {
 
         <div style={{ borderTop: "1px solid var(--border)", margin: "4px 0 20px" }} />
 
-        <div style={label}>Reassign</div>
-        <select className="select" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
-          {users.map((u) => <option key={u.id} value={u.id}>{u.name} · {u.role}</option>)}
-        </select>
+        <div style={label}>Assign To</div>
+        <SearchDropdown
+          value={assignee}
+          onChange={setAssignee}
+          options={users.map((u) => ({ value: u.id, label: `${u.name} · ${u.role}` }))}
+        />
       </div>
       <div className="drawer-footer">
         <button className="btn btn-secondary btn-sm" onClick={() => fileRef.current?.click()}>📸 Add photo</button>

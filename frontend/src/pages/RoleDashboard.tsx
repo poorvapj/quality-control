@@ -34,7 +34,7 @@ function SectionLabel({ icon, children, right }: { icon: string; children: React
    change needed. A role with no grants at all still gets the Team section
    (if they lead one) and a plain "nothing yet" notice, never a blank page. */
 export default function RoleDashboard() {
-  const { data, currentUserId, myRole, setActiveTab, openDrawer } = useApp();
+  const { data, currentUserId, myRole, setActiveTab, openDrawer, setReInspectQualityId } = useApp();
   const role = myRole();
   const projects = myProjects(data, currentUserId);
   const projectIds = projects.map((p) => p.id);
@@ -127,15 +127,23 @@ export default function RoleDashboard() {
             {myInspections.length === 0 ? (
               <div className="py-6 px-5 text-center text-[var(--text-muted)] text-[13px]">You haven't logged an inspection yet.</div>
             ) : (
-              myInspections.slice(0, 6).map((i) => (
-                <div key={i.id} className="flex items-center justify-between gap-3 py-3 px-4 border-b border-[var(--border)] last:border-b-0">
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[13px] font-bold truncate">{i.projectCode} · {i.floorName}{i.workType ? ` · ${i.workType}` : ""}</div>
-                    <div className="text-[11px] text-[var(--text-muted)] mt-0.5">{i.inspectionDate}</div>
+              myInspections.slice(0, 6).map((i) => {
+                const canReinspect = i.result !== "Pass";
+                return (
+                  <div
+                    key={i.id}
+                    className={"flex items-center justify-between gap-3 py-3 px-4 border-b border-[var(--border)] last:border-b-0" + (canReinspect ? " cursor-pointer" : "")}
+                    onClick={canReinspect ? () => { setReInspectQualityId(i.id); setActiveTab("qualityInspection" as TabKey); } : undefined}
+                    title={canReinspect ? "Re-inspect this" : undefined}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[13px] font-bold truncate">{i.projectCode} · {i.floorName}{i.workType ? ` · ${i.workType}` : ""}</div>
+                      <div className="text-[11px] text-[var(--text-muted)] mt-0.5">{i.inspectionDate}</div>
+                    </div>
+                    <Badge color={i.result === "Pass" ? "green" : i.result === "Fail" ? "red" : "amber"}>{i.result}</Badge>
                   </div>
-                  <Badge color={i.result === "Pass" ? "green" : i.result === "Fail" ? "red" : "amber"}>{i.result}</Badge>
-                </div>
-              ))
+                );
+              })
             )}
           </Card>
         </>
