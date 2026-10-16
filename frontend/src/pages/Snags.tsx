@@ -86,7 +86,7 @@ export default function Snags() {
           {escalated.map((s) => (
             <div
               key={s.id}
-              className="flex items-center justify-between gap-3 py-3.5 px-4 border-b border-[var(--border)] cursor-pointer transition-colors last:border-b-0 border-l-4 border-l-[var(--color-fail)] bg-[rgba(239,68,68,0.05)]"
+              className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 py-3.5 px-4 border-b border-[var(--border)] cursor-pointer transition-colors last:border-b-0 border-l-4 border-l-[var(--color-fail)] bg-[rgba(239,68,68,0.05)]"
               onClick={() => openDrawer({ kind: "snag", id: s.id })}
             >
               <div className="min-w-0 flex-1">
@@ -161,7 +161,7 @@ export default function Snags() {
               <div
                 key={s.id}
                 className={
-                  "flex items-center justify-between gap-3 py-3.5 px-4 border-b border-[var(--border)] cursor-pointer transition-colors last:border-b-0" +
+                  "flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 py-3.5 px-4 border-b border-[var(--border)] cursor-pointer transition-colors last:border-b-0" +
                   (closed ? " opacity-60" : "") +
                   (!closed && s.severity === "Critical" ? " border-l-4 border-l-[var(--color-fail)] bg-[rgba(239,68,68,0.05)]" : "")
                 }
@@ -176,7 +176,7 @@ export default function Snags() {
                     raised by {refLabel(data, "users", s.raisedBy)} {ago(s.raisedAt)} · on {refLabel(data, "users", s.assignedTo)}
                   </div>
                 </div>
-                <div className="flex gap-1.5 items-center shrink-0">
+                <div className="flex gap-1.5 items-center flex-wrap shrink-0">
                   <Badge color={SEVERITY_BADGE_COLOR[s.severity] || "gray"}>{s.severity}</Badge>
                   <Badge color={closed ? "green" : STATUS_BADGE_COLOR[s.status] || "red"}>{s.status}</Badge>
                   {!closed && <Badge color={DUE_BADGE_COLOR[d.cls]}>{d.text}</Badge>}
