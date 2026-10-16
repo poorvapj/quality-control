@@ -3,7 +3,7 @@ import type { Photo } from "../types";
 import { watermarkPhoto } from "./watermark";
 
 const DEFAULT_LABEL: Record<string, string> = {
-  qc: "QC Evidence", snags: "Snag Photo", progress: "Progress Photo", dpr: "DPR Photo", drawings: ""
+  qc: "QC Evidence", snags: "Snag Photo", progress: "Progress Photo", dpr: "DPR Photo", drawings: "", caseStudies: "Case Study"
 };
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -26,7 +26,7 @@ function fileToDataUrl(file: File): Promise<string> {
  *  falls back to a generic one per type when the caller doesn't have one
  *  handy. */
 export async function uploadPhoto(
-  file: File, type: "snags" | "qc" | "progress" | "drawings" | "dpr", label?: string
+  file: File, type: "snags" | "qc" | "progress" | "drawings" | "dpr" | "caseStudies", label?: string
 ): Promise<Photo> {
   const isSitePhoto = type !== "drawings" && file.type.startsWith("image/");
   const dataUrl = isSitePhoto

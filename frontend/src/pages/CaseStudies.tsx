@@ -10,7 +10,11 @@ import PhotoGroupUploader from "../components/PhotoGroupUploader";
 import SidePanel from "../components/SidePanel";
 import Card from "../ui/tw/Card";
 import Btn from "../ui/tw/Btn";
+import { QC_CHECKLISTS } from "./QualityInspection";
+import { uploadPhoto } from "../shared/uploadPhoto";
 import type { CaseStudy, Photo, Op } from "../types";
+
+const CATEGORY_OPTIONS = Object.keys(QC_CHECKLISTS);
 
 /* A quality issue written up for reference/training — not a day-to-day
  * operational record like Quality Inspection, so this is its own simple
@@ -124,8 +128,58 @@ export default function CaseStudies() {
                 ))}</div>
               </div>
             )}
+            {openCase.attachments && openCase.attachments.length > 0 && (
+              <div>
+                <div className="micro-label mb-1">Attachments</div>
+                <div className="flex flex-col gap-1.5">
+                  {openCase.attachments.map((a, i) => (
+                    <a key={i} href={a.url} target="_blank" rel="noreferrer" className="text-[12.5px] text-[var(--theme-primary)] truncate">{a.name}</a>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </SidePanel>
+      )}
+    </div>
+  );
+}
+
+/* Any file (PDF/doc/image), unlike PhotoGroupUploader which is
+ * specifically for watermarked site-evidence photos. */
+function AttachmentsUploader({ attachments, onChange }: { attachments: { name: string; url: string }[]; onChange: (a: { name: string; url: string }[]) => void }) {
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function handleFiles(files: FileList | null) {
+    if (!files || !files.length) return;
+    setBusy(true);
+    const uploaded = await Promise.all(
+      Array.from(files).map(async (f) => ({ name: f.name, url: (await uploadPhoto(f, "caseStudies")).url }))
+    );
+    onChange([...attachments, ...uploaded]);
+    setBusy(false);
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <label>Attachments</label>
+        <span className="text-[10.5px] text-[var(--text-muted)]">optional — any file, e.g. a PDF report</span>
+      </div>
+      <input ref={inputRef} type="file" multiple style={{ display: "none" }} onChange={(e) => { handleFiles(e.target.files); e.target.value = ""; }} />
+      <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={() => inputRef.current?.click()}>
+        {busy ? "Uploading…" : "＋ Add file"}
+      </button>
+      {attachments.length > 0 && (
+        <div className="flex flex-col gap-1.5 mt-2">
+          {attachments.map((a, i) => (
+            <div key={i} className="flex items-center justify-between gap-2 text-[12px] border border-[var(--border)] rounded-radius-sm px-2.5 py-1.5">
+              <a href={a.url} target="_blank" rel="noreferrer" className="truncate">{a.name}</a>
+              <button type="button" className="shrink-0" onClick={() => onChange(attachments.filter((_, ai) => ai !== i))}>✕</button>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -144,12 +198,14 @@ function CaseStudyForm({
   const [projectId, setProjectId] = useState("");
   const [floorId, setFloorId] = useState("");
   const [category, setCategory] = useState("");
+  const [customCategory, setCustomCategory] = useState(false);
   const [description, setDescription] = useState("");
   const [rootCause, setRootCause] = useState("");
   const [correctiveAction, setCorrectiveAction] = useState("");
   const [lessonsLearned, setLessonsLearned] = useState("");
   const [photosBefore, setPhotosBefore] = useState<Photo[]>([]);
   const [photosAfter, setPhotosAfter] = useState<Photo[]>([]);
+  const [attachments, setAttachments] = useState<{ name: string; url: string }[]>([]);
   const [saving, setSaving] = useState(false);
 
   const floors = projectFloors(data, projectId || null);
@@ -157,9 +213,9 @@ function CaseStudyForm({
   const floor = floors.find((f) => f.id === floorId);
 
   function reset() {
-    setTitle(""); setProjectId(""); setFloorId(""); setCategory("");
+    setTitle(""); setProjectId(""); setFloorId(""); setCategory(""); setCustomCategory(false);
     setDescription(""); setRootCause(""); setCorrectiveAction(""); setLessonsLearned("");
-    setPhotosBefore([]); setPhotosAfter([]);
+    setPhotosBefore([]); setPhotosAfter([]); setAttachments([]);
   }
 
   async function save() {
@@ -183,6 +239,7 @@ function CaseStudyForm({
       lessonsLearned: lessonsLearned.trim(),
       photosBefore,
       photosAfter,
+      attachments,
       createdByUserId: currentUserId || "",
       createdByName: authorName,
       createdAt: Date.now()
@@ -236,7 +293,21 @@ function CaseStudyForm({
         </div>
         <div className="field full">
           <label>Category</label>
-          <input className="input" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Optional — e.g. RCC, Waterproofing, Plumbing" />
+          {!customCategory ? (
+            <SearchDropdown
+              value={category}
+              onChange={(v) => {
+                if (v === "__other__") { setCustomCategory(true); setCategory(""); }
+                else setCategory(v);
+              }}
+              options={[{ value: "", label: "Choose" }, ...CATEGORY_OPTIONS.map((c) => ({ value: c, label: c })), { value: "__other__", label: "Other…" }]}
+            />
+          ) : (
+            <div className="flex gap-1.5">
+              <input className="input" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Type category" autoFocus />
+              <button type="button" className="btn btn-secondary" style={{ flexShrink: 0 }} onClick={() => { setCustomCategory(false); setCategory(""); }}>List</button>
+            </div>
+          )}
         </div>
         <div className="field full">
           <label>What Happened *</label>
@@ -259,6 +330,9 @@ function CaseStudyForm({
         </div>
         <div className="field full">
           <PhotoGroupUploader label="After photos" photos={photosAfter} onChange={setPhotosAfter} optional />
+        </div>
+        <div className="field full">
+          <AttachmentsUploader attachments={attachments} onChange={setAttachments} />
         </div>
       </div>
     </SidePanel>

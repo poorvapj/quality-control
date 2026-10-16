@@ -34,7 +34,7 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
 // text only — Status/Remarks are filled in by the inspector, not part of
 // the master list). Keyed by the checklist's own title, used as both the
 // "Work Type" picker's value and the record's `workType`.
-const QC_CHECKLISTS: Record<string, string[]> = {
+export const QC_CHECKLISTS: Record<string, string[]> = {
   "Material Testing & Quality Checks": [
     "Concrete strength: verify approved mix design, sampling, cube/cylinder casting, identification, curing, and compressive-strength test reports.",
     "Sand: check grading/particle size, silt content, cleanliness, and compliance with approved specifications.",

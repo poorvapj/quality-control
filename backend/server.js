@@ -557,7 +557,7 @@ if (!process.env.CLOUDINARY_URL) {
 // Every Project Quality asset lives under this root, segregated by type, so it
 // never collides with — or needs to touch — existing VMS assets in the same account.
 const CLOUDINARY_ROOT = "ProjectQuality";
-const PHOTO_TYPES = ["snags", "qc", "progress", "drawings", "dpr"];
+const PHOTO_TYPES = ["snags", "qc", "progress", "drawings", "dpr", "caseStudies"];
 
 /* ---------------------------------------------------------------- storage */
 
@@ -1617,15 +1617,21 @@ async function handleApi(req, res, urlPath) {
   }
   if (req.method === "POST" && urlPath === "/api/photo") {
     const body = await readBody(req);
-    const m = /^data:image\/(png|jpe?g|webp);base64,([A-Za-z0-9+/=]+)$/.exec(body.dataUrl || "");
-    if (!m) return sendJson(res, 400, { error: "dataUrl must be a base64 png/jpeg/webp" });
+    // PDF support exists only for Case Studies' general Attachments (a
+    // writeup may reasonably want to attach a report/document, not just
+    // site photos) — every other caller here is still image-only, by
+    // design (a watermarked site photo should never silently become a raw
+    // document upload).
+    const imageMatch = /^data:image\/(png|jpe?g|webp);base64,([A-Za-z0-9+/=]+)$/.exec(body.dataUrl || "");
+    const pdfMatch = body.type === "caseStudies" && /^data:application\/pdf;base64,([A-Za-z0-9+/=]+)$/.exec(body.dataUrl || "");
+    if (!imageMatch && !pdfMatch) return sendJson(res, 400, { error: "dataUrl must be a base64 png/jpeg/webp" + (body.type === "caseStudies" ? " or pdf" : "") });
     if (!PHOTO_TYPES.includes(body.type)) {
       return sendJson(res, 400, { error: "type must be one of: " + PHOTO_TYPES.join(", ") });
     }
     try {
       const result = await cloudinary.uploader.upload(body.dataUrl, {
         folder: CLOUDINARY_ROOT + "/" + body.type,
-        resource_type: "image"
+        resource_type: pdfMatch ? "raw" : "image"
       });
       return sendJson(res, 200, { url: result.secure_url, publicId: result.public_id });
     } catch (e) {

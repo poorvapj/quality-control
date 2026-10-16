@@ -614,6 +614,10 @@ export interface CaseStudy extends BaseRecord {
   lessonsLearned: string;
   photosBefore: Photo[];
   photosAfter: Photo[];
+  // Any file, not just an image — a report/document worth attaching to the
+  // writeup. Separate from the Photo[] fields above since those are
+  // specifically watermarked site-evidence images.
+  attachments?: { name: string; url: string }[];
   linkedInspectionId?: string | null;
   createdByUserId: string;
   createdByName: string;
