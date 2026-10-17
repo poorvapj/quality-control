@@ -19,6 +19,7 @@ export const MATRIX_MODULES: MatrixModule[] = [
   { key: "drawingRequests", label: "Drawing Requests", actions: ["view", "create", "edit"] },
   { key: "qualityInspection", label: "Quality Inspection", actions: ["view", "create", "edit"] },
   { key: "unitExecution", label: "Measurement", actions: ["view", "create"] },
+  { key: "caseStudies", label: "Case Studies", actions: ["view", "create"] },
   { key: "measurement", label: "Work-category Measurement (not in sidebar)", actions: ["view", "create"] },
   { key: "progressAnalysis", label: "Progress Analysis", actions: ["view"] },
   { key: "purchaseOrders", label: "Purchase Orders", actions: ["view"] },
@@ -177,9 +178,9 @@ export const TAB_ACCESS: Record<string, TabAccess> = {
   // register-style view of the exact same records (every Fail/Rework
   // Required), not a separately grantable module.
   qualityFails: { module: "qualityInspection", mode: "grant" },
-  // caseStudies is handled as a special case in canAccessTab() below (OR'd
-  // across qualityInspection/unitExecution/measurement) — no single-module
-  // entry here since it's not Quality-only.
+  // caseStudies is handled as a special case in canAccessTab() below, not
+  // here — it's OR'd across qualityInspection/unitExecution/measurement
+  // PLUS its own standalone "caseStudies" module grant.
   unitExecutionWorkflow: { module: "unitExecution", mode: "grant" },
   measurement: { module: "measurement", mode: "grant" },
   progressAnalysis: { module: "progressAnalysis", mode: "grant" },
@@ -215,10 +216,12 @@ export function canAccessTab(data: BoardData | null, userId: string | null, tab:
   // the create-user screen needs the same right as editing Masters
   if (tab === "addUser") return hasModuleGrant(data, userId, "masters", "edit");
   // Case Studies isn't Quality-only — Execution and Measurement people log
-  // them too, so it's visible to anyone granted ANY of those three modules
-  // rather than tied to exactly one via TAB_ACCESS's single-module mapping.
+  // them too, so it's visible to anyone granted ANY of those three modules,
+  // OR an explicit standalone "Case Studies" grant (its own MATRIX_MODULES
+  // row, for an admin who wants to hand someone just this without also
+  // opening up Quality Inspection/Measurement/Unit Execution).
   if (tab === "caseStudies") {
-    return ["qualityInspection", "unitExecution", "measurement"].some((m) => hasModuleGrant(data, userId, m, "view"));
+    return ["qualityInspection", "unitExecution", "measurement", "caseStudies"].some((m) => hasModuleGrant(data, userId, m, "view"));
   }
   const t = TAB_ACCESS[tab];
   if (!t) return true;

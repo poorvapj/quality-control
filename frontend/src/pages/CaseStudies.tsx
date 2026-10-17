@@ -23,7 +23,7 @@ export default function CaseStudies() {
   const { data, currentUserId, myRole, apply, toast, me, caseStudyDraft, setCaseStudyDraft } = useApp();
   const isAdmin = currentUserId === "U-ADMIN";
   // Not Quality-only — Execution and Measurement people log these too.
-  const canCreate = isAdmin || ["qualityInspection", "unitExecution", "measurement"].some((m) => hasModuleGrant(data, currentUserId, m, "create"));
+  const canCreate = isAdmin || ["qualityInspection", "unitExecution", "measurement", "caseStudies"].some((m) => hasModuleGrant(data, currentUserId, m, "create"));
   const allProjects = myProjects(data, currentUserId);
   const allowedProjectCodes = new Set(allProjects.map((p) => p.code));
   const caseStudies = coll(data, "caseStudies")
