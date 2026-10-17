@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, myProjects, projectFloors } from "../shared/rules";
 import { nextId } from "../shared/helpers";
@@ -20,7 +20,7 @@ const CATEGORY_OPTIONS = Object.keys(QC_CHECKLISTS);
  * operational record like Quality Inspection, so this is its own simple
  * list + form rather than another view bolted onto that page. */
 export default function CaseStudies() {
-  const { data, currentUserId, myRole, apply, toast, me } = useApp();
+  const { data, currentUserId, myRole, apply, toast, me, caseStudyDraft, setCaseStudyDraft } = useApp();
   const isAdmin = currentUserId === "U-ADMIN";
   // Not Quality-only — Execution and Measurement people log these too.
   const canCreate = isAdmin || ["qualityInspection", "unitExecution", "measurement"].some((m) => hasModuleGrant(data, currentUserId, m, "create"));
@@ -33,6 +33,15 @@ export default function CaseStudies() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [editing, setEditing] = useState<CaseStudy | null>(null);
   const [openCase, setOpenCase] = useState<CaseStudy | null>(null);
+
+  // A one-shot "Write up as Case Study" request from Fail Register — open
+  // straight into the New Case Study form, pre-filled, then clear it so a
+  // later unrelated visit to this page doesn't reopen it.
+  useEffect(() => {
+    if (!caseStudyDraft) return;
+    setPanelOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [caseStudyDraft]);
 
   async function deleteCase(c: CaseStudy) {
     if (!isAdmin) return;
@@ -86,13 +95,14 @@ export default function CaseStudies() {
 
       <CaseStudyForm
         open={panelOpen}
-        onClose={() => setPanelOpen(false)}
+        onClose={() => { setPanelOpen(false); setCaseStudyDraft(null); }}
         data={data}
         allProjects={allProjects}
         currentUserId={currentUserId}
         authorName={me()?.name || ""}
         apply={apply}
         toast={toast}
+        draft={caseStudyDraft}
       />
 
       {openCase && (
@@ -107,6 +117,9 @@ export default function CaseStudies() {
           <div className="flex flex-col gap-4">
             {openCase.category && (
               <div><div className="micro-label mb-1">Category</div><div className="text-[13px]">{openCase.category}</div></div>
+            )}
+            {openCase.linkedInspectionId && (
+              <div><div className="micro-label mb-1">Linked Inspection</div><div className="text-[13px]">{openCase.linkedInspectionId}</div></div>
             )}
             <div><div className="micro-label mb-1">What Happened</div><div className="text-[13px] whitespace-pre-wrap">{openCase.description}</div></div>
             <div><div className="micro-label mb-1">Root Cause</div><div className="text-[13px] whitespace-pre-wrap">{openCase.rootCause}</div></div>
@@ -186,19 +199,21 @@ function AttachmentsUploader({ attachments, onChange }: { attachments: { name: s
 }
 
 function CaseStudyForm({
-  open, onClose, data, allProjects, currentUserId, authorName, apply, toast
+  open, onClose, data, allProjects, currentUserId, authorName, apply, toast, draft
 }: {
   open: boolean; onClose: () => void; data: any;
   allProjects: { id: string; code: string; name: string }[];
   currentUserId: string | null; authorName: string;
   apply: (ops: Op[]) => Promise<void>;
   toast: (msg: string) => void;
+  draft?: { projectId?: string; floorId?: string; category?: string; linkedInspectionId: string } | null;
 }) {
   const [title, setTitle] = useState("");
   const [projectId, setProjectId] = useState("");
   const [floorId, setFloorId] = useState("");
   const [category, setCategory] = useState("");
   const [customCategory, setCustomCategory] = useState(false);
+  const [linkedInspectionId, setLinkedInspectionId] = useState<string | null>(null);
   const [description, setDescription] = useState("");
   const [rootCause, setRootCause] = useState("");
   const [correctiveAction, setCorrectiveAction] = useState("");
@@ -215,8 +230,24 @@ function CaseStudyForm({
   function reset() {
     setTitle(""); setProjectId(""); setFloorId(""); setCategory(""); setCustomCategory(false);
     setDescription(""); setRootCause(""); setCorrectiveAction(""); setLessonsLearned("");
-    setPhotosBefore([]); setPhotosAfter([]); setAttachments([]);
+    setPhotosBefore([]); setPhotosAfter([]); setAttachments([]); setLinkedInspectionId(null);
   }
+
+  // "Write up as Case Study" from Fail Register pre-fills project/floor/
+  // category and links back to the exact inspection that prompted this —
+  // a one-shot draft (see AppContext's caseStudyDraft), only applied the
+  // moment the panel opens.
+  useEffect(() => {
+    if (!open) return;
+    if (draft) {
+      setProjectId(draft.projectId || "");
+      setFloorId(draft.floorId || "");
+      setCategory(draft.category && CATEGORY_OPTIONS.includes(draft.category) ? draft.category : "");
+      setCustomCategory(!!draft.category && !CATEGORY_OPTIONS.includes(draft.category));
+      setLinkedInspectionId(draft.linkedInspectionId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   async function save() {
     if (!title.trim()) { toast("Title is required"); return; }
@@ -240,6 +271,7 @@ function CaseStudyForm({
       photosBefore,
       photosAfter,
       attachments,
+      linkedInspectionId,
       createdByUserId: currentUserId || "",
       createdByName: authorName,
       createdAt: Date.now()
@@ -270,6 +302,13 @@ function CaseStudyForm({
       }
     >
       <div className="form-grid">
+        {linkedInspectionId && (
+          <div className="field full">
+            <div className="text-[11.5px] text-[var(--theme-primary)] bg-[var(--bg-subtle)] rounded-radius-sm px-2.5 py-1.5">
+              Linked to inspection {linkedInspectionId} — project/floor/category pre-filled from it.
+            </div>
+          </div>
+        )}
         <div className="field full">
           <label>Title *</label>
           <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Honeycombing in RCC column, Zen Garden 6th floor" />

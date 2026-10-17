@@ -18,7 +18,7 @@ import type { TabKey } from "../types";
  * which is meant for day-to-day filtering rather than "show me the whole
  * history of what's gone wrong". */
 export default function FailRegister() {
-  const { data, currentUserId, setActiveTab, setReInspectQualityId } = useApp();
+  const { data, currentUserId, setActiveTab, setReInspectQualityId, setCaseStudyDraft } = useApp();
   const allProjects = myProjects(data, currentUserId);
   const allowedProjectCodes = new Set(allProjects.map((p) => p.code));
   const inspections = coll(data, "qualityInspections").filter((i) => allowedProjectCodes.has(i.projectCode));
@@ -162,8 +162,8 @@ export default function FailRegister() {
 
       <Card padded={false} className="p-[18px]">
         <Table
-          columns={["Date", "Project", "Floor", "Checklist", "Result", "Inspector", "Assigned DRI", "Snag Status"]}
-          colWidths={["100px", "90px", "160px", "180px", "120px", "120px", "130px", "110px"]}
+          columns={["Date", "Project", "Floor", "Checklist", "Result", "Inspector", "Assigned DRI", "Snag Status", ""]}
+          colWidths={["100px", "90px", "160px", "180px", "120px", "120px", "130px", "110px", "150px"]}
           maxHeight="560px"
         >
           {filtered.map((insp) => {
@@ -190,6 +190,23 @@ export default function FailRegister() {
                       <span className="whitespace-nowrap">{snag.status === "Closed" ? "Resolved" : overdue ? "Overdue" : snag.status}</span>
                     </Badge>
                   )}
+                </TableCell>
+                <TableCell>
+                  <Btn
+                    label="Write up as Case Study"
+                    color="secondary"
+                    size="sm"
+                    onClick={(e: React.MouseEvent) => {
+                      e.stopPropagation();
+                      setCaseStudyDraft({
+                        projectId: insp.projectId,
+                        floorId: insp.floorId,
+                        category: insp.workType,
+                        linkedInspectionId: insp.id
+                      });
+                      setActiveTab("caseStudies" as TabKey);
+                    }}
+                  />
                 </TableCell>
               </TableRow>
             );

@@ -92,6 +92,11 @@ interface AppContextValue {
   // this exact failed inspection" from a dashboard's Recent Inspections
   // row — consumed (and cleared) by QualityInspection.tsx on mount.
   reInspectQualityId: string | null;
+  // Same one-shot pattern, for "Write up as Case Study" from a Fail
+  // Register row — pre-fills Case Studies' New form with that inspection's
+  // project/floor/category and links back to it. Consumed (and cleared) by
+  // CaseStudies.tsx on mount.
+  caseStudyDraft: { projectId?: string; floorId?: string; category?: string; linkedInspectionId: string } | null;
 
   setCurrentUserId: (id: string) => void;
   setCurrentProjectId: (id: string) => void;
@@ -109,6 +114,7 @@ interface AppContextValue {
   closeRecordModal: () => void;
   setOpenDrawingRequestId: (id: string | null) => void;
   setReInspectQualityId: (id: string | null) => void;
+  setCaseStudyDraft: (d: AppContextValue["caseStudyDraft"]) => void;
   login: (email: string, password: string) => Promise<string | null>;
   logout: () => void;
   toast: (msg: string) => void;
@@ -145,6 +151,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [recordModal, setRecordModal] = useState<RecordModalState | null>(null);
   const [openDrawingRequestId, setOpenDrawingRequestId] = useState<string | null>(null);
   const [reInspectQualityId, setReInspectQualityId] = useState<string | null>(null);
+  const [caseStudyDraft, setCaseStudyDraft] = useState<AppContextValue["caseStudyDraft"]>(null);
 
   const dataRef = useRef<BoardData | null>(null);
   dataRef.current = data;
@@ -345,10 +352,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const value: AppContextValue = {
     data, rev, mode, loggedIn, currentUserId, currentProjectId, activeTab, activeMaster, drawer, toastMsg,
-    assignModal, snagModal, checklistModal, recordModal, openDrawingRequestId, reInspectQualityId,
+    assignModal, snagModal, checklistModal, recordModal, openDrawingRequestId, reInspectQualityId, caseStudyDraft,
     setCurrentUserId, setCurrentProjectId, setActiveTab, setActiveMaster, openDrawer, closeDrawer,
     openAssignModal, closeAssignModal, openSnagModal, closeSnagModal,
-    openChecklistModal, closeChecklistModal, openRecordModal, closeRecordModal, setOpenDrawingRequestId, setReInspectQualityId,
+    openChecklistModal, closeChecklistModal, openRecordModal, closeRecordModal, setOpenDrawingRequestId, setReInspectQualityId, setCaseStudyDraft,
     login, logout, toast, apply, me, myRole
   };
 
