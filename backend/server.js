@@ -480,6 +480,31 @@ async function notifySnagTarget(eventType, rec, existing) {
   }
 }
 
+// Every Work Quality Inspection submission — not just a Fail — goes to
+// Poorva directly (not role-based like the other Slack notifications,
+// since this one's addressed to a specific person rather than "whoever's
+// affected"), with its photos shown inline. She isn't a User record in
+// this app (just an email on file), so this resolves her Slack id the
+// same way as any other recipient but with a fixed, hardcoded address
+// instead of looking one up from a record.
+const QC_REPORT_NOTIFY_EMAIL = "poorva@neotericgrp.in";
+async function notifyQualityInspectionSubmitted(rec) {
+  if (!SLACK_BOT_TOKEN) return;
+  try {
+    const text = `📋 *New Quality Inspection submitted* — ${rec.projectCode || "—"} · ${rec.floorName || "—"}${rec.unitName ? " / " + rec.unitName : ""}`
+      + (rec.workType ? ` · ${rec.workType}` : "") + `\nResult: *${rec.result}* · Inspector: ${rec.inspectorName || "—"}`
+      + (rec.remarks ? `\n> ${rec.remarks}` : "");
+    const blocks = [{ type: "section", text: { type: "mrkdwn", text } }];
+    for (const p of (rec.photos || []).slice(0, 8)) { // Slack hard-caps blocks per message; 8 photos is already a lot for one inspection
+      if (p?.url) blocks.push({ type: "image", image_url: p.url, alt_text: "Inspection photo" });
+    }
+    const uid = await slackUserIdForEmail(QC_REPORT_NOTIFY_EMAIL);
+    if (uid) await slackPostMessage(uid, text, blocks);
+  } catch (e) {
+    console.error("notifyQualityInspectionSubmitted failed:", e.message);
+  }
+}
+
 function getSession(req) {
   const header = req.headers["authorization"] || "";
   const m = /^Bearer\s+(.+)$/.exec(header);
@@ -1016,6 +1041,10 @@ async function applyOps(ops, session) {
         }
       } else if (op.coll === "qualityInspections") {
         await mongoDb.collection(op.coll).updateOne({ id: op.rec.id }, update, { upsert: true });
+        // Every submission (not just a Fail) — there's no edit path for an
+        // already-saved inspection (only a fresh re-inspect record), so
+        // this upsert is always a brand-new one.
+        notifyQualityInspectionSubmitted(rec);
         // A passing re-inspection closes the ORIGINAL failed inspection's
         // linked Snag server-side — never trust the client alone to close
         // its own loop, since that Snag's status gates the "open issues"
