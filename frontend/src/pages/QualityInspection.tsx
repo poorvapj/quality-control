@@ -645,7 +645,7 @@ function InspectionForm({
 
     setSaving(true);
     const assignee = users.find((u) => u.id === assignedToUserId);
-    const id = nextId("QI", []); // id uniqueness enforced by server-side unique index on `id`, same as every other master
+    const id = nextId("QI", allInspections); // BUG FIX: was nextId("QI", []), which always returned "QI-0001" and silently overwrote every previous inspection on every new submission
     const needsSnag = result !== "Pass";
     // Snag id/record built up-front so it can be cross-referenced from the
     // inspection record in the SAME apply() batch — both are brand-new
