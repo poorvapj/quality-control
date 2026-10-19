@@ -78,4 +78,35 @@ test("an unknown status is rejected", () => {
   assert.strictEqual(ask(stored(pending), { status: "banana" }, { userId: "RISHABH" }).status, 400);
 });
 
+console.log("older records (saved before approval existed, so no approval stored)");
+const legacy = { id: "QI-OLD", inspectorUserId: "NAMAN" }; // no approval field at all
+const askLegacy = (wanted, session, creatorId = "NAMAN") =>
+  resolveApprovalOnUpdate({ existing: legacy, incoming: { approval: wanted }, session, creatorId, users, teams, now: 7000 });
+test("the author's team leader can approve or reject an older record", () => {
+  const approved = askLegacy({ status: "approved" }, { userId: "RISHABH" });
+  assert.strictEqual(approved.ok, true);
+  assert.strictEqual(approved.approval.status, "approved");
+  assert.strictEqual(approved.approval.approverUserId, "RISHABH");
+  assert.strictEqual(approved.approval.decidedByUserId, "RISHABH");
+  const noRemark = askLegacy({ status: "rejected" }, { userId: "RISHABH" });
+  assert.strictEqual(noRemark.ok, false); assert.strictEqual(noRemark.status, 400); // a remark is still required
+  assert.strictEqual(askLegacy({ status: "rejected", remark: "redo" }, { userId: "RISHABH" }).approval.status, "rejected");
+});
+test("Admin may too, but the author and other people may not", () => {
+  assert.strictEqual(askLegacy({ status: "approved" }, { userId: "U-ADMIN", isAdmin: true }).ok, true);
+  assert.strictEqual(askLegacy({ status: "approved" }, { userId: "NAMAN" }).ok, false);   // own work
+  assert.strictEqual(askLegacy({ status: "approved" }, { userId: "SHUBHAM" }).ok, false); // a teammate
+  assert.strictEqual(askLegacy({ status: "approved" }, { userId: "LEADER2" }).ok, false); // another team's leader
+});
+test("an older record by someone on no team (or a team leader) gets no approval - it stays free", () => {
+  const free = resolveApprovalOnUpdate({ existing: { id: "x" }, incoming: { approval: { status: "approved" } }, session: { userId: "RISHABH" }, creatorId: "LONE", users, teams });
+  assert.strictEqual(free.ok, true); assert.strictEqual(free.approval, undefined);
+  const leader = resolveApprovalOnUpdate({ existing: { id: "x" }, incoming: { approval: { status: "approved" } }, session: { userId: "RISHABH" }, creatorId: "LEADER2", users, teams });
+  assert.strictEqual(leader.approval, undefined);
+});
+test("a client still cannot attach a PENDING approval to an older record", () => {
+  const r = askLegacy({ status: "pending", approverUserId: "NAMAN" }, { userId: "NAMAN" });
+  assert.strictEqual(r.ok, true); assert.strictEqual(r.approval, undefined);
+});
+
 console.log(`\n${passed} passed`);

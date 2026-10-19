@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { buildEventOp } from "../shared/eventLog";
-import { canDecide, decideOp, describeRecord, KIND_LABEL, pendingFor, rejectedFor, type ApprovalColl } from "../shared/approval";
+import { canDecide, decideOp, describeRecord, effectiveApproval, KIND_LABEL, pendingFor, rejectedFor, type ApprovalColl } from "../shared/approval";
 import type { Approval } from "../types";
 import Badge from "../ui/tw/Badge";
 import Btn from "../ui/tw/Btn";
@@ -27,18 +27,18 @@ export function ApprovalBadge({ approval }: { approval?: Approval }) {
 
 /** Approve / Reject buttons — render nothing unless the signed-in person may decide this record. */
 export function ApprovalActions({ collName, record }: { collName: ApprovalColl; record: any }) {
-  const { apply, toast, currentUserId } = useApp();
+  const { data, apply, toast, currentUserId } = useApp();
   const [rejecting, setRejecting] = useState(false);
   const [remark, setRemark] = useState("");
   const [busy, setBusy] = useState(false);
-  if (!canDecide(currentUserId, record)) return null;
+  if (!canDecide(data, currentUserId, record)) return null;
 
   async function decide(status: "approved" | "rejected") {
     if (status === "rejected" && !remark.trim()) { toast("Add a remark so they know what to redo"); return; }
     setBusy(true);
     try {
       await apply([
-        decideOp(collName, record, status, remark),
+        decideOp(collName, record, status, remark, effectiveApproval(data, record)),
         buildEventOp(currentUserId, status === "approved" ? "APPROVAL_APPROVE" : "APPROVAL_REJECT", record.id, "", `${KIND_LABEL[collName]} · ${describeRecord(collName, record)}`)
       ]);
       toast(status === "approved" ? "Approved" : "Sent back for redo");
@@ -70,13 +70,14 @@ const sectionLabel = "text-[13px] font-bold tracking-tight text-[var(--text-sub)
 /** Dashboard section for a team leader: their team's inspections/measurements waiting on them. */
 export function ApprovalQueue() {
   const { data, currentUserId } = useApp();
+  const [showAll, setShowAll] = useState(false);
   const items = pendingFor(data, currentUserId);
   if (items.length === 0) return null;
   return (
     <>
       <div className={sectionLabel}><NavIcon name="award" size={13} /> Awaiting My Approval <span className="text-[11px] font-medium normal-case text-[var(--text-muted)]">· {items.length}</span></div>
       <Card padded={false} className="mb-6">
-        {items.slice(0, 8).map(({ coll: c, rec }) => (
+        {(showAll ? items : items.slice(0, 8)).map(({ coll: c, rec }) => (
           <div key={rec.id} className="py-3 px-4 border-b border-[var(--border)] last:border-b-0">
             <div className="text-[13px] font-bold">{KIND_LABEL[c]} · {describeRecord(c, rec)}</div>
             <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
@@ -85,7 +86,11 @@ export function ApprovalQueue() {
             <ApprovalActions collName={c} record={rec} />
           </div>
         ))}
-        {items.length > 8 && <div className="py-2 px-4 text-[11.5px] text-[var(--text-muted)]">+{items.length - 8} more — open Quality Inspection / Measurement to see all.</div>}
+        {items.length > 8 && (
+          <button type="button" className="py-2 px-4 text-[11.5px] font-semibold text-[var(--theme-primary)]" onClick={() => setShowAll((v) => !v)}>
+            {showAll ? "Show fewer" : `Show all ${items.length}`}
+          </button>
+        )}
       </Card>
     </>
   );

@@ -7,7 +7,7 @@ import { buildEventOp } from "../shared/eventLog";
 import { hasModuleGrant } from "../shared/permissionMatrix";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
-import { approvalFor } from "../shared/approval";
+import { approvalFor, effectiveApproval } from "../shared/approval";
 import { ApprovalBadge, ApprovalActions } from "../components/ApprovalControls";
 import SidePanel from "../components/SidePanel";
 import StatTile from "../components/StatTile";
@@ -204,7 +204,7 @@ export default function Measurement() {
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex flex-col items-end gap-1">
-                    <ApprovalBadge approval={m.approval} />
+                    <ApprovalBadge approval={effectiveApproval(data, m)} />
                     <ApprovalActions collName="workMeasurements" record={m} />
                   </div>
                   {m.linkStatus === "ambiguous" && canCreate && <Btn label="Choose link" color="secondary" size="sm" onClick={() => setConfirming(m)} />}

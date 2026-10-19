@@ -745,7 +745,16 @@ async function applyApprovalRules(op, session) {
     if (approval) op.rec.approval = approval; else delete op.rec.approval;
     return;
   }
-  const r = resolveApprovalOnUpdate({ existing, incoming: op.rec, session, creatorId: existing.inspectorUserId || existing.recordedByUserId });
+  // an older record (no approval yet) may be decided by its author's team
+  // leader, which needs the team data to confirm who that is
+  let users, teams;
+  if (!existing.approval && op.rec.approval) {
+    [users, teams] = await Promise.all([
+      mongoDb.collection("users").find({}, { projection: { _id: 0, id: 1, name: 1, teamId: 1 } }).toArray(),
+      mongoDb.collection("teams").find({}, { projection: { _id: 0, id: 1, leaderId: 1 } }).toArray()
+    ]);
+  }
+  const r = resolveApprovalOnUpdate({ existing, incoming: op.rec, session, creatorId: existing.inspectorUserId || existing.recordedByUserId, users, teams });
   if (!r.ok) { const e = new Error(r.error); e.status = r.status; throw e; }
   if (r.approval) op.rec.approval = r.approval; else delete op.rec.approval;
 }

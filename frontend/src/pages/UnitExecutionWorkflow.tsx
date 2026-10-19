@@ -7,7 +7,7 @@ import { buildEventOp } from "../shared/eventLog";
 import { hasModuleGrant } from "../shared/permissionMatrix";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
-import { approvalFor } from "../shared/approval";
+import { approvalFor, effectiveApproval } from "../shared/approval";
 import { ApprovalBadge, ApprovalActions } from "../components/ApprovalControls";
 import SidePanel from "../components/SidePanel";
 import Card from "../ui/tw/Card";
@@ -157,7 +157,7 @@ export default function UnitExecutionWorkflow() {
               <TableCell muted className="text-right tabular-nums whitespace-nowrap">{qty(m.unusedBalanceQty)} / {qty(m.wastageQty)} {m.materialUnit}</TableCell>
               <TableCell muted>
                 <div className="whitespace-nowrap">{m.recordedByName}</div>
-                <div className="mt-1"><ApprovalBadge approval={m.approval} /></div>
+                <div className="mt-1"><ApprovalBadge approval={effectiveApproval(data, m)} /></div>
                 <ApprovalActions collName="materialMeasurements" record={m} />
               </TableCell>
             </TableRow>

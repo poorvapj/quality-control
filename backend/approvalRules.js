@@ -4,7 +4,8 @@
    leader) is created "pending" and names the leader as its approver. Only that
    leader (or an Admin) can approve or reject it, never the person who made it.
    Rejected work is sent back: the record stays "rejected" with the leader's
-   remark and the member records a new one. Records by Admins, leaders, or
+   remark and the member records a new one. Records saved before this existed
+   (no approval on them) can still be decided by their author's team leader. Records by Admins, leaders, or
    people on no team carry no approval at all.
 
    Approval is a REVIEW FLAG only — it changes nothing else: no billing,
@@ -31,9 +32,18 @@ function deriveApprovalOnCreate({ creatorId, users, teams }) {
 /** What approval an UPDATED record may end up with.
  *  existing = stored record; incoming = what the client sent; session = {userId, isAdmin}.
  *  Returns { ok:true, approval } (approval may be undefined = none) or { ok:false, status, error }. */
-function resolveApprovalOnUpdate({ existing, incoming, session, creatorId, now }) {
-  const before = existing && existing.approval;
+function resolveApprovalOnUpdate({ existing, incoming, session, creatorId, now, users, teams }) {
+  let before = existing && existing.approval;
   const wanted = incoming && incoming.approval;
+
+  // A record saved BEFORE approval existed carries none. If its author is on a
+  // team, it counts as awaiting that team's leader, so the leader can still
+  // approve or reject it — otherwise everything recorded before the feature
+  // went live could never be reviewed. (Only a decision creates the approval;
+  // a client can't attach a "pending" one.) Records by non-team people stay free.
+  if (!before && wanted && wanted.status !== "pending" && users && teams) {
+    before = deriveApprovalOnCreate({ creatorId, users, teams }) || undefined;
+  }
 
   // never let a client add approval to a record that has none
   if (!before) return { ok: true, approval: undefined };

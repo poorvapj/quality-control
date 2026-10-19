@@ -9,7 +9,7 @@ import { buildEventOp } from "../shared/eventLog";
 import { hasModuleGrant } from "../shared/permissionMatrix";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
-import { approvalFor } from "../shared/approval";
+import { approvalFor, effectiveApproval } from "../shared/approval";
 import { ApprovalBadge, ApprovalActions } from "../components/ApprovalControls";
 import PhotoGroupUploader from "../components/PhotoGroupUploader";
 import SidePanel from "../components/SidePanel";
@@ -376,7 +376,7 @@ This cannot be undone.`)) return;
                   <Badge color={insp.result === "Pass" ? "green" : insp.result === "Fail" ? "red" : "amber"}>
                     <span className="whitespace-nowrap">{insp.result}</span>
                   </Badge>
-                  <div className="mt-1"><ApprovalBadge approval={insp.approval} /></div>
+                  <div className="mt-1"><ApprovalBadge approval={effectiveApproval(data, insp)} /></div>
                   <div onClick={(e) => e.stopPropagation()}><ApprovalActions collName="qualityInspections" record={insp} /></div>
                 </TableCell>
                 <TableCell muted className="truncate max-w-0">{insp.inspectorName}</TableCell>

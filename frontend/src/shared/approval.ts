@@ -24,11 +24,20 @@ export function approvalFor(data: BoardData | null, userId: string | null): Appr
   return { status: "pending", approverUserId: team.leaderId, approverName: leader?.name || "" };
 }
 
+/** The approval a record effectively has. A record saved before approval
+ *  existed has none stored; if its author is on a team it counts as awaiting
+ *  that team's leader (the server applies the same rule when they decide it),
+ *  so the leader can still review older work. */
+export function effectiveApproval(data: BoardData | null, r: Rec): Approval | undefined {
+  return r.approval ?? approvalFor(data, creatorOf(r));
+}
+
 /** Can this person approve/reject this record right now? */
-export function canDecide(userId: string | null, r: Rec): boolean {
-  if (!userId || r.approval?.status !== "pending") return false;
+export function canDecide(data: BoardData | null, userId: string | null, r: Rec): boolean {
+  const a = effectiveApproval(data, r);
+  if (!userId || a?.status !== "pending") return false;
   if (userId === creatorOf(r)) return false;
-  return userId === "U-ADMIN" || userId === r.approval.approverUserId;
+  return userId === "U-ADMIN" || userId === a.approverUserId;
 }
 
 /** Pending records waiting on this person (all of them for Admin). */
@@ -36,7 +45,7 @@ export function pendingFor(data: BoardData | null, userId: string | null): { col
   if (!userId) return [];
   const out: { coll: ApprovalColl; rec: Rec }[] = [];
   for (const c of APPROVAL_COLLS) {
-    for (const rec of coll(data, c) as Rec[]) if (canDecide(userId, rec)) out.push({ coll: c, rec });
+    for (const rec of coll(data, c) as Rec[]) if (canDecide(data, userId, rec)) out.push({ coll: c, rec });
   }
   return out.sort((a, b) => (b.rec.createdAt || 0) - (a.rec.createdAt || 0));
 }
@@ -64,6 +73,6 @@ export function describeRecord(c: ApprovalColl, r: Rec): string {
 }
 
 /** The save that records a decision. The server stamps who/when and re-checks the rights. */
-export function decideOp(c: ApprovalColl, r: Rec, status: "approved" | "rejected", remark?: string): Op {
-  return { op: "upsert", coll: c, rec: { ...r, approval: { ...(r.approval as Approval), status, remark: remark?.trim() || undefined } } } as Op;
+export function decideOp(c: ApprovalColl, r: Rec, status: "approved" | "rejected", remark?: string, base?: Approval): Op {
+  return { op: "upsert", coll: c, rec: { ...r, approval: { ...((base ?? r.approval) as Approval), status, remark: remark?.trim() || undefined } } } as Op;
 }
