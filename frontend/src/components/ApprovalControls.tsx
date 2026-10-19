@@ -75,16 +75,16 @@ export function ApprovalActions({ collName, record }: { collName: ApprovalColl; 
 
 /** Sends what is waiting on this person (everything, for Admin) to Slack with
  *  Approve / Reject buttons — for work saved before Slack approvals existed. */
-export function SendApprovalsToSlackButton({ label = "Send to Slack" }: { label?: string }) {
+export function SendApprovalsToSlackButton({ label = "Send to Slack", record }: { label?: string; record?: { coll: string; id: string } }) {
   const { toast } = useApp();
   const [busy, setBusy] = useState(false);
   async function send() {
     setBusy(true);
     try {
-      const r = await fetch(API_BASE + "/api/approvals/slack-resend", { method: "POST", headers: authHeaders() });
+      const r = await fetch(API_BASE + "/api/approvals/slack-resend", { method: "POST", headers: { ...authHeaders(), "Content-Type": "application/json" }, body: JSON.stringify(record || {}) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) toast(j.error || "Couldn't send to Slack");
-      else toast(j.queued ? `Sending ${j.queued} approval${j.queued === 1 ? "" : "s"} to Slack…` : "Nothing is waiting for approval.");
+      else toast(record ? (j.queued ? "Sent to Slack" : "Nothing to send — already decided, or not waiting on you") : j.queued ? `Sending ${j.queued} approval${j.queued === 1 ? "" : "s"} to Slack…` : "Nothing is waiting for approval.");
     } catch {
       toast("Couldn't reach the server");
     } finally {

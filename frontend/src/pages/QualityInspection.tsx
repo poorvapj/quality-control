@@ -9,8 +9,8 @@ import { buildEventOp } from "../shared/eventLog";
 import { hasModuleGrant } from "../shared/permissionMatrix";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
-import { approvalFor, effectiveApproval } from "../shared/approval";
-import { ApprovalBadge, ApprovalActions, SendApprovalsToSlackButton } from "../components/ApprovalControls";
+import { approvalFor, effectiveApproval, canDecide } from "../shared/approval";
+import { ApprovalBadge, ApprovalActions, ApprovalReviewPanel, SendApprovalsToSlackButton } from "../components/ApprovalControls";
 import PhotoGroupUploader from "../components/PhotoGroupUploader";
 import SidePanel from "../components/SidePanel";
 import StatTile from "../components/StatTile";
@@ -173,6 +173,9 @@ This cannot be undone.`)) return;
       {canCreate && insp.result !== "Pass" && snag?.status !== "Closed" && (
         <Btn label="Re-inspect" color="secondary" size="sm" onClick={() => { setReInspectOf(insp); setPanelOpen(true); }} />
       )}
+      {effectiveApproval(data, insp)?.status === "pending" && (isAdmin || canDecide(data, currentUserId, insp)) && (
+        <SendApprovalsToSlackButton label="Send to Slack" record={{ coll: "qualityInspections", id: insp.id }} />
+      )}
       {isAdmin && <Btn label="Delete" color="secondary" size="sm" onClick={() => deleteInspection(insp)} />}
     </div>
   );
@@ -183,6 +186,7 @@ This cannot be undone.`)) return;
 
   const [panelOpen, setPanelOpen] = useState(false);
   const [reInspectOf, setReInspectOf] = useState<QI | null>(null);
+  const [reviewing, setReviewing] = useState<QI | null>(null); // a clicked row: just that one inspection, with Approve / Reject
   const [historyFloor, setHistoryFloor] = useState<{ floorId: string; floorLabel: string } | null>(null);
 
   // A dashboard's Recent Inspections row set this (then switched to this
@@ -379,7 +383,7 @@ This cannot be undone.`)) return;
               <div
                 key={insp.id}
                 className="border border-[var(--border)] rounded-radius-md p-3.5 bg-[var(--bg-card)]"
-                onClick={() => setHistoryFloor({ floorId: insp.floorId, floorLabel: insp.floorName })}
+                onClick={() => setReviewing(insp)}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -421,7 +425,7 @@ This cannot be undone.`)) return;
             const snag = linkedSnag(insp);
             const overdue = !!snag && snag.status !== "Closed" && !!snag.dueAt && snag.dueAt < Date.now();
             return (
-              <TableRow key={insp.id} onClick={() => setHistoryFloor({ floorId: insp.floorId, floorLabel: insp.floorName })}>
+              <TableRow key={insp.id} onClick={() => setReviewing(insp)}>
                 <TableCell muted className="whitespace-nowrap">{insp.inspectionDate}</TableCell>
                 <TableCell className="whitespace-nowrap">{insp.projectCode}</TableCell>
                 <TableCell strong>
@@ -467,6 +471,7 @@ This cannot be undone.`)) return;
         toast={toast}
       />
 
+      <ApprovalReviewPanel item={reviewing ? { coll: "qualityInspections", rec: reviewing } : null} onClose={() => setReviewing(null)} />
       <FloorHistoryPanel
         open={!!historyFloor}
         onClose={() => setHistoryFloor(null)}
@@ -684,6 +689,7 @@ function InspectionForm({
     if (workType === "Column Inspection" && selectedColumns.length === 0) { toast("Select at least one column"); return; }
     if (workType === "R.C.C. Slab Inspection" && selectedSlabs.length === 0) { toast("Select at least one slab"); return; }
     if (checklist.some((row) => !row.status)) { toast("Mark every checklist point as OK / Not OK / N/A"); return; }
+    if (photos.length === 0) { toast("Add at least one photo as evidence"); return; }
     if (result !== "Pass" && !remarks.trim()) { toast("Remarks are required for Fail / Rework Required"); return; }
     if (result !== "Pass" && !assignedToUserId) { toast("A responsible DRI must be assigned for Fail / Rework Required"); return; }
     if (result !== "Pass" && !targetDate) { toast("A target date is required for the corrective action"); return; }
@@ -971,8 +977,8 @@ function InspectionForm({
         </div>
 
         <div className="field full">
-          <label>Photo Evidence</label>
-          <PhotoGroupUploader label="Inspection photos" photos={photos} onChange={setPhotos} optional />
+          <label>Photo Evidence <span style={{ color: "var(--danger, #d92d20)" }}>*</span></label>
+          <PhotoGroupUploader label="Inspection photos (at least 1)" photos={photos} onChange={setPhotos} />
         </div>
 
         {result !== "Pass" && (

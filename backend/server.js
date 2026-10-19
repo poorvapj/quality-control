@@ -240,7 +240,10 @@ async function slackPostMessage(channel, text, blocks, opts = {}) {
       try {
         const uid = await slackUserIdForEmail(email);
         if (!uid || uid === channel) continue;
-        await slackPostRaw(uid, approvalSlack.observerCopyText(opts.to || "", text));
+        // the copy keeps the buttons (the server still checks who may press them), so an
+        // observer who is allowed to decide can act from her own copy
+        const label = opts.to ? `📋 _Copy of a Slack notification sent to *${opts.to}*_` : "📋 _Copy of a Slack notification_";
+        await slackPostRaw(uid, approvalSlack.observerCopyText(opts.to || "", text), blocks && blocks.length ? [{ type: "context", elements: [{ type: "mrkdwn", text: label }] }, ...blocks] : undefined);
       } catch (e) {
         console.error("Slack observer copy failed:", e.message);
       }
@@ -1736,9 +1739,13 @@ async function handleApi(req, res, urlPath) {
     const session = getSession(req);
     if (!session) return sendJson(res, 401, { error: "Sign-in required" });
     if (!SLACK_BOT_TOKEN) return sendJson(res, 501, { error: "Slack is not configured on this server" });
-    const last = approvalResendAt.get(session.userId) || 0;
-    if (Date.now() - last < 60000) return sendJson(res, 429, { error: "Already sent a moment ago — wait a minute before sending again." });
-    approvalResendAt.set(session.userId, Date.now());
+    // { coll, id } = send just that one record; no body = everything waiting on this person
+    const reqBody = (await readBody(req).catch(() => null)) || {};
+    const one = reqBody.coll && reqBody.id ? approvalSlack.parseApprovalEntity(reqBody.coll + ":" + reqBody.id) : null;
+    const cooldownKey = session.userId + (one ? "|" + one.coll + ":" + one.id : "");
+    const last = approvalResendAt.get(cooldownKey) || 0;
+    if (Date.now() - last < (one ? 10000 : 60000)) return sendJson(res, 429, { error: "Already sent a moment ago — wait before sending again." });
+    approvalResendAt.set(cooldownKey, Date.now());
     const colls = approvalSlack.APPROVAL_COLLECTIONS;
     const [users, teams, ...lists] = await Promise.all([
       mongoDb.collection("users").find({}, { projection: { _id: 0, id: 1, name: 1, teamId: 1 } }).toArray(),
@@ -1746,7 +1753,7 @@ async function handleApi(req, res, urlPath) {
       ...colls.map((c) => mongoDb.collection(c).find({}, { projection: { _id: 0 } }).toArray())
     ]);
     const records = Object.fromEntries(colls.map((c, i) => [c, lists[i]]));
-    const pending = findPendingApprovals({ records, users, teams }).filter((p) => session.isAdmin || p.approverUserId === session.userId);
+    const pending = findPendingApprovals({ records, users, teams }).filter((p) => (session.isAdmin || p.approverUserId === session.userId) && (!one || (p.coll === one.coll && p.rec.id === one.id)));
     sendJson(res, 200, { queued: pending.length });
     (async () => {
       for (const p of pending) {
