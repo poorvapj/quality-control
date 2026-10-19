@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
-import { coll, projectFloors, floorUnits, trackStages, prog, floorReleased, floorBelow, unitSummary, myProjects } from "../shared/rules";
+import { coll, projectFloors, floorUnits, trackStages, prog, floorReleased, floorBelow, unitSummary, myProjects, byId } from "../shared/rules";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
 import Card from "../ui/tw/Card";
@@ -21,7 +21,15 @@ export default function TowerBoard() {
   // shows real data from the start (currentProjectId), exactly like
   // before; only the dropdown's own label defaults to "Choose" until
   // someone actively picks from it.
-  const [viewProjectId, setViewProjectId] = useState("");
+  // Quality team members (including its leader, Rishabh) work almost
+  // exclusively on Zen Garden right now — default the board straight to
+  // it for them instead of making them pick it every time.
+  const me = byId(coll(data, "users"), currentUserId);
+  const myTeam = me?.teamId ? byId(coll(data, "teams"), me.teamId) : null;
+  const isQualityTeam = myTeam?.role === "Quality";
+  const zenGarden = allProjects.find((p) => p.name === "Zen Garden");
+  const defaultProjectId = isQualityTeam && zenGarden ? zenGarden.id : "";
+  const [viewProjectId, setViewProjectId] = useState(defaultProjectId);
   const [fFloor, setFFloor] = useState(ALL_FLOORS);
   const [fStatus, setFStatus] = useState<StatusFilter>("");
   const [q, setQ] = useState("");

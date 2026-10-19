@@ -54,20 +54,39 @@ export const QC_CHECKLISTS: Record<string, string[]> = {
     "Shuttering check: verify slab level, thickness, dimensions, support/props, stability, tight joints, and cleanliness.",
     "Reinforcement steel: check bar diameter, spacing, top and bottom reinforcement, extra bars, laps, anchorage, and openings as per drawings.",
     "Cover and embedded services: verify cover blocks, electrical conduits, sleeves, and other inserts do not displace reinforcement.",
+    "Slump test at pour point: record the value and reject the batch if it falls outside the design mix range.",
+    "Cube samples taken: minimum 3 cubes per 5 cum, labelled with floor and date.",
+    "Vibration done correctly: poker at max 500mm centres, no cold joints — no gap over 30 minutes between layers.",
+    "Curing started within 24 hours of pour: wet gunny or curing compound, minimum 7 days.",
     "Pre-pour approval: confirm inspection clearance, concrete grade, pour sequence, access, and curing arrangements."
   ],
   "Brickwork Inspection": [
     "Brickwork layout: check wall location, thickness, openings, and alignment against approved drawings.",
-    "Line, level, and plumb: check courses and wall faces regularly using suitable instruments.",
+    "Line, level, and plumb: check courses and wall faces regularly using suitable instruments — plumb check every 3 courses, max deviation 3mm per 3m.",
     "Bond and joints: ensure proper bond, staggered vertical joints, uniform joint thickness, and fully filled mortar joints.",
     "Mortar and bricks: verify approved materials, mortar mix, brick condition, and appropriate wetting where specified.",
     "Laying and curing: ensure proper laying technique, toothed/keyed junctions where specified, and curing as required."
   ],
+  "Plumbing & Electrical Inspection": [
+    "Pipe pressure test before concealment: 1.5x working pressure for 30 minutes, zero pressure drop.",
+    "All sleeves placed before structural pour: DRI confirms — no chasing of RCC members allowed.",
+    "Earthing continuity confirmed floor by floor: continuity tester, each floor signed off separately.",
+    "ELCB trip test done after panel installation: trip time within IS specification, recorded in register.",
+    "As-built drawing updated and filed before handover: attached to the QC file for this apartment."
+  ],
   "Plastering Inspection": [
     "Pre-plaster services: check plumbing pipes, electrical conduits/boxes, and A.C. pipe/fittings before plastering.",
-    "Joint treatment: apply approved fibre mesh at concrete–brickwork junctions and other specified locations.",
+    "Joint treatment: apply approved fibre mesh (min 300mm either side of junction, galvanised) at concrete–brickwork junctions and other specified locations.",
     "Surface preparation: ensure background is clean, sound, and prepared to the approved method; provide bonding treatment where specified.",
-    "Finish, level, and plumb: check thickness, flatness, corners, edges, line, level, and verticality."
+    "Finish, level, and plumb: check thickness (12mm internal, verified with pin at 3 points per wall), flatness, corners, edges, line, level, and verticality.",
+    "Tap test: 100% tap test after plastering — zero hollow plaster allowed; any hollow area broken out and redone."
+  ],
+  "Waterproofing Inspection": [
+    "All surface cracks sealed before WP coat: approved crack filler; inspector confirms surface is ready.",
+    "Two coats applied, turned up 150mm on all walls: overlap 150mm at joints, full turn-up at floor-wall junction.",
+    "Flood test — 50mm water ponding for 24 hours: non-negotiable; inspector present at start and end.",
+    "Ceiling below inspected for seepage after 24 hours: zero leaks to proceed; any seepage means redo WP and retest.",
+    "Sign-off: flood test result recorded with date, time, and inspector name — photo mandatory."
   ],
   "Tile Work Inspection": [
     "Floor level and slope: verify finished levels and required slope toward floor traps/drains in wet areas.",
@@ -76,6 +95,14 @@ export const QC_CHECKLISTS: Record<string, string[]> = {
     "Joints and gaps: check uniform joint width, alignment, spacers, and approved grout/filler.",
     "Hollow tiles and finish: tap-test for hollow areas where appropriate; check lippage, cutting, edge finish, and skirting alignment.",
     "Protection and cleaning: clean grout residue and protect finished tiles from damage until handover."
+  ],
+  "Finishing & Handover Inspection": [
+    "All punch list items from earlier stages closed: zero open NCRs, verified by Quality Inspector.",
+    "Doors & windows: smooth operation, gaps under 5mm on all sides, locks functional.",
+    "All fixtures working: taps, switches, fans, geysers tested — no snag.",
+    "Flooring: no hollow tiles, clean grout — 100% tap test on all floor tiles, uniform grout joints.",
+    "Paint: no peeling, uniform finish, no patches — visual check in daylight; touch-up not acceptable over peeling.",
+    "Customer walkthrough checklist signed: customer signs, any observation noted and resolved before possession."
   ]
 };
 type ChecklistStatus = (typeof CHECKLIST_STATUSES)[number];
