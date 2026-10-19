@@ -3,6 +3,8 @@
    Rule: a record saved by someone who belongs to a Team (and isn't that team's
    leader) is created "pending" and names the leader as its approver. Only that
    leader (or an Admin) can approve or reject it, never the person who made it.
+   "Leader" means the team's CURRENT leader, so changing a team's leader moves
+   its pending work to the new one.
    Rejected work is sent back: the record stays "rejected" with the leader's
    remark and the member records a new one. Records saved before this existed
    (no approval on them) can still be decided by their author's team leader. Records by Admins, leaders, or
@@ -47,6 +49,14 @@ function resolveApprovalOnUpdate({ existing, incoming, session, creatorId, now, 
 
   // never let a client add approval to a record that has none
   if (!before) return { ok: true, approval: undefined };
+
+  // WHO may decide is the author's team leader NOW, not whoever was leader when
+  // the record was saved: if a team's leader is set or changed later, its
+  // pending work moves to the new leader. (Falls back to the stored approver
+  // when the author is no longer on a team, or no team data was supplied.)
+  const current = users && teams ? deriveApprovalOnCreate({ creatorId, users, teams }) : null;
+  const approverId = (current && current.approverUserId) || before.approverUserId;
+  const approverName = (current && current.approverName) || before.approverName || "";
   // no change requested (or fields tampered while status is unchanged) -> keep exactly what is stored
   if (!wanted || wanted.status === before.status) return { ok: true, approval: before };
   if (!STATUSES.includes(wanted.status)) return { ok: false, status: 400, error: "Invalid approval status" };
@@ -58,7 +68,7 @@ function resolveApprovalOnUpdate({ existing, incoming, session, creatorId, now, 
     return { ok: false, status: 403, error: `This record is already ${before.status}` };
   }
 
-  const isApprover = !!session && (session.isAdmin || session.userId === before.approverUserId);
+  const isApprover = !!session && (session.isAdmin || session.userId === approverId);
   if (!isApprover) return { ok: false, status: 403, error: "Only this person's team leader can approve or reject it" };
   if (session.userId === creatorId) return { ok: false, status: 403, error: "You can't approve your own work" };
 
@@ -68,8 +78,8 @@ function resolveApprovalOnUpdate({ existing, incoming, session, creatorId, now, 
     ok: true,
     approval: {
       status: wanted.status,
-      approverUserId: before.approverUserId,
-      approverName: before.approverName || "",
+      approverUserId: approverId,
+      approverName,
       decidedByUserId: session.userId,
       decidedAt: now || Date.now(),
       remark: remark || undefined

@@ -109,4 +109,36 @@ test("a client still cannot attach a PENDING approval to an older record", () =>
   assert.strictEqual(r.ok, true); assert.strictEqual(r.approval, undefined);
 });
 
+console.log("leader set or changed AFTER the record was saved");
+// Naman's record was saved while someone else led the team: the stored approver is OLDLEADER.
+const stale = { id: "QI-STALE", inspectorUserId: "NAMAN", approval: { status: "pending", approverUserId: "OLDLEADER", approverName: "Old Leader" } };
+const askStale = (wanted, session, withTeams = true) =>
+  resolveApprovalOnUpdate({ existing: stale, incoming: { approval: wanted }, session, creatorId: "NAMAN", now: 9000, ...(withTeams ? { users, teams } : {}) });
+test("the team's CURRENT leader can decide work that was saved under a previous leader", () => {
+  const r = askStale({ status: "approved" }, { userId: "RISHABH" });
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.approval.status, "approved");
+  assert.strictEqual(r.approval.approverUserId, "RISHABH"); // recorded as the current leader
+  assert.strictEqual(r.approval.approverName, "Rishabh Rajput");
+});
+test("the previous leader no longer can (the work moved to the new leader)", () => {
+  const r = askStale({ status: "approved" }, { userId: "OLDLEADER" });
+  assert.strictEqual(r.ok, false); assert.strictEqual(r.status, 403);
+});
+test("without team data it falls back to the stored approver (nothing breaks)", () => {
+  assert.strictEqual(askStale({ status: "approved" }, { userId: "OLDLEADER" }, false).ok, true);
+  assert.strictEqual(askStale({ status: "approved" }, { userId: "RISHABH" }, false).ok, false);
+});
+test("if the author is no longer on any team, the stored approver still stands", () => {
+  const r = resolveApprovalOnUpdate({
+    existing: { id: "x", inspectorUserId: "LONE", approval: { status: "pending", approverUserId: "RISHABH", approverName: "R" } },
+    incoming: { approval: { status: "approved" } }, session: { userId: "RISHABH" }, creatorId: "LONE", users, teams
+  });
+  assert.strictEqual(r.ok, true); assert.strictEqual(r.approval.approverUserId, "RISHABH");
+});
+test("the author still can't approve their own work, and a pending-to-pending copy changes nothing", () => {
+  assert.strictEqual(askStale({ status: "approved" }, { userId: "NAMAN" }).ok, false);
+  assert.deepStrictEqual(askStale({ status: "pending", approverUserId: "NAMAN" }, { userId: "NAMAN" }).approval, stale.approval);
+});
+
 console.log(`\n${passed} passed`);

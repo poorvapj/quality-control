@@ -29,7 +29,13 @@ export function approvalFor(data: BoardData | null, userId: string | null): Appr
  *  that team's leader (the server applies the same rule when they decide it),
  *  so the leader can still review older work. */
 export function effectiveApproval(data: BoardData | null, r: Rec): Approval | undefined {
-  return r.approval ?? approvalFor(data, creatorOf(r));
+  const current = approvalFor(data, creatorOf(r)); // the author's team + CURRENT leader, if any
+  if (!r.approval) return current;
+  // Pending work is waiting on the team's CURRENT leader, even if the leader was
+  // set or changed after the record was saved (the server applies the same rule).
+  return r.approval.status === "pending" && current
+    ? { ...r.approval, approverUserId: current.approverUserId, approverName: current.approverName }
+    : r.approval;
 }
 
 /** Can this person approve/reject this record right now? */

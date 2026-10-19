@@ -745,10 +745,11 @@ async function applyApprovalRules(op, session) {
     if (approval) op.rec.approval = approval; else delete op.rec.approval;
     return;
   }
-  // an older record (no approval yet) may be decided by its author's team
-  // leader, which needs the team data to confirm who that is
+  // the person who may decide is the author's CURRENT team leader (and an
+  // older record with no approval yet is decided by that same leader), so a
+  // decision needs the team data to confirm who that is
   let users, teams;
-  if (!existing.approval && op.rec.approval) {
+  if (op.rec.approval) {
     [users, teams] = await Promise.all([
       mongoDb.collection("users").find({}, { projection: { _id: 0, id: 1, name: 1, teamId: 1 } }).toArray(),
       mongoDb.collection("teams").find({}, { projection: { _id: 0, id: 1, leaderId: 1 } }).toArray()

@@ -12,7 +12,12 @@ import NavIcon from "./NavIcon";
 export function ApprovalBadge({ approval }: { approval?: Approval }) {
   if (!approval) return null;
   if (approval.status === "pending") {
-    return <div title={`Waiting for ${approval.approverName || "the team leader"}`}><Badge color="amber"><span className="whitespace-nowrap">Pending approval</span></Badge></div>;
+    return (
+      <div title={`Waiting for ${approval.approverName || "the team leader"}`}>
+        <Badge color="amber"><span className="whitespace-nowrap">Pending approval</span></Badge>
+        {approval.approverName && <div className="text-[10.5px] text-[var(--text-muted)] mt-0.5 whitespace-nowrap">with {approval.approverName}</div>}
+      </div>
+    );
   }
   if (approval.status === "approved") {
     return <div title={approval.approverName ? `Approved by ${approval.approverName}` : undefined}><Badge color="green"><span className="whitespace-nowrap">Approved</span></Badge></div>;
