@@ -68,7 +68,8 @@ const { validateMeasurement } = require("./materialMeasurementRules.js");
 const { getProgressAnalysis } = require("./progressAnalysis.js");
 const workMeasurements = require("./workMeasurementRules.js");
 const { getVmsDrawingRequests } = require("./vmsDrawingRequests.js");
-const { deriveApprovalOnCreate, resolveApprovalOnUpdate } = require("./approvalRules.js");
+const { deriveApprovalOnCreate, resolveApprovalOnUpdate, findPendingApprovals } = require("./approvalRules.js");
+const approvalSlack = require("./approvalSlack.js");
 const { sanitizePoEvent, matchProjectByName, isStaleUpdate } = require("./imsWebhook.js");
 const { buildTeamDailyReport, slackSummaryFor } = require("./teamDailyReports.js");
 const { verifySlackSignature, parseSlackActionPayload, parseActionId, snagCloseBlocks, teamReportApproveBlocks } = require("./slackActions.js");
@@ -202,8 +203,16 @@ async function slackUserIdForEmail(email, knownSlackId) {
   }
 }
 
-async function slackPostMessage(channel, text, blocks) {
-  if (!SLACK_BOT_TOKEN || !channel) return;
+// Everyone listed here gets a text-only COPY of every Slack notification the app
+// sends to anyone else (Poorva, by default). Set SLACK_COPY_TO_EMAILS to a
+// comma-separated list to change who, or to an empty value to switch it off.
+const SLACK_COPY_TO_EMAILS = (process.env.SLACK_COPY_TO_EMAILS !== undefined ? process.env.SLACK_COPY_TO_EMAILS : "poorva@neotericgrp.in")
+  .split(",").map((e) => e.trim()).filter(Boolean);
+
+// The one place a message is actually sent. Returns Slack's reply (it carries the
+// DM channel id and the message ts, needed to update the message later).
+async function slackPostRaw(channel, text, blocks) {
+  if (!SLACK_BOT_TOKEN || !channel) return null;
   try {
     const res = await fetch("https://slack.com/api/chat.postMessage", {
       method: "POST",
@@ -212,8 +221,62 @@ async function slackPostMessage(channel, text, blocks) {
     });
     const json = await res.json();
     if (!json.ok) console.error("Slack chat.postMessage:", json.error, channel);
+    return json;
   } catch (e) {
     console.error("Slack chat.postMessage failed:", e.message);
+    return null;
+  }
+}
+
+// Every notification goes through here, so the copy to the observers happens
+// for all of them — current and future — without each call site remembering.
+// A copy is plain text (no buttons: it must never be clickable as the real
+// request), is skipped when the observer IS the recipient (no double message),
+// and is never itself copied. `opts.to` is just a label for who it went to.
+async function slackPostMessage(channel, text, blocks, opts = {}) {
+  const posted = await slackPostRaw(channel, text, blocks);
+  if (!opts.noCopy) {
+    for (const email of SLACK_COPY_TO_EMAILS) {
+      try {
+        const uid = await slackUserIdForEmail(email);
+        if (!uid || uid === channel) continue;
+        await slackPostRaw(uid, approvalSlack.observerCopyText(opts.to || "", text));
+      } catch (e) {
+        console.error("Slack observer copy failed:", e.message);
+      }
+    }
+  }
+  return posted;
+}
+
+async function slackOpenView(triggerId, view) {
+  if (!SLACK_BOT_TOKEN || !triggerId) return;
+  try {
+    const res = await fetch("https://slack.com/api/views.open", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ trigger_id: triggerId, view })
+    });
+    const json = await res.json();
+    if (!json.ok) console.error("Slack views.open:", json.error);
+  } catch (e) {
+    console.error("Slack views.open failed:", e.message);
+  }
+}
+
+// Replaces a message we sent earlier with plain text (drops its buttons).
+async function slackUpdateMessage(channel, ts, text) {
+  if (!SLACK_BOT_TOKEN || !channel || !ts) return;
+  try {
+    const res = await fetch("https://slack.com/api/chat.update", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ channel, ts, text, blocks: [{ type: "section", text: { type: "mrkdwn", text } }] })
+    });
+    const json = await res.json();
+    if (!json.ok) console.error("Slack chat.update:", json.error);
+  } catch (e) {
+    console.error("Slack chat.update failed:", e.message);
   }
 }
 
@@ -288,11 +351,11 @@ async function notifySlack(eventType, payload) {
     const tasks = [];
     if (msg.recipientEmail || msg.recipientSlackId) {
       tasks.push(
-        slackUserIdForEmail(msg.recipientEmail, msg.recipientSlackId).then((uid) => uid && slackPostMessage(uid, msg.text, msg.blocks))
+        slackUserIdForEmail(msg.recipientEmail, msg.recipientSlackId).then((uid) => uid && slackPostMessage(uid, msg.text, msg.blocks, { to: msg.who }))
       );
     }
     if (SLACK_CHANNEL_ID) {
-      tasks.push(slackPostMessage(SLACK_CHANNEL_ID, msg.text, msg.blocks));
+      tasks.push(slackPostMessage(SLACK_CHANNEL_ID, msg.text, msg.blocks, { to: "the team channel" }));
     }
     await Promise.all(tasks);
   } catch (e) {
@@ -728,6 +791,75 @@ function splitSetUnset(fields) {
    through unauthenticated — otherwise nobody could ever create the first
    admin account to log in and authorize anything else. Throws a tagged
    error so the route handler can turn it into a clean 401/403. */
+/* ---------------------------------------------------------- approvals on Slack
+   A team member's inspection/measurement waits for their team leader. The
+   leader gets it on Slack with Approve / Reject buttons and can decide
+   without opening the app; the author hears back either way. Every message
+   below also reaches the observers via slackPostMessage (a copy to Poorva). */
+async function slackIdForUserId(userId) {
+  const u = userId ? await mongoDb.collection("users").findOne({ id: userId }, { projection: { _id: 0, id: 1, name: 1, email: 1, slackId: 1 } }) : null;
+  if (!u) return { user: null, uid: null };
+  return { user: u, uid: await slackUserIdForEmail(u.email, u.slackId) };
+}
+
+const approvalResendAt = new Map(); // userId -> last "send pending to Slack" time
+
+async function notifyApprovalRequest(coll, rec) {
+  if (!SLACK_BOT_TOKEN) return;
+  try {
+    const approverId = rec.approval && rec.approval.approverUserId;
+    const { user, uid } = await slackIdForUserId(approverId);
+    if (!user || !uid) return; // no Slack link for this leader — they still see it in the app
+    const { text, blocks } = approvalSlack.approvalRequestBlocks(coll, rec);
+    await slackPostMessage(uid, text, blocks, { to: user.name });
+  } catch (e) {
+    console.error("notifyApprovalRequest failed:", e.message);
+  }
+}
+
+async function notifyApprovalDecision(coll, rec, status, remark, byUserId) {
+  if (!SLACK_BOT_TOKEN) return;
+  try {
+    const authorId = rec.inspectorUserId || rec.recordedByUserId;
+    const [{ user: author, uid }, { user: by }] = await Promise.all([slackIdForUserId(authorId), slackIdForUserId(byUserId)]);
+    if (!author || !uid) return;
+    await slackPostMessage(uid, approvalSlack.approvalDecisionText({ coll, rec, status, remark, byName: by && by.name }), undefined, { to: author.name });
+  } catch (e) {
+    console.error("notifyApprovalDecision failed:", e.message);
+  }
+}
+
+// A decision made from Slack: same rules as the app (approvalRules.js), so a
+// click can never do more than the person could do in the app themselves.
+async function decideApprovalFromSlack({ coll, id, status, remark, actor }) {
+  if (!approvalSlack.APPROVAL_COLLECTIONS.includes(coll)) return { ok: false, message: "⚠️ That item can't be approved here." };
+  if (!actor) return { ok: false, message: "🚫 Couldn't match your Slack account to a user in the app (the emails must be the same)." };
+  const rec = await mongoDb.collection(coll).findOne({ id }, { projection: { _id: 0 } });
+  if (!rec) return { ok: false, message: "⚠️ That record no longer exists." };
+  if (rec.approval && rec.approval.status && rec.approval.status !== "pending") {
+    return { ok: false, message: `ℹ️ Already ${rec.approval.status}.` };
+  }
+  const [users, teams] = await Promise.all([
+    mongoDb.collection("users").find({}, { projection: { _id: 0, id: 1, name: 1, teamId: 1 } }).toArray(),
+    mongoDb.collection("teams").find({}, { projection: { _id: 0, id: 1, leaderId: 1 } }).toArray()
+  ]);
+  const r = resolveApprovalOnUpdate({
+    existing: rec, incoming: { approval: { status, remark } },
+    session: { userId: actor.id, isAdmin: actor.id === ADMIN_USER_ID },
+    creatorId: rec.inspectorUserId || rec.recordedByUserId, users, teams
+  });
+  if (!r.ok) return { ok: false, message: `🚫 ${r.error}` };
+  if (!r.approval) return { ok: false, message: "ℹ️ That record doesn't need approval." };
+  await mongoDb.collection(coll).updateOne({ id }, { $set: { approval: r.approval } });
+  await mongoDb.collection("events").insertOne({
+    ts: Date.now(), userId: actor.id, action: status === "approved" ? "APPROVAL_APPROVE" : "APPROVAL_REJECT", targetId: id, stageId: "",
+    detail: `${approvalSlack.KIND_LABEL[coll]} · ${approvalSlack.describeRecord(coll, rec)} (via Slack)`
+  });
+  await bumpRev();
+  notifyApprovalDecision(coll, rec, status, r.approval.remark, actor.id);
+  return { ok: true, message: approvalSlack.approvalResultLine({ coll, rec, status, remark: r.approval.remark, byName: actor.name }) };
+}
+
 // Team-leader approval of a team member's inspections/measurements (see
 // approvalRules.js). Runs on every save of those records: whatever approval
 // the browser sent is replaced by what the rules allow, so a member can't
@@ -742,7 +874,7 @@ async function applyApprovalRules(op, session) {
       mongoDb.collection("teams").find({}, { projection: { _id: 0, id: 1, leaderId: 1 } }).toArray()
     ]);
     const approval = deriveApprovalOnCreate({ creatorId: session.userId, users, teams });
-    if (approval) op.rec.approval = approval; else delete op.rec.approval;
+    if (approval) { op.rec.approval = approval; op._notifyApprovalRequest = op.coll; } else delete op.rec.approval;
     return;
   }
   // the person who may decide is the author's CURRENT team leader (and an
@@ -758,6 +890,10 @@ async function applyApprovalRules(op, session) {
   const r = resolveApprovalOnUpdate({ existing, incoming: op.rec, session, creatorId: existing.inspectorUserId || existing.recordedByUserId, users, teams });
   if (!r.ok) { const e = new Error(r.error); e.status = r.status; throw e; }
   if (r.approval) op.rec.approval = r.approval; else delete op.rec.approval;
+  // a pending -> approved/rejected change: tell the author once it has been saved
+  if (r.approval && r.approval.status !== "pending" && (!existing.approval || existing.approval.status === "pending")) {
+    op._notifyApprovalDecision = { coll: op.coll, status: r.approval.status, remark: r.approval.remark, byUserId: session.userId };
+  }
 }
 
 async function assertOpAllowed(op, session) {
@@ -1115,6 +1251,15 @@ async function applyOps(ops, session) {
       await mongoDb.collection("progress").updateOne({ _id: op.key }, update, { upsert: true });
     } else if (op.op === "event" && op.ev) {
       await mongoDb.collection("events").insertOne(Object.assign({}, op.ev));
+    }
+
+    // Slack follow-ups for approvals — after the write, never blocking or failing it
+    if (op._notifyApprovalRequest) notifyApprovalRequest(op._notifyApprovalRequest, op.rec);
+    if (op._notifyApprovalDecision) {
+      const d = op._notifyApprovalDecision;
+      mongoDb.collection(d.coll).findOne({ id: op.rec.id }, { projection: { _id: 0 } })
+        .then((saved) => saved && notifyApprovalDecision(d.coll, saved, d.status, d.remark, d.byUserId))
+        .catch((e) => console.error("approval decision notify failed:", e.message));
     }
   }
   await trimEvents();
@@ -1581,6 +1726,38 @@ async function handleApi(req, res, urlPath) {
     console.log(`[ims-webhook] saved PO ${rec.id} (deleted=${rec.deleted}) — ${projectCode ? "linked to project " + projectCode : "NOT linked to any QC project"}`);
     return sendJson(res, 200, { ok: true, matched: !!projectCode });
   }
+  if (req.method === "POST" && urlPath === "/api/approvals/slack-resend") {
+    // (Re)send everything that is waiting on someone to Slack, with the
+    // Approve / Reject buttons — for work that was saved before Slack
+    // approvals existed. A team leader sends only what is waiting on THEM;
+    // Admin sends everyone's. Replies at once, delivers in the background (a
+    // short pause between messages keeps Slack happy), and a minute's cooldown
+    // per person stops an accidental double press from messaging twice.
+    const session = getSession(req);
+    if (!session) return sendJson(res, 401, { error: "Sign-in required" });
+    if (!SLACK_BOT_TOKEN) return sendJson(res, 501, { error: "Slack is not configured on this server" });
+    const last = approvalResendAt.get(session.userId) || 0;
+    if (Date.now() - last < 60000) return sendJson(res, 429, { error: "Already sent a moment ago — wait a minute before sending again." });
+    approvalResendAt.set(session.userId, Date.now());
+    const colls = approvalSlack.APPROVAL_COLLECTIONS;
+    const [users, teams, ...lists] = await Promise.all([
+      mongoDb.collection("users").find({}, { projection: { _id: 0, id: 1, name: 1, teamId: 1 } }).toArray(),
+      mongoDb.collection("teams").find({}, { projection: { _id: 0, id: 1, leaderId: 1 } }).toArray(),
+      ...colls.map((c) => mongoDb.collection(c).find({}, { projection: { _id: 0 } }).toArray())
+    ]);
+    const records = Object.fromEntries(colls.map((c, i) => [c, lists[i]]));
+    const pending = findPendingApprovals({ records, users, teams }).filter((p) => session.isAdmin || p.approverUserId === session.userId);
+    sendJson(res, 200, { queued: pending.length });
+    (async () => {
+      for (const p of pending) {
+        // the message goes to whoever holds it NOW, and carries buttons that act on the record itself
+        const rec = { ...p.rec, approval: { ...(p.rec.approval || { status: "pending" }), approverUserId: p.approverUserId } };
+        await notifyApprovalRequest(p.coll, rec);
+        await new Promise((r) => setTimeout(r, 700));
+      }
+    })().catch((e) => console.error("approval slack-resend failed:", e.message));
+    return;
+  }
   if (req.method === "POST" && urlPath === "/api/slack/actions") {
     // Slack's "Interactivity & Shortcuts" Request URL — a button click
     // (Close Snag / Approve Report) posts here. Verified via Slack's own
@@ -1598,6 +1775,26 @@ async function handleApi(req, res, urlPath) {
     if (!ok) return sendJson(res, 401, { error: "Invalid Slack signature" });
 
     const payload = parseSlackActionPayload(rawBody);
+
+    // The Reject form was submitted: Slack needs a validation answer in the HTTP
+    // reply itself (an empty remark keeps the form open), the real work follows.
+    if (payload?.type === "view_submission") {
+      const sub = approvalSlack.parseRejectSubmission(payload);
+      if (!sub) return sendJson(res, 200, {});
+      if (!sub.remark) return sendJson(res, 200, approvalSlack.remarkRequiredResponse());
+      (async () => {
+        try {
+          const actor = await appUserForSlackUserId(payload.user?.id);
+          const out = await decideApprovalFromSlack({ coll: sub.coll, id: sub.id, status: "rejected", remark: sub.remark, actor });
+          if (sub.channel && sub.ts) await slackUpdateMessage(sub.channel, sub.ts, out.message);
+          else if (!out.ok && payload.user?.id) await slackPostMessage(payload.user.id, out.message, undefined, { noCopy: true });
+        } catch (e) {
+          console.error("Slack reject submission failed:", e.message);
+        }
+      })();
+      return sendJson(res, 200, {});
+    }
+
     const action = payload?.actions?.[0];
     const parsed = action ? parseActionId(action.action_id) : null;
 
@@ -1621,7 +1818,25 @@ async function handleApi(req, res, urlPath) {
       // notifySlack/notifyEvent already use elsewhere in this file.
       (async () => {
         try {
+          // Reject opens the form first, while Slack's short-lived trigger_id is still valid
+          if (parsed.kind === "approval_reject") {
+            const ent = approvalSlack.parseApprovalEntity(parsed.entityId);
+            if (ent) {
+              const summary = String(payload.message?.text || "").split("\n")[0];
+              await slackOpenView(payload.trigger_id, approvalSlack.rejectModal({ coll: ent.coll, id: ent.id, summary, channel: payload.channel?.id, ts: payload.message?.ts }));
+            }
+            return;
+          }
           const actor = await appUserForSlackUserId(payload.user?.id);
+          if (parsed.kind === "approval_approve") {
+            const ent = approvalSlack.parseApprovalEntity(parsed.entityId);
+            if (!ent) { await respond("⚠️ That item can't be approved here."); return; }
+            const out = await decideApprovalFromSlack({ coll: ent.coll, id: ent.id, status: "approved", actor });
+            // a refusal leaves the buttons where they are (so a wrong click doesn't kill the request)
+            if (out.ok) await respond(out.message);
+            else if (payload.user?.id) await slackPostMessage(payload.user.id, out.message, undefined, { noCopy: true });
+            return;
+          }
           if (parsed.kind === "snag_close") {
             const snag = await mongoDb.collection("snags").findOne({ id: parsed.entityId });
             if (!snag) { await respond("⚠️ That snag no longer exists."); return; }
@@ -1836,7 +2051,7 @@ async function handleApi(req, res, urlPath) {
         if (leader) {
           const summaryText = slackSummaryFor(report);
           slackUserIdForEmail(leader.email, leader.slackId)
-            .then((uid) => uid && slackPostMessage(uid, summaryText, teamReportApproveBlocks(summaryText, report.id)))
+            .then((uid) => uid && slackPostMessage(uid, summaryText, teamReportApproveBlocks(summaryText, report.id), { to: leader.name || "the team leader" }))
             .catch((e) => console.error("Daily Team Report Slack DM failed:", team.id, e.message));
         }
       }

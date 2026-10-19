@@ -87,4 +87,31 @@ function resolveApprovalOnUpdate({ existing, incoming, session, creatorId, now, 
   };
 }
 
-module.exports = { deriveApprovalOnCreate, resolveApprovalOnUpdate, STATUSES };
+/** Every record that is waiting on someone right now, and who holds it.
+ *  records = { <collection>: [record, …], … }. A record counts if it has a pending
+ *  approval, OR if it has none at all (saved before approval existed) but its
+ *  author is on a team — those are decided by that team's leader too. The holder
+ *  is the author's CURRENT team leader, falling back to the approver stored on
+ *  the record. Never the author themselves. */
+function findPendingApprovals({ records, users, teams }) {
+  const out = [];
+  for (const coll of Object.keys(records || {})) {
+    for (const rec of records[coll] || []) {
+      const creatorId = rec.inspectorUserId || rec.recordedByUserId;
+      const current = deriveApprovalOnCreate({ creatorId, users, teams });
+      let approverUserId;
+      if (rec.approval) {
+        if (rec.approval.status !== "pending") continue;
+        approverUserId = (current && current.approverUserId) || rec.approval.approverUserId;
+      } else {
+        if (!current) continue;
+        approverUserId = current.approverUserId;
+      }
+      if (!approverUserId || approverUserId === creatorId) continue;
+      out.push({ coll, rec, approverUserId });
+    }
+  }
+  return out;
+}
+
+module.exports = { deriveApprovalOnCreate, resolveApprovalOnUpdate, findPendingApprovals, STATUSES };

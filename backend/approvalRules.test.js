@@ -1,5 +1,5 @@
 const assert = require("assert");
-const { deriveApprovalOnCreate, resolveApprovalOnUpdate } = require("./approvalRules.js");
+const { deriveApprovalOnCreate, resolveApprovalOnUpdate, findPendingApprovals } = require("./approvalRules.js");
 
 let passed = 0;
 function test(name, fn) {
@@ -139,6 +139,33 @@ test("if the author is no longer on any team, the stored approver still stands",
 test("the author still can't approve their own work, and a pending-to-pending copy changes nothing", () => {
   assert.strictEqual(askStale({ status: "approved" }, { userId: "NAMAN" }).ok, false);
   assert.deepStrictEqual(askStale({ status: "pending", approverUserId: "NAMAN" }, { userId: "NAMAN" }).approval, stale.approval);
+});
+
+console.log("finding everything that is pending right now");
+const pool = {
+  qualityInspections: [
+    { id: "A", inspectorUserId: "NAMAN", approval: { status: "pending", approverUserId: "OLDLEADER" } }, // saved under a previous leader
+    { id: "B", inspectorUserId: "SHUBHAM", approval: { status: "approved", approverUserId: "RISHABH" } },  // decided - not pending
+    { id: "C", inspectorUserId: "NAMAN" },                                                                // older record, author on a team
+    { id: "D", inspectorUserId: "LONE" },                                                                 // older record, author on no team - free
+    { id: "E", inspectorUserId: "LEADER2" },                                                              // author leads their own team - free
+    { id: "F", inspectorUserId: "NAMAN", approval: { status: "rejected", approverUserId: "RISHABH", remark: "x" } }
+  ],
+  materialMeasurements: [{ id: "M", recordedByUserId: "SHUBHAM", approval: { status: "pending", approverUserId: "RISHABH" } }],
+  workMeasurements: []
+};
+test("lists pending and older-unreviewed records, grouped under the CURRENT leader", () => {
+  const got = findPendingApprovals({ records: pool, users, teams });
+  assert.deepStrictEqual(got.map((p) => p.rec.id).sort(), ["A", "C", "M"]);
+  for (const p of got) assert.strictEqual(p.approverUserId, "RISHABH"); // A moved from OLDLEADER to the current leader
+});
+test("decided, rejected, team-less and leader-authored records are not listed", () => {
+  const ids = findPendingApprovals({ records: pool, users, teams }).map((p) => p.rec.id);
+  for (const gone of ["B", "D", "E", "F"]) assert.ok(!ids.includes(gone), gone);
+});
+test("nothing is listed when there is nothing to do, and a missing team table is safe", () => {
+  assert.deepStrictEqual(findPendingApprovals({ records: { qualityInspections: [] }, users, teams }), []);
+  assert.deepStrictEqual(findPendingApprovals({ records: {}, users, teams }), []);
 });
 
 console.log(`\n${passed} passed`);

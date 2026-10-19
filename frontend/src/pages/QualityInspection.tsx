@@ -10,7 +10,7 @@ import { hasModuleGrant } from "../shared/permissionMatrix";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
 import { approvalFor, effectiveApproval } from "../shared/approval";
-import { ApprovalBadge, ApprovalActions } from "../components/ApprovalControls";
+import { ApprovalBadge, ApprovalActions, SendApprovalsToSlackButton } from "../components/ApprovalControls";
 import PhotoGroupUploader from "../components/PhotoGroupUploader";
 import SidePanel from "../components/SidePanel";
 import StatTile from "../components/StatTile";
@@ -153,6 +153,29 @@ This cannot be undone.`)) return;
     await apply(ops);
     toast("Inspection deleted");
   }
+
+  // Pieces shared by the desktop table row and the mobile card, so the two
+  // layouts always show the same thing.
+  const snagSummary = (insp: QI, snag: Snag | null, overdue: boolean) =>
+    !snag ? <span className="text-[var(--text-sub)]">—</span> : (
+      <div>
+        <Badge color={snag.status === "Closed" ? "green" : overdue ? "red" : "amber"}>
+          <span className="whitespace-nowrap">{snag.status === "Closed" ? "Resolved" : overdue ? "Overdue" : snag.status}</span>
+        </Badge>
+        <div className="text-[10.5px] text-[var(--text-muted)] mt-1">
+          {insp.correctiveAction?.assignedToName} · due {insp.correctiveAction?.targetDate}
+        </div>
+      </div>
+    );
+  const rowActions = (insp: QI, snag: Snag | null, row: boolean) => (
+    <div className={row ? "flex flex-col gap-1.5 items-start" : "flex flex-wrap gap-1.5"} onClick={(e) => e.stopPropagation()}>
+      <Btn label="History" color="secondary" size="sm" onClick={() => setHistoryFloor({ floorId: insp.floorId, floorLabel: insp.floorName })} />
+      {canCreate && insp.result !== "Pass" && snag?.status !== "Closed" && (
+        <Btn label="Re-inspect" color="secondary" size="sm" onClick={() => { setReInspectOf(insp); setPanelOpen(true); }} />
+      )}
+      {isAdmin && <Btn label="Delete" color="secondary" size="sm" onClick={() => deleteInspection(insp)} />}
+    </div>
+  );
 
   function linkedSnag(insp: QI): Snag | null {
     return insp.linkedSnagId ? byId(snags, insp.linkedSnagId) : null;
@@ -335,6 +358,7 @@ This cannot be undone.`)) return;
         </div>
         <Btn label={generating ? "Generating…" : "Generate Report"} color="secondary" icon="download" onClick={generateReport} disabled={generating} />
         <Btn label="Fail Register" color="secondary" icon="bug" onClick={() => setActiveTab("qualityFails" as TabKey)} />
+        {isAdmin && <SendApprovalsToSlackButton label="Send pending approvals to Slack" />}
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
@@ -344,7 +368,46 @@ This cannot be undone.`)) return;
         <StatTile label="Resolved Issues" value={resolvedCount} icon="award" />
       </div>
 
-      <Card padded={false} className="p-[18px]">
+      <Card padded={false} className="p-3 md:p-[18px]">
+        {/* phones: one card per inspection instead of a table that scrolls sideways */}
+        <div className="md:hidden flex flex-col gap-2.5">
+          {filtered.length === 0 && <div className="py-6 text-center text-[13px] text-[var(--text-muted)]">No inspections recorded yet.</div>}
+          {filtered.map((insp) => {
+            const snag = linkedSnag(insp);
+            const overdue = !!snag && snag.status !== "Closed" && !!snag.dueAt && snag.dueAt < Date.now();
+            return (
+              <div
+                key={insp.id}
+                className="border border-[var(--border)] rounded-radius-md p-3.5 bg-[var(--bg-card)]"
+                onClick={() => setHistoryFloor({ floorId: insp.floorId, floorLabel: insp.floorName })}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-[14px] font-bold leading-snug">{insp.floorName}{insp.unitName ? ` / ${insp.unitName}` : ""}</div>
+                    {insp.workType && <div className="text-[11.5px] text-[var(--text-muted)] mt-0.5">{insp.workType}</div>}
+                  </div>
+                  <div className="shrink-0 flex flex-col items-end gap-1">
+                    <Badge color={insp.result === "Pass" ? "green" : insp.result === "Fail" ? "red" : "amber"}>
+                      <span className="whitespace-nowrap">{insp.result}</span>
+                    </Badge>
+                    <ApprovalBadge approval={effectiveApproval(data, insp)} />
+                  </div>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-[11.5px] text-[var(--text-muted)]">
+                  <span>{insp.inspectionDate}</span>
+                  <span>{insp.projectCode}</span>
+                  <span>by {insp.inspectorName}</span>
+                </div>
+                {insp.itemDescription && <div className="mt-1 text-[11.5px] text-[var(--text-muted)]">{insp.workOrderNo} · {insp.itemDescription}</div>}
+                {snag && <div className="mt-2.5">{snagSummary(insp, snag, overdue)}</div>}
+                <div className="mt-3">{rowActions(insp, snag, false)}</div>
+                <div onClick={(e) => e.stopPropagation()}><ApprovalActions collName="qualityInspections" record={insp} /></div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="hidden md:block">
         <Table
           columns={["Date", "Project", "Floor", "VMS Reference", "Result", "Inspector", "Snag / Corrective Action", ""]}
           // Fixed px widths (not %) so the table keeps its natural size on a
@@ -380,31 +443,13 @@ This cannot be undone.`)) return;
                   <div onClick={(e) => e.stopPropagation()}><ApprovalActions collName="qualityInspections" record={insp} /></div>
                 </TableCell>
                 <TableCell muted className="truncate max-w-0">{insp.inspectorName}</TableCell>
-                <TableCell>
-                  {!snag ? <span className="text-[var(--text-sub)]">—</span> : (
-                    <div>
-                      <Badge color={snag.status === "Closed" ? "green" : overdue ? "red" : "amber"}>
-                        <span className="whitespace-nowrap">{snag.status === "Closed" ? "Resolved" : overdue ? "Overdue" : snag.status}</span>
-                      </Badge>
-                      <div className="text-[10.5px] text-[var(--text-muted)] mt-1 truncate">
-                        {insp.correctiveAction?.assignedToName} · due {insp.correctiveAction?.targetDate}
-                      </div>
-                    </div>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-col gap-1.5 items-start" onClick={(e) => e.stopPropagation()}>
-                    <Btn label="History" color="secondary" size="sm" onClick={() => setHistoryFloor({ floorId: insp.floorId, floorLabel: insp.floorName })} />
-                    {canCreate && insp.result !== "Pass" && snag?.status !== "Closed" && (
-                      <Btn label="Re-inspect" color="secondary" size="sm" onClick={() => { setReInspectOf(insp); setPanelOpen(true); }} />
-                    )}
-                    {isAdmin && <Btn label="Delete" color="secondary" size="sm" onClick={() => deleteInspection(insp)} />}
-                  </div>
-                </TableCell>
+                <TableCell>{snagSummary(insp, snag, overdue)}</TableCell>
+                <TableCell>{rowActions(insp, snag, true)}</TableCell>
               </TableRow>
             );
           })}
         </Table>
+        </div>
       </Card>
 
       <InspectionForm

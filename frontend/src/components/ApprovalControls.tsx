@@ -1,5 +1,6 @@
-import React, { useState } from "react";
-import { useApp } from "../context/AppContext";
+import React, { useEffect, useState } from "react";
+import { useApp, authHeaders } from "../context/AppContext";
+import { API_BASE } from "../services/config";
 import { buildEventOp } from "../shared/eventLog";
 import { canDecide, decideOp, describeRecord, effectiveApproval, KIND_LABEL, pendingFor, rejectedFor, type ApprovalColl } from "../shared/approval";
 import type { Approval } from "../types";
@@ -7,6 +8,8 @@ import Badge from "../ui/tw/Badge";
 import Btn from "../ui/tw/Btn";
 import Card from "../ui/tw/Card";
 import NavIcon from "./NavIcon";
+import SidePanel from "./SidePanel";
+import { coll } from "../shared/rules";
 
 /** Where a record stands: Pending approval / Approved / Rejected (with the leader's remark). */
 export function ApprovalBadge({ approval }: { approval?: Approval }) {
@@ -70,25 +73,188 @@ export function ApprovalActions({ collName, record }: { collName: ApprovalColl; 
   );
 }
 
+/** Sends what is waiting on this person (everything, for Admin) to Slack with
+ *  Approve / Reject buttons — for work saved before Slack approvals existed. */
+export function SendApprovalsToSlackButton({ label = "Send to Slack" }: { label?: string }) {
+  const { toast } = useApp();
+  const [busy, setBusy] = useState(false);
+  async function send() {
+    setBusy(true);
+    try {
+      const r = await fetch(API_BASE + "/api/approvals/slack-resend", { method: "POST", headers: authHeaders() });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) toast(j.error || "Couldn't send to Slack");
+      else toast(j.queued ? `Sending ${j.queued} approval${j.queued === 1 ? "" : "s"} to Slack…` : "Nothing is waiting for approval.");
+    } catch {
+      toast("Couldn't reach the server");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return <Btn label={busy ? "Sending…" : label} color="secondary" size="sm" icon="send" onClick={send} disabled={busy} />;
+}
+
+const FIELD_LABEL = "text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-0.5";
+
+function Detail({ label, children }: { label: string; children?: React.ReactNode }) {
+  if (children == null || children === "" || children === false) return null;
+  return <div className="mb-3"><div className={FIELD_LABEL}>{label}</div><div className="text-[13px] leading-snug">{children}</div></div>;
+}
+
+function Photos({ photos }: { photos?: { url: string }[] }) {
+  if (!photos || photos.length === 0) return null;
+  return (
+    <Detail label={`Photos (${photos.length})`}>
+      <div className="flex flex-wrap gap-2">
+        {photos.map((p, i) => (
+          <img key={i} src={p.url} alt="" onClick={() => window.open(p.url, "_blank")}
+            className="w-16 h-16 object-cover rounded-radius-sm border border-[var(--border)] cursor-pointer" />
+        ))}
+      </div>
+    </Detail>
+  );
+}
+
+const STATUS_COLOR: Record<string, string> = { OK: "#16a34a", "Not OK": "#dc2626", "N/A": "var(--text-muted)" };
+
+/** The whole record, laid out so a leader can judge it before deciding. */
+function RecordDetails({ collName, rec }: { collName: ApprovalColl; rec: any }) {
+  if (collName === "qualityInspections") {
+    const color = rec.result === "Pass" ? "#16a34a" : rec.result === "Fail" ? "#dc2626" : "#d97706";
+    return (
+      <>
+        <Detail label="Project">{rec.projectCode} — {rec.projectName}</Detail>
+        <Detail label="Location">{rec.floorName}{rec.unitName ? ` / ${rec.unitName}` : " (whole floor)"}</Detail>
+        <Detail label="Checklist">{rec.workType}</Detail>
+        <Detail label="Result"><b style={{ color }}>{rec.result}</b></Detail>
+        <Detail label="Inspected by">{rec.inspectorName} · {rec.inspectionDate}</Detail>
+        <Detail label="Contractor">{rec.contractor}</Detail>
+        <Detail label="VMS item">{rec.itemDescription ? `${rec.workOrderNo || ""} · ${rec.itemDescription}` : ""}</Detail>
+        {rec.checklistItems?.length > 0 && (
+          <Detail label="Checklist points">
+            <div className="border border-[var(--border)] rounded-radius-sm">
+              {rec.checklistItems.map((c: any, i: number) => (
+                <div key={i} className="px-2.5 py-2 border-b border-[var(--border)] last:border-b-0 text-[12.5px]">
+                  <div className="flex gap-2 justify-between">
+                    <span>{c.text}</span>
+                    <b className="shrink-0 whitespace-nowrap" style={{ color: STATUS_COLOR[c.status] }}>{c.status}</b>
+                  </div>
+                  {c.remarks && <div className="text-[11.5px] text-[var(--text-muted)] mt-0.5">{c.remarks}</div>}
+                </div>
+              ))}
+            </div>
+          </Detail>
+        )}
+        <Detail label="Remarks">{rec.remarks}</Detail>
+        <Photos photos={rec.photos} />
+        {rec.correctiveAction && <Detail label="Corrective action">{rec.correctiveAction.assignedToName} · due {rec.correctiveAction.targetDate}</Detail>}
+        <Detail label="Snag raised">{rec.linkedSnagId}</Detail>
+      </>
+    );
+  }
+  if (collName === "materialMeasurements") {
+    return (
+      <>
+        <Detail label="Project">{rec.projectCode} — {rec.projectName}</Detail>
+        <Detail label="Location">{rec.floorName} / {rec.unitName}</Detail>
+        <Detail label="Recorded by">{rec.recordedByName} · {rec.measurementDate}</Detail>
+        <Detail label="VMS item">{rec.itemDescription ? `${rec.workOrderNo || ""} · ${rec.itemDescription}${rec.itemIsCustom ? " (typed in, not in VMS)" : ""}` : ""}</Detail>
+        <Detail label="Measured">{rec.measuredQty} {rec.measuredUnit}</Detail>
+        <Detail label="Material consumed">{rec.materialConsumedQty} {rec.materialUnit}</Detail>
+        <Detail label="Unused balance / wastage">{rec.unusedBalanceQty} / {rec.wastageQty} {rec.materialUnit}</Detail>
+        <Detail label="Remarks">{rec.remarks}</Detail>
+      </>
+    );
+  }
+  const loc = rec.location || {};
+  const where = [loc.tower && `Tower ${loc.tower}`, loc.floor && `Floor ${loc.floor}`, loc.flat && `Flat ${loc.flat}`, loc.area].filter(Boolean).join(" · ");
+  const d = rec.dimensions || {};
+  const dims = ([["L", d.length], ["W", d.width], ["H", d.height], ["T", d.thickness]] as const).filter(([, v]) => v != null).map(([k, v]) => `${k} ${v}`).join(" × ");
+  return (
+    <>
+      <Detail label="Project">{rec.projectCode} — {rec.projectName}</Detail>
+      <Detail label="Location">{where}</Detail>
+      <Detail label="Work category">{rec.category}</Detail>
+      <Detail label="Recorded by">{rec.recordedByName} · {rec.measurementDate}</Detail>
+      <Detail label="Measured">{rec.measuredQty} {rec.measuredUnit}</Detail>
+      <Detail label="Dimensions">{dims}</Detail>
+      <Detail label="VMS item">{rec.linkedItemDescription ? `${rec.linkedWorkOrderNo || ""} · ${rec.linkedItemDescription}` : ""}</Detail>
+      <Detail label="Remarks">{rec.remarks}</Detail>
+      <Photos photos={rec.photos} />
+    </>
+  );
+}
+
+/** Opens from a queue row: the full record, then (for the person who may decide it) Approve / Reject. */
+export function ApprovalReviewPanel({ item, onClose, closeWhenDecided }: {
+  item: { coll: ApprovalColl; rec: any } | null; onClose: () => void; closeWhenDecided?: boolean;
+}) {
+  const { data, currentUserId } = useApp();
+  const live = item ? ((coll(data, item.coll) as any[]).find((r) => r.id === item.rec.id) || item.rec) : null;
+  const decidable = !!item && canDecide(data, currentUserId, live);
+  // once the decision is saved there is nothing left to do here
+  useEffect(() => { if (closeWhenDecided && item && !decidable) onClose(); }, [closeWhenDecided, item?.rec.id, decidable]); // eslint-disable-line react-hooks/exhaustive-deps
+  const approval = live ? effectiveApproval(data, live) : undefined;
+  return (
+    <SidePanel
+      open={!!item}
+      wide
+      icon={<NavIcon name="award" size={18} />}
+      title={item ? `${KIND_LABEL[item.coll]} · ${describeRecord(item.coll, live)}` : ""}
+      desc={live ? `by ${live.inspectorName || live.recordedByName || "—"} · ${live.inspectionDate || live.measurementDate || ""}` : ""}
+      onClose={onClose}
+    >
+      {item && live && (
+        <>
+          <div className="mb-4"><ApprovalBadge approval={approval} /></div>
+          <RecordDetails collName={item.coll} rec={live} />
+          {decidable && (
+            <div className="mt-2 pt-3 border-t border-[var(--border)]">
+              <div className={FIELD_LABEL}>Your decision</div>
+              <ApprovalActions collName={item.coll} record={live} />
+            </div>
+          )}
+        </>
+      )}
+    </SidePanel>
+  );
+}
+
 const sectionLabel = "text-[13px] font-bold tracking-tight text-[var(--text-sub)] uppercase flex items-center gap-2 mb-2.5";
 
 /** Dashboard section for a team leader: their team's inspections/measurements waiting on them. */
 export function ApprovalQueue() {
   const { data, currentUserId } = useApp();
   const [showAll, setShowAll] = useState(false);
+  const [open, setOpen] = useState<{ coll: ApprovalColl; rec: any } | null>(null);
   const items = pendingFor(data, currentUserId);
   if (items.length === 0) return null;
   return (
     <>
-      <div className={sectionLabel}><NavIcon name="award" size={13} /> Awaiting My Approval <span className="text-[11px] font-medium normal-case text-[var(--text-muted)]">· {items.length}</span></div>
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-2.5">
+        <div className="text-[13px] font-bold tracking-tight text-[var(--text-sub)] uppercase flex items-center gap-2"><NavIcon name="award" size={13} /> Awaiting My Approval <span className="text-[11px] font-medium normal-case text-[var(--text-muted)]">· {items.length}</span></div>
+        <SendApprovalsToSlackButton label="Send these to Slack" />
+      </div>
       <Card padded={false} className="mb-6">
         {(showAll ? items : items.slice(0, 8)).map(({ coll: c, rec }) => (
-          <div key={rec.id} className="py-3 px-4 border-b border-[var(--border)] last:border-b-0">
-            <div className="text-[13px] font-bold">{KIND_LABEL[c]} · {describeRecord(c, rec)}</div>
-            <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
-              by {rec.inspectorName || rec.recordedByName || "—"}{rec.inspectionDate || rec.measurementDate ? ` · ${rec.inspectionDate || rec.measurementDate}` : ""}
+          <div
+            key={rec.id}
+            role="button"
+            tabIndex={0}
+            onClick={() => setOpen({ coll: c, rec })}
+            onKeyDown={(e) => { if (e.key === "Enter") setOpen({ coll: c, rec }); }}
+            className="py-3 px-4 border-b border-[var(--border)] last:border-b-0 cursor-pointer hover:bg-[var(--bg-card-hover)]"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[13px] font-bold">{KIND_LABEL[c]} · {describeRecord(c, rec)}</div>
+                <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                  by {rec.inspectorName || rec.recordedByName || "—"}{rec.inspectionDate || rec.measurementDate ? ` · ${rec.inspectionDate || rec.measurementDate}` : ""}
+                </div>
+              </div>
+              <span className="text-[11px] font-semibold text-[var(--theme-primary)] whitespace-nowrap shrink-0">View details ›</span>
             </div>
-            <ApprovalActions collName={c} record={rec} />
+            <div onClick={(e) => e.stopPropagation()}><ApprovalActions collName={c} record={rec} /></div>
           </div>
         ))}
         {items.length > 8 && (
@@ -97,6 +263,7 @@ export function ApprovalQueue() {
           </button>
         )}
       </Card>
+      <ApprovalReviewPanel item={open} onClose={() => setOpen(null)} closeWhenDecided />
     </>
   );
 }
@@ -104,6 +271,7 @@ export function ApprovalQueue() {
 /** Dashboard section for a team member: their work the leader sent back. */
 export function SentBackList() {
   const { data, currentUserId } = useApp();
+  const [open, setOpen] = useState<{ coll: ApprovalColl; rec: any } | null>(null);
   const items = rejectedFor(data, currentUserId);
   if (items.length === 0) return null;
   return (
@@ -111,15 +279,23 @@ export function SentBackList() {
       <div className={sectionLabel}><NavIcon name="bug" size={13} /> Sent Back To Redo <span className="text-[11px] font-medium normal-case text-[var(--text-muted)]">· {items.length}</span></div>
       <Card padded={false} className="mb-6">
         {items.slice(0, 6).map(({ coll: c, rec }) => (
-          <div key={rec.id} className="py-3 px-4 border-b border-[var(--border)] last:border-b-0">
+          <div
+            key={rec.id}
+            role="button"
+            tabIndex={0}
+            onClick={() => setOpen({ coll: c, rec })}
+            onKeyDown={(e) => { if (e.key === "Enter") setOpen({ coll: c, rec }); }}
+            className="py-3 px-4 border-b border-[var(--border)] last:border-b-0 cursor-pointer hover:bg-[var(--bg-card-hover)]"
+          >
             <div className="text-[13px] font-bold">{KIND_LABEL[c]} · {describeRecord(c, rec)}</div>
             <div className="text-[11.5px] mt-1" style={{ color: "var(--color-fail)" }}>
               {rec.approval?.approverName || "Team leader"}: {rec.approval?.remark || "no remark"}
             </div>
-            <div className="text-[10.5px] text-[var(--text-muted)] mt-0.5">Record a new one to replace it.</div>
+            <div className="text-[10.5px] text-[var(--text-muted)] mt-0.5">Record a new one to replace it. · View details ›</div>
           </div>
         ))}
       </Card>
+      <ApprovalReviewPanel item={open} onClose={() => setOpen(null)} />
     </>
   );
 }

@@ -96,12 +96,25 @@ export default function RecordModal() {
         </select>
       );
     } else if (f.type === "ref") {
-      let opts = coll(data, f.coll!).filter((r: any) => r.active !== false);
+      // A person picker (Team Leader, Permission user…) lists EVERYONE, sorted by
+      // name, with their role beside the name — so "Rishi" and "Rishabh" can't be
+      // mixed up — and inactive people are shown greyed out and labelled rather
+      // than silently missing (an inactive account can't be picked, but you can
+      // now see that it is the reason).
+      const isUsers = f.coll === "users";
+      let opts = coll(data, f.coll!).filter((r: any) => isUsers || r.active !== false);
       if (f.coll === "floors" || f.coll === "units") opts = opts.filter((r: any) => r.projectId === currentProjectId);
+      if (isUsers) opts = [...opts].sort((a: any, b: any) => String(a.name || "").localeCompare(String(b.name || "")));
       inner = (
         <select className="select" value={v ?? ""} onChange={(e) => setV(f.k, e.target.value)}>
           <option value="">—</option>
-          {opts.map((o: any) => <option key={o.id} value={o.id}>{refLabel(data, f.coll!, o.id)}</option>)}
+          {opts.map((o: any) => {
+            const inactive = isUsers && o.active === false;
+            const label = isUsers
+              ? `${refLabel(data, f.coll!, o.id)} · ${(ROLES as any)[o.role]?.name || o.role || "no role"}${inactive ? " (inactive)" : ""}`
+              : refLabel(data, f.coll!, o.id);
+            return <option key={o.id} value={o.id} disabled={inactive && o.id !== v}>{label}</option>;
+          })}
         </select>
       );
     } else if (f.type === "bool") {
