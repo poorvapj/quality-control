@@ -209,9 +209,19 @@ async function slackUserIdForEmail(email, knownSlackId) {
 const SLACK_COPY_TO_EMAILS = (process.env.SLACK_COPY_TO_EMAILS !== undefined ? process.env.SLACK_COPY_TO_EMAILS : "poorva@neotericgrp.in")
   .split(",").map((e) => e.trim()).filter(Boolean);
 
+// Only the real production database should ever page a real person on
+// Slack — a local/dev run (MONGODB_DB unset or pointing at a dev/test
+// database) talks to test data, and a stray approval ping from that to
+// someone's actual Slack DM is confusing at best. Checked once, here, at
+// the one place a message is actually sent — not by chasing down every
+// call site that might send one.
+const LIVE_SLACK_DB = "project_quality";
+const slackEnabledForThisDb = process.env.MONGODB_DB === LIVE_SLACK_DB;
+
 // The one place a message is actually sent. Returns Slack's reply (it carries the
 // DM channel id and the message ts, needed to update the message later).
 async function slackPostRaw(channel, text, blocks) {
+  if (!slackEnabledForThisDb) { console.log(`Slack message suppressed (MONGODB_DB=${process.env.MONGODB_DB || "unset"}, not ${LIVE_SLACK_DB}):`, text); return null; }
   if (!SLACK_BOT_TOKEN || !channel) return null;
   try {
     const res = await fetch("https://slack.com/api/chat.postMessage", {
@@ -269,6 +279,7 @@ async function slackOpenView(triggerId, view) {
 
 // Replaces a message we sent earlier with plain text (drops its buttons).
 async function slackUpdateMessage(channel, ts, text) {
+  if (!slackEnabledForThisDb) { console.log(`Slack update suppressed (MONGODB_DB=${process.env.MONGODB_DB || "unset"}, not ${LIVE_SLACK_DB}):`, text); return; }
   if (!SLACK_BOT_TOKEN || !channel || !ts) return;
   try {
     const res = await fetch("https://slack.com/api/chat.update", {
