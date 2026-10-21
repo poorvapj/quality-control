@@ -919,7 +919,14 @@ function InspectionForm({
 
     setSaving(true);
     const assignee = users.find((u) => u.id === assignedToUserId);
-    const id = nextId("QI", allInspections); // BUG FIX: was nextId("QI", []), which always returned "QI-0001" and silently overwrote every previous inspection on every new submission
+    // BUG FIX: was nextId("QI", []), which always returned "QI-0001" and
+    // silently overwrote every previous inspection on every new submission.
+    // Must scan the FULL collection, not `allInspections` (scoped to the
+    // signed-in user's allowed projects) — a user restricted to a subset of
+    // projects (e.g. Deepti Dixit) would otherwise compute the max id from
+    // only their visible projects and collide with a newer inspection
+    // saved in a project they can't see, silently overwriting it.
+    const id = nextId("QI", coll(data, "qualityInspections"));
     const needsSnag = result !== "Pass";
     // Snag id/record built up-front so it can be cross-referenced from the
     // inspection record in the SAME apply() batch — both are brand-new
