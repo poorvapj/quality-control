@@ -195,9 +195,21 @@ export default function DailyProgressReportPage() {
 
     const projectSummary = labourByProject.map(({ project, total }) => {
       const projRows = rows.filter((r) => r.projectId === project.id);
+      // Major Work Type = the category that actually had the most MANPOWER
+      // on it, not just the one logged in the most rows. A row's labourCount
+      // is one crew's full headcount for the day, credited to every category
+      // that crew logged (a DPR row rarely splits labour across its own
+      // categories) — so a category 10 people worked vs another 1 person
+      // merely logged outranks it, which a plain entry-count tally couldn't
+      // tell apart (that's what made Civil/Electrical/Plumbing/RCC — each
+      // logged in exactly one entry on the only reporting day in range —
+      // look like a 4-way tie and flip unpredictably between report runs).
+      const catLabour = new Map<string, number>();
       const catCounts = new Map<string, number>();
       const byVendor = new Map<string, { vendorCode: string; vendorName: string; labourCount: number; categories: Set<string> }>();
       for (const r of projRows) {
+        const rowCategories = new Set(r.workEntries.map((we) => we.category));
+        rowCategories.forEach((cat) => catLabour.set(cat, (catLabour.get(cat) || 0) + (r.labourCount || 0)));
         r.workEntries.forEach((we) => catCounts.set(we.category, (catCounts.get(we.category) || 0) + 1));
         const key = r.vendorCode || r.vendorName;
         if (!byVendor.has(key)) byVendor.set(key, { vendorCode: r.vendorCode, vendorName: r.vendorName, labourCount: 0, categories: new Set() });
@@ -205,12 +217,12 @@ export default function DailyProgressReportPage() {
         v.labourCount += r.labourCount || 0;
         r.workEntries.forEach((we) => v.categories.add(we.category));
       }
-      // Tie-broken alphabetically — two categories with the same count must
-      // always pick the same winner, regardless of which DPR row happened
-      // to be processed first (that order isn't guaranteed stable, which is
-      // exactly what made this flip between two generations of the same
-      // report with identical underlying counts).
-      const majorWorkType = Array.from(catCounts.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] || "—";
+      // Tie-break chain: most labour, then most log entries, then
+      // alphabetical — fully deterministic, so the same underlying data
+      // always produces the same answer regardless of row processing order
+      // or which report run it was generated in.
+      const majorWorkType = Array.from(catLabour.keys())
+        .sort((a, b) => (catLabour.get(b)! - catLabour.get(a)!) || (catCounts.get(b)! - catCounts.get(a)!) || a.localeCompare(b))[0] || "—";
       const prevTotal = prevBounds ? prevRows.filter((r) => r.projectId === project.id).reduce((a, r) => a + (r.labourCount || 0), 0) : null;
       const changePct = prevTotal != null && prevTotal > 0 ? Math.round(((total - prevTotal) / prevTotal) * 100) : null;
       const vendorBreakdown = Array.from(byVendor.values())
@@ -289,10 +301,15 @@ export default function DailyProgressReportPage() {
     // Drawing Requests: VMS's own list, so the report shows VMS's current
     // stage per ticket and includes tickets raised only in VMS. Same filters
     // as the page (project; a DRI sees only their own, matched by name since
-    // VMS has no QC user id). If VMS can't be read, fall back to QC's copy and
-    // say so, instead of silently producing a different table.
+    // VMS has no QC user id) — AND the same date range as every other table
+    // in this report. Both the QC fallback list and the VMS fetch below used
+    // to skip this, so the KPI/table counted every drawing request ever
+    // raised regardless of the chosen period (e.g. picking "13 Oct–today"
+    // still pulled in tickets from months earlier) while VMS's own report
+    // correctly scopes to the period — the two counts could never match.
+    const inBounds = (createdAt: number) => !bounds || (() => { const d = ymd(new Date(createdAt)); return d >= bounds.from && d <= bounds.to; })();
     type ReportDr = { ticketNo: string; description: string; projectName: string; driName: string; stageLabel: string; requestedOn: string; daysSince: number; open: boolean };
-    let reportDrawingRequests: ReportDr[] = allDrawingRequests.map((r) => ({
+    let reportDrawingRequests: ReportDr[] = allDrawingRequests.filter((r) => inBounds(r.createdAt)).map((r) => ({
       ticketNo: r.ticketNo,
       description: r.description,
       projectName: r.projectName || refLabel(data, "projects", r.projectId),
@@ -311,6 +328,7 @@ export default function DailyProgressReportPage() {
         reportDrawingRequests = vdr.requests
           .filter((r) => !scopeProject || (r.projectCode ? r.projectCode === scopeProject.code : r.projectName.trim().toLowerCase() === scopeProject.name.trim().toLowerCase()))
           .filter((r) => !isDri || r.driName.trim().toLowerCase() === myName)
+          .filter((r) => inBounds(r.createdAt))
           .map((r) => ({
             ticketNo: r.ticketNo,
             description: r.description,
