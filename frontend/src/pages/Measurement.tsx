@@ -220,7 +220,7 @@ export default function Measurement() {
         onClose={() => setPanelOpen(false)}
         categories={categories}
         categoriesNote={categoriesNote}
-        existing={measurements}
+        existing={coll(data, "workMeasurements")}
         apply={apply}
         toast={toast}
         userId={currentUserId || ""}
