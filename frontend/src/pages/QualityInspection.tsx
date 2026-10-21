@@ -30,11 +30,10 @@ const SEVERITIES: Severity[] = ["Critical", "Major", "Minor"];
 const CHECKLIST_STATUSES = ["OK", "Not OK", "N/A"] as const;
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
-// The site's physical QA/QC checklists, transcribed verbatim (per-item
-// text only — Status/Remarks are filled in by the inspector, not part of
-// the master list). Keyed by the checklist's own title, used as both the
-// "Work Type" picker's value and the record's `workType`.
-export const QC_CHECKLISTS: Record<string, string[]> = {
+// Checklists that aren't split into timed phases — one flat list, same as
+// always. Keyed by the checklist's own title, used as both the "Work Type"
+// picker's value and the record's `workType`.
+const STANDALONE_CHECKLISTS: Record<string, string[]> = {
   "Material Testing & Quality Checks": [
     "Concrete strength: verify approved mix design, sampling, cube/cylinder casting, identification, curing, and compressive-strength test reports.",
     "Sand: check grading/particle size, silt content, cleanliness, and compliance with approved specifications.",
@@ -49,44 +48,6 @@ export const QC_CHECKLISTS: Record<string, string[]> = {
     "Concrete cover: check specified cover blocks and required clear cover on all sides.",
     "Shuttering/formwork: verify dimensions, line, level, verticality, rigidity, joints, cleanliness, and application of release agent.",
     "Plumb: check column verticality before concreting and recheck as required."
-  ],
-  "R.C.C. Slab Inspection": [
-    "Shuttering check: verify slab level, thickness, dimensions, support/props, stability, tight joints, and cleanliness.",
-    "Reinforcement steel: check bar diameter, spacing, top and bottom reinforcement, extra bars, laps, anchorage, and openings as per drawings.",
-    "Cover and embedded services: verify cover blocks, electrical conduits, sleeves, and other inserts do not displace reinforcement.",
-    "Slump test at pour point: record the value and reject the batch if it falls outside the design mix range.",
-    "Cube samples taken: minimum 3 cubes per 5 cum, labelled with floor and date.",
-    "Vibration done correctly: poker at max 500mm centres, no cold joints — no gap over 30 minutes between layers.",
-    "Curing started within 24 hours of pour: wet gunny or curing compound, minimum 7 days.",
-    "Pre-pour approval: confirm inspection clearance, concrete grade, pour sequence, access, and curing arrangements."
-  ],
-  "Brickwork Inspection": [
-    "Brickwork layout: check wall location, thickness, openings, and alignment against approved drawings.",
-    "Line, level, and plumb: check courses and wall faces regularly using suitable instruments — plumb check every 3 courses, max deviation 3mm per 3m.",
-    "Bond and joints: ensure proper bond, staggered vertical joints, uniform joint thickness, and fully filled mortar joints.",
-    "Mortar and bricks: verify approved materials, mortar mix, brick condition, and appropriate wetting where specified.",
-    "Laying and curing: ensure proper laying technique, toothed/keyed junctions where specified, and curing as required."
-  ],
-  "Plumbing & Electrical Inspection": [
-    "Pipe pressure test before concealment: 1.5x working pressure for 30 minutes, zero pressure drop.",
-    "All sleeves placed before structural pour: DRI confirms — no chasing of RCC members allowed.",
-    "Earthing continuity confirmed floor by floor: continuity tester, each floor signed off separately.",
-    "ELCB trip test done after panel installation: trip time within IS specification, recorded in register.",
-    "As-built drawing updated and filed before handover: attached to the QC file for this apartment."
-  ],
-  "Plastering Inspection": [
-    "Pre-plaster services: check plumbing pipes, electrical conduits/boxes, and A.C. pipe/fittings before plastering.",
-    "Joint treatment: apply approved fibre mesh (min 300mm either side of junction, galvanised) at concrete–brickwork junctions and other specified locations.",
-    "Surface preparation: ensure background is clean, sound, and prepared to the approved method; provide bonding treatment where specified.",
-    "Finish, level, and plumb: check thickness (12mm internal, verified with pin at 3 points per wall), flatness, corners, edges, line, level, and verticality.",
-    "Tap test: 100% tap test after plastering — zero hollow plaster allowed; any hollow area broken out and redone."
-  ],
-  "Waterproofing Inspection": [
-    "All surface cracks sealed before WP coat: approved crack filler; inspector confirms surface is ready.",
-    "Two coats applied, turned up 150mm on all walls: overlap 150mm at joints, full turn-up at floor-wall junction.",
-    "Flood test — 50mm water ponding for 24 hours: non-negotiable; inspector present at start and end.",
-    "Ceiling below inspected for seepage after 24 hours: zero leaks to proceed; any seepage means redo WP and retest.",
-    "Sign-off: flood test result recorded with date, time, and inspector name — photo mandatory."
   ],
   "Tile Work Inspection": [
     "Floor level and slope: verify finished levels and required slope toward floor traps/drains in wet areas.",
@@ -105,16 +66,166 @@ export const QC_CHECKLISTS: Record<string, string[]> = {
     "Customer walkthrough checklist signed: customer signs, any observation noted and resolved before possession."
   ]
 };
+
+interface PhaseDef { label: string; items: string[] }
+interface PhaseGroup { name: string; scope: "floor" | "unit" | "unit-area"; phases: PhaseDef[] }
+
+// The remaining checklists are split into the site's own timed phases
+// (before/during/after a physical event — a pour, brickwork, plastering,
+// waterproofing application, panel installation…), each its own entry in
+// the Work Type picker ("<group> — <phase>"), and each phase can only be
+// filled once the one before it has a Pass on record for the same
+// floor/flat (see phaseInfo/pendingPriorPhase below) — all the existing
+// checkpoints are kept, just grouped under whichever phase they belong to.
+const PHASE_GROUPS: PhaseGroup[] = [
+  {
+    name: "R.C.C. Slab Inspection",
+    scope: "floor",
+    phases: [
+      {
+        label: "Before Pour",
+        items: [
+          "Shuttering check: verify slab level, thickness, dimensions, support/props, stability, tight joints, and cleanliness.",
+          "Reinforcement steel: check bar diameter, spacing, top and bottom reinforcement, extra bars, laps, anchorage, and openings as per drawings.",
+          "Cover and embedded services: verify cover blocks, electrical conduits, sleeves, and other inserts do not displace reinforcement.",
+          "Pre-pour approval: confirm inspection clearance, concrete grade, pour sequence, access, and curing arrangements."
+        ]
+      },
+      {
+        label: "During Pour",
+        items: [
+          "Slump test at pour point: record the value and reject the batch if it falls outside the design mix range.",
+          "Cube samples taken: minimum 3 cubes per 5 cum, labelled with floor and date.",
+          "Vibration done correctly: poker at max 500mm centres, no cold joints — no gap over 30 minutes between layers."
+        ]
+      },
+      {
+        label: "After Pour",
+        items: ["Curing started within 24 hours of pour: wet gunny or curing compound, minimum 7 days."]
+      }
+    ]
+  },
+  {
+    name: "Brickwork & Plaster",
+    scope: "unit",
+    phases: [
+      {
+        label: "Before Brickwork",
+        items: ["Brickwork layout: check wall location, thickness, openings, and alignment against approved drawings."]
+      },
+      {
+        label: "During Brickwork",
+        items: [
+          "Line, level, and plumb: check courses and wall faces regularly using suitable instruments — plumb check every 3 courses, max deviation 3mm per 3m.",
+          "Bond and joints: ensure proper bond, staggered vertical joints, uniform joint thickness, and fully filled mortar joints.",
+          "Mortar and bricks: verify approved materials, mortar mix, brick condition, and appropriate wetting where specified.",
+          "Laying and curing: ensure proper laying technique, toothed/keyed junctions where specified, and curing as required."
+        ]
+      },
+      {
+        label: "During Plastering",
+        items: [
+          "Pre-plaster services: check plumbing pipes, electrical conduits/boxes, and A.C. pipe/fittings before plastering.",
+          "Surface preparation: ensure background is clean, sound, and prepared to the approved method; provide bonding treatment where specified.",
+          "Finish, level, and plumb: check thickness (12mm internal, verified with pin at 3 points per wall), flatness, corners, edges, line, level, and verticality."
+        ]
+      },
+      {
+        label: "After Plastering",
+        items: ["Tap test: 100% tap test after plastering — zero hollow plaster allowed; any hollow area broken out and redone."]
+      }
+    ]
+  },
+  {
+    name: "Waterproofing Inspection",
+    scope: "unit-area",
+    phases: [
+      {
+        label: "Before Application",
+        items: ["All surface cracks sealed before WP coat: approved crack filler; inspector confirms surface is ready."]
+      },
+      {
+        label: "During Application",
+        items: ["Two coats applied, turned up 150mm on all walls: overlap 150mm at joints, full turn-up at floor-wall junction."]
+      },
+      {
+        label: "After WP / Before Tiling",
+        items: ["Flood test — 50mm water ponding for 24 hours: non-negotiable; inspector present at start and end."]
+      },
+      {
+        label: "After 24 Hours",
+        items: [
+          "Ceiling below inspected for seepage after 24 hours: zero leaks to proceed; any seepage means redo WP and retest.",
+          "Sign-off: flood test result recorded with date, time, and inspector name — photo mandatory."
+        ]
+      }
+    ]
+  },
+  {
+    name: "Plumbing & Electrical Inspection",
+    scope: "unit",
+    phases: [
+      { label: "Before Plastering", items: ["Pipe pressure test before concealment: 1.5x working pressure for 30 minutes, zero pressure drop."] },
+      { label: "Before Pour", items: ["All sleeves placed before structural pour: DRI confirms — no chasing of RCC members allowed."] },
+      { label: "During Installation", items: ["Earthing continuity confirmed floor by floor: continuity tester, each floor signed off separately."] },
+      { label: "After Panel Installation", items: ["ELCB trip test done after panel installation: trip time within IS specification, recorded in register."] },
+      { label: "Before Handover", items: ["As-built drawing updated and filed before handover: attached to the QC file for this apartment."] }
+    ]
+  }
+];
+
+const phaseWorkType = (groupName: string, label: string) => `${groupName} — ${label}`;
+
+// workType -> which group/phase it is, so the form can look up its scope
+// and what has to have passed before it unlocks.
+const PHASE_LOOKUP = new Map<string, { group: PhaseGroup; phaseIndex: number }>();
+for (const group of PHASE_GROUPS) {
+  group.phases.forEach((phase, phaseIndex) => PHASE_LOOKUP.set(phaseWorkType(group.name, phase.label), { group, phaseIndex }));
+}
+
+// Flat map of every Work Type -> its checklist items, for the places that
+// just need "what are this checklist's points" (seeding the form, Case
+// Studies' category list) without caring whether it's standalone or one
+// phase of a group.
+export const QC_CHECKLISTS: Record<string, string[]> = {
+  ...STANDALONE_CHECKLISTS,
+  ...Object.fromEntries(
+    PHASE_GROUPS.flatMap((group) => group.phases.map((phase) => [phaseWorkType(group.name, phase.label), phase.items]))
+  )
+};
 type ChecklistStatus = (typeof CHECKLIST_STATUSES)[number];
 
-// The checklists above run in building order. Material testing, column and
-// RCC slab are structure / floor level; Brickwork Inspection and every
-// checklist after it (plastering, tile work, …) happen flat by flat — so for
-// those the form also asks WHICH flat. Decided by position in the list, so a
-// checklist added later in the sequence is flat-wise automatically.
-const WORK_TYPES = Object.keys(QC_CHECKLISTS);
-const FLAT_WISE_FROM = WORK_TYPES.indexOf("Brickwork Inspection");
-const isFlatWise = (wt: string) => !!wt && FLAT_WISE_FROM >= 0 && WORK_TYPES.indexOf(wt) >= FLAT_WISE_FROM;
+// The Work Type picker: standalone checklists in their old order, then
+// each phase group's phases in sequence (so "R.C.C. Slab Inspection —
+// Before Pour" always precedes "— During Pour" in the list).
+const WORK_TYPES = [
+  "Material Testing & Quality Checks",
+  "Column Inspection",
+  ...PHASE_GROUPS.flatMap((group) => group.phases.map((phase) => phaseWorkType(group.name, phase.label))),
+  "Tile Work Inspection",
+  "Finishing & Handover Inspection"
+];
+
+// A standalone checklist's scope: floor-level ones ask no flat; unit-level
+// ones (just Tile Work and the final Finishing & Handover gate — the phase
+// groups handle their own scope via PHASE_LOOKUP) do.
+const STANDALONE_UNIT_SCOPED = new Set(["Tile Work Inspection", "Finishing & Handover Inspection"]);
+
+function scopeOf(wt: string): "floor" | "unit" | "unit-area" {
+  const phase = PHASE_LOOKUP.get(wt);
+  if (phase) return phase.group.scope;
+  return STANDALONE_UNIT_SCOPED.has(wt) ? "unit" : "floor";
+}
+const isFlatWise = (wt: string) => !!wt && scopeOf(wt) !== "floor";
+const requiresAreas = (wt: string) => !!wt && scopeOf(wt) === "unit-area";
+
+// The unit-wise/unit-area-wise stages whose LAST phase (or, for a
+// standalone checklist, itself) must have a Pass on record before
+// Finishing & Handover — the final gate — can be filled for that flat.
+const UNIT_FINAL_STAGES = [
+  ...PHASE_GROUPS.filter((g) => g.scope !== "floor").map((g) => phaseWorkType(g.name, g.phases[g.phases.length - 1].label)),
+  "Tile Work Inspection"
+];
 
 // Fixed across every project/floor — confirmed with the person who asked
 // for this field, not read from any per-floor master data.
@@ -683,9 +794,10 @@ function InspectionForm({
   function onWorkTypeChange(wt: string) {
     setWorkType(wt);
     if (!isFlatWise(wt)) setUnitId(""); // floor-level checklist: no flat
+    const group = PHASE_LOOKUP.get(wt)?.group.name;
     if (wt !== "Column Inspection") setSelectedColumns([]);
-    if (wt !== "R.C.C. Slab Inspection") { setSelectedSlabs([]); setAddingCustomSlab(false); setCustomSlabText(""); }
-    if (wt !== "Waterproofing Inspection") { setSelectedAreas([]); setAddingCustomArea(false); setCustomAreaText(""); }
+    if (group !== "R.C.C. Slab Inspection") { setSelectedSlabs([]); setAddingCustomSlab(false); setCustomSlabText(""); }
+    if (group !== "Waterproofing Inspection") { setSelectedAreas([]); setAddingCustomArea(false); setCustomAreaText(""); }
     setChecklist((QC_CHECKLISTS[wt] || []).map((text) => ({ text, status: "", remarks: "" })));
   }
   function setItemStatus(idx: number, status: ChecklistStatus) {
@@ -708,6 +820,64 @@ function InspectionForm({
   const flatWise = isFlatWise(workType);
   const units = flatWise && projectId && floorId ? floorUnits(data, projectId, floorId) : [];
   const unit = byId(units, unitId);
+
+  // Latest-result lookup shared by both gates below: the most recent
+  // inspection logged for a given Work Type + flat (+ wet area, for
+  // Waterproofing's per-area phases). Only the latest attempt counts, so a
+  // phase that failed and was later re-inspected to Pass still clears it.
+  function latestResult(stageWorkType: string, forUnitId: string, area?: string): QualityInspectionResult | undefined {
+    const matches = allInspections
+      .filter((i) => i.workType === stageWorkType && (forUnitId ? i.unitId === forUnitId : !i.unitId && i.floorId === floorId))
+      .filter((i) => !area || i.areas?.includes(area))
+      .sort((a, b) => b.createdAt - a.createdAt);
+    return matches[0]?.result;
+  }
+
+  // Finishing & Handover is the final gate for a flat — it shows up in the
+  // picker like any other checklist, but can't actually be filled in until
+  // every unit-wise stage's LAST phase has a Pass on record for THIS unit.
+  const pendingPriorStages = workType === "Finishing & Handover Inspection" && unitId
+    ? UNIT_FINAL_STAGES.filter((stage) => latestResult(stage, unitId) !== "Pass")
+    : [];
+  const blockedByPriorStages = workType === "Finishing & Handover Inspection" && !!unitId && pendingPriorStages.length > 0;
+
+  // Every OTHER phase (2nd onward) of a timed group is gated the same way,
+  // one step at a time, against the phase immediately before it — Before
+  // Pour must Pass before During Pour unlocks, During Pour before After
+  // Pour, and so on. Waterproofing is gated per wet area: each selected
+  // area has to have passed the previous phase on its own, since one
+  // bathroom finishing its flood test doesn't mean the kitchen has.
+  const phaseInfo = PHASE_LOOKUP.get(workType);
+  const priorPhaseWorkType = phaseInfo && phaseInfo.phaseIndex > 0
+    ? phaseWorkType(phaseInfo.group.name, phaseInfo.group.phases[phaseInfo.phaseIndex - 1].label)
+    : null;
+  const scopeKeyReady = phaseInfo?.group.scope === "floor" ? !!floorId : !!unitId;
+  const pendingPriorAreas = phaseInfo?.group.scope === "unit-area" && priorPhaseWorkType && unitId
+    ? selectedAreas.filter((area) => latestResult(priorPhaseWorkType, unitId, area) !== "Pass")
+    : [];
+  const blockedByPriorPhase = !!priorPhaseWorkType && scopeKeyReady && (
+    phaseInfo!.group.scope === "unit-area"
+      ? selectedAreas.length > 0 && pendingPriorAreas.length > 0
+      : latestResult(priorPhaseWorkType, unitId) !== "Pass"
+  );
+  const priorPhaseMessage = phaseInfo?.group.scope === "unit-area"
+    ? `"${priorPhaseWorkType}" hasn't passed yet for: ${pendingPriorAreas.join(", ")}`
+    : `"${priorPhaseWorkType}" hasn't passed yet for this ${phaseInfo?.group.scope === "floor" ? "floor" : "flat"}`;
+
+  // Floor-to-floor is a heads-up only, never a hard block (teams asked for
+  // flexibility here) — the inspector can still proceed, but sees which
+  // earlier floor(s) haven't finished their own Structure stage yet.
+  const structureGroup = PHASE_GROUPS.find((g) => g.name === "R.C.C. Slab Inspection")!;
+  const structureLastPhase = phaseWorkType(structureGroup.name, structureGroup.phases[structureGroup.phases.length - 1].label);
+  function floorPassed(fId: string): boolean {
+    const matches = allInspections
+      .filter((i) => i.workType === structureLastPhase && !i.unitId && i.floorId === fId)
+      .sort((a, b) => b.createdAt - a.createdAt);
+    return matches[0]?.result === "Pass";
+  }
+  const earlierFloorsNotStructurallyDone = workType && PHASE_LOOKUP.get(workType)?.group === structureGroup && floor
+    ? floors.filter((f) => (f.seq || 0) < (floor.seq || 0) && !floorPassed(f.id))
+    : [];
 
   // VMS Work Order/Item picker is an OPTIONAL manual reference only — a QC
   // Unit has no reliable key back to a VMS scope-item/location (see the
@@ -736,9 +906,11 @@ function InspectionForm({
     if (!projectId || !floorId) { toast("Project and Floor are required"); return; }
     if (!workType) { toast("Select a checklist (Work Type) first"); return; }
     if (flatWise && !unitId) { toast("Pick the flat — Brickwork and the work after it is inspected flat by flat"); return; }
+    if (blockedByPriorStages) { toast(`Finish and pass ${pendingPriorStages.join(", ")} for this flat first`); return; }
+    if (blockedByPriorPhase) { toast(priorPhaseMessage); return; }
     if (workType === "Column Inspection" && selectedColumns.length === 0) { toast("Select at least one column"); return; }
-    if (workType === "R.C.C. Slab Inspection" && selectedSlabs.length === 0) { toast("Select at least one slab"); return; }
-    if (workType === "Waterproofing Inspection" && selectedAreas.length === 0) { toast("Select at least one area (kitchen/bathroom/balcony)"); return; }
+    if (phaseInfo?.group.name === "R.C.C. Slab Inspection" && selectedSlabs.length === 0) { toast("Select at least one slab"); return; }
+    if (requiresAreas(workType) && selectedAreas.length === 0) { toast("Select at least one area (kitchen/bathroom/balcony)"); return; }
     if (checklist.some((row) => !row.status)) { toast("Mark every checklist point as OK / Not OK / N/A"); return; }
     if (photos.length === 0) { toast("Add at least one photo as evidence"); return; }
     if (result !== "Pass" && !remarks.trim()) { toast("Remarks are required for Fail / Rework Required"); return; }
@@ -755,7 +927,10 @@ function InspectionForm({
     // duplicate snag ever being raised for the same failed inspection
     // (there is no edit path for an already-saved inspection, only a
     // fresh "re-inspect" record).
-    const snagId = needsSnag ? nextId("SNG", []) : null;
+    // BUG FIX: was nextId("SNG", []), which always returned "SNG-0001" and
+    // would silently overwrite every previous Quality-Inspection-raised snag
+    // the next time an inspection failed — same bug class as the QI id above.
+    const snagId = needsSnag ? nextId("SNG", coll(data, "snags")) : null;
 
     const rec: QI = {
       id,
@@ -770,8 +945,8 @@ function InspectionForm({
       unit: itemEntry?.unit,
       workType,
       columns: workType === "Column Inspection" ? selectedColumns : undefined,
-      slabs: workType === "R.C.C. Slab Inspection" ? selectedSlabs : undefined,
-      areas: workType === "Waterproofing Inspection" ? selectedAreas : undefined,
+      slabs: phaseInfo?.group.name === "R.C.C. Slab Inspection" ? selectedSlabs : undefined,
+      areas: requiresAreas(workType) ? selectedAreas : undefined,
       contractor: contractor.trim() || undefined,
       checklistItems: checklist.map((row) => ({ text: row.text, status: row.status as "OK" | "Not OK" | "N/A", remarks: row.remarks.trim() || undefined })),
       inspectionDate, result,
@@ -840,7 +1015,7 @@ function InspectionForm({
       footer={
         <>
           <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save Inspection"}</button>
+          <button className="btn btn-primary" onClick={save} disabled={saving || blockedByPriorStages || blockedByPriorPhase}>{saving ? "Saving…" : "Save Inspection"}</button>
         </>
       }
     >
@@ -885,7 +1060,7 @@ function InspectionForm({
             value={workType}
             disabled={!!reInspectOf}
             onChange={onWorkTypeChange}
-            options={[{ value: "", label: "Select checklist…" }, ...Object.keys(QC_CHECKLISTS).map((wt) => ({ value: wt, label: wt }))]}
+            options={[{ value: "", label: "Select checklist…" }, ...WORK_TYPES.map((wt) => ({ value: wt, label: wt }))]}
           />
         </div>
 
@@ -902,6 +1077,30 @@ function InspectionForm({
           </div>
         )}
 
+        {blockedByPriorStages && (
+          <div className="field full">
+            <div className="text-[12.5px] font-semibold p-3 rounded-radius-md" style={{ background: "rgba(239,68,68,0.08)", color: "var(--color-fail)" }}>
+              This is the final gate — it can't be filled in until every earlier stage has passed for this flat. Still pending: {pendingPriorStages.join(", ")}.
+            </div>
+          </div>
+        )}
+
+        {blockedByPriorPhase && (
+          <div className="field full">
+            <div className="text-[12.5px] font-semibold p-3 rounded-radius-md" style={{ background: "rgba(239,68,68,0.08)", color: "var(--color-fail)" }}>
+              Can't fill this in yet — {priorPhaseMessage}.
+            </div>
+          </div>
+        )}
+
+        {earlierFloorsNotStructurallyDone.length > 0 && (
+          <div className="field full">
+            <div className="text-[12.5px] font-semibold p-3 rounded-radius-md" style={{ background: "rgba(217,119,6,0.08)", color: "#d97706" }}>
+              Heads up: {earlierFloorsNotStructurallyDone.map((f) => f.name).join(", ")} {earlierFloorsNotStructurallyDone.length === 1 ? "hasn't" : "haven't"} finished Structure (After Pour) yet — pouring on this floor ahead of that is out of sequence, though you can still proceed.
+            </div>
+          </div>
+        )}
+
         {workType === "Column Inspection" && (
           <div className="field full">
             <label>Select Columns *</label>
@@ -915,7 +1114,7 @@ function InspectionForm({
           </div>
         )}
 
-        {workType === "R.C.C. Slab Inspection" && (
+        {phaseInfo?.group.name === "R.C.C. Slab Inspection" && (
           <div className="field full">
             <label>Select Slabs *</label>
             <SearchDropdown
@@ -945,7 +1144,7 @@ function InspectionForm({
           </div>
         )}
 
-        {workType === "Waterproofing Inspection" && (
+        {requiresAreas(workType) && (
           <div className="field full">
             <label>Select Areas *</label>
             <SearchDropdown
@@ -975,7 +1174,7 @@ function InspectionForm({
           </div>
         )}
 
-        {checklist.length > 0 && (
+        {checklist.length > 0 && !blockedByPriorStages && !blockedByPriorPhase && (
           <div className="field full">
             <div className="overflow-x-auto border border-[var(--border)] rounded-radius-md">
               <table className="w-full text-[12px] border-collapse">

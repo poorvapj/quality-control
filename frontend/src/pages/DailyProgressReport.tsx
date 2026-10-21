@@ -254,6 +254,13 @@ export default function DailyProgressReportPage() {
     // Read live, never stored, so it can't drift from VMS.
     type WpRow = { workItem: string; projectName: string; workOrderNo: string; unit: string; planned: number; completed: number };
     const workProgressRows: WpRow[] = [];
+    // VMS's own project list (by code) — QC's `projects` master carries
+    // projects VMS has never heard of yet (e.g. a plot/launch registered in
+    // QC before VMS has a Work Order for it), so "N projects did not
+    // submit" / "X of Y reported" used to count those too and could never
+    // match VMS's own figure. null until the fetch below resolves; when it
+    // does, those two numbers are scoped to just the VMS-known projects.
+    let vmsProjectCodes: Set<string> | null = null;
     try {
       type PaItem = { itemId: string; itemType: "scopeItem" | "subItem"; parentItemId: string | null; description: string; unit: string; plannedQty: number; completedQty: number; periodCompletedQty: number | null };
       type PaResponse = { available: false } | { available: true; projects: { projectCode: string; projectName: string; workOrders: { workOrderNo: string; items: PaItem[] }[] }[] };
@@ -264,6 +271,7 @@ export default function DailyProgressReportPage() {
       const paUrl = API_BASE + "/api/progress-analysis" + (bounds ? `?from=${bounds.from}&to=${bounds.to}` : "");
       const res: PaResponse = await fetch(paUrl, { headers: authHeaders() }).then((r) => r.json());
       if (res.available) {
+        vmsProjectCodes = new Set(res.projects.map((p) => p.projectCode));
         for (const proj of res.projects) {
           const qcProject = coll(data, "projects").find((p) => p.code === proj.projectCode);
           if (fProject && qcProject?.id !== fProject) continue;
@@ -350,8 +358,16 @@ export default function DailyProgressReportPage() {
     const drawingRequestsInRange = reportDrawingRequests.filter((r) => inBounds(r.createdAt)).length;
     const OVERDUE_DAYS = 3;
     const overdueDrawingReqs = reportDrawingRequests.filter((r) => r.open && r.daysSince > OVERDUE_DAYS);
-    const totalProjectsInScope = fProject ? 1 : projects.length;
-    const notReportedCount = (fProject ? projects.filter((p) => p.id === fProject) : projects).filter((p) => !reportedProjectIds.has(p.id)).length;
+    // Scope "did not submit" / "X of Y reported" to projects VMS itself
+    // knows about (falls back to QC's full list if VMS couldn't be read) —
+    // otherwise a project QC has registered but VMS has no Work Order for
+    // yet always counted as "did not submit", permanently inflating this
+    // number and never matching VMS's own project count. Only matters for
+    // the "All Projects" scope — picking a single project is already a
+    // scope of 1, VMS-known or not.
+    const projectsInVmsScope = vmsProjectCodes ? projects.filter((p) => vmsProjectCodes!.has(p.code)) : projects;
+    const totalProjectsInScope = fProject ? 1 : projectsInVmsScope.length;
+    const notReportedCount = (fProject ? projects.filter((p) => p.id === fProject) : projectsInVmsScope).filter((p) => !reportedProjectIds.has(p.id)).length;
     const actionItems: { level: "critical" | "warning" | "good"; text: string }[] = [];
     if (overdueDrawingReqs.length) {
       actionItems.push({ level: "critical", text: `${overdueDrawingReqs.length} drawing request${overdueDrawingReqs.length === 1 ? "" : "s"} delayed more than ${OVERDUE_DAYS} days` });
