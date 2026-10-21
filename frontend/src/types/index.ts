@@ -776,6 +776,7 @@ export interface BoardData {
   purchaseOrders: PurchaseOrder[];
   teamDailyReports: TeamDailyReport[];
   customSlabNames: CustomSlabName[];
+  customAreaNames: CustomAreaName[];
   progress: Record<string, ProgressPatch>;
   events: EventLog[];
   [key: string]: unknown;
@@ -809,6 +810,10 @@ export interface TeamDailyReport extends BaseRecord {
  *  every future inspector sees it too instead of just the one inspection
  *  that introduced it — same idea as the Vendor master, just much smaller. */
 export interface CustomSlabName extends BaseRecord {
+  name: string;
+}
+
+export interface CustomAreaName extends BaseRecord {
   name: string;
 }
 

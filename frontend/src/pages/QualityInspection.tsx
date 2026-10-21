@@ -52,44 +52,41 @@ export const QC_CHECKLISTS: Record<string, string[]> = {
   ],
   "R.C.C. Slab Inspection": [
     "Shuttering check: verify slab level, thickness, dimensions, support/props, stability, tight joints, and cleanliness.",
-    "S1.1 — Reinforcement cover & bar spacing verified against drawing (before pour): cover blocks in place; spacing per structural drawing.",
+    "Reinforcement steel: check bar diameter, spacing, top and bottom reinforcement, extra bars, laps, anchorage, and openings as per drawings.",
     "Cover and embedded services: verify cover blocks, electrical conduits, sleeves, and other inserts do not displace reinforcement.",
-    "S1.2 — Slump test at pour point (during pour): record the value; reject if outside design mix range.",
-    "S1.3 — Cube samples taken (during pour): minimum 3 cubes per 5 cum, labelled with floor and date.",
-    "S1.4 — Vibration done correctly, no cold joints (during pour): poker at max 500mm centres; no gap over 30 minutes between layers.",
-    "S1.5 — Curing started within 24 hours (after pour): wet gunny or curing compound, minimum 7 days.",
-    "Pre-pour approval: confirm inspection clearance, concrete grade, pour sequence, access, and curing arrangements.",
-    "Sign-off required: Quality Inspector signature before shuttering removal."
+    "Slump test at pour point: record the value and reject the batch if it falls outside the design mix range.",
+    "Cube samples taken: minimum 3 cubes per 5 cum, labelled with floor and date.",
+    "Vibration done correctly: poker at max 500mm centres, no cold joints — no gap over 30 minutes between layers.",
+    "Curing started within 24 hours of pour: wet gunny or curing compound, minimum 7 days.",
+    "Pre-pour approval: confirm inspection clearance, concrete grade, pour sequence, access, and curing arrangements."
   ],
   "Brickwork Inspection": [
-    "B2.1 — Wall layout matches drawing: door & window positions correct (before brickwork), verified by DRI against approved drawing.",
-    "B2.2 — Plumb check every 3 courses (during brickwork): spirit level; max deviation 3mm per 3m.",
+    "Brickwork layout: check wall location, thickness, openings, and alignment against approved drawings.",
+    "Line, level, and plumb: check courses and wall faces regularly using suitable instruments — plumb check every 3 courses, max deviation 3mm per 3m.",
     "Bond and joints: ensure proper bond, staggered vertical joints, uniform joint thickness, and fully filled mortar joints.",
     "Mortar and bricks: verify approved materials, mortar mix, brick condition, and appropriate wetting where specified.",
     "Laying and curing: ensure proper laying technique, toothed/keyed junctions where specified, and curing as required."
   ],
   "Plumbing & Electrical Inspection": [
-    "M4.1 — Pipe pressure test before concealment (before plastering): 1.5x working pressure for 30 minutes; zero pressure drop.",
-    "M4.2 — All sleeves placed before structural pour (before pour): DRI confirms; no chasing of RCC members allowed.",
-    "M4.3 — Earthing continuity confirmed floor by floor (during installation): continuity tester; each floor signed off separately.",
-    "M4.4 — ELCB trip test done and time recorded (after panel installation): trip time within IS specification; recorded in register.",
-    "M4.5 — As-built drawing updated and filed (before handover): updated drawing attached to the QC file for this apartment.",
-    "Sign-off required: pressure test result + ELCB trip time recorded before wall plastering is approved."
+    "Pipe pressure test before concealment: 1.5x working pressure for 30 minutes, zero pressure drop.",
+    "All sleeves placed before structural pour: DRI confirms — no chasing of RCC members allowed.",
+    "Earthing continuity confirmed floor by floor: continuity tester, each floor signed off separately.",
+    "ELCB trip test done after panel installation: trip time within IS specification, recorded in register.",
+    "As-built drawing updated and filed before handover: attached to the QC file for this apartment."
   ],
   "Plastering Inspection": [
     "Pre-plaster services: check plumbing pipes, electrical conduits/boxes, and A.C. pipe/fittings before plastering.",
-    "B2.3 — Chicken mesh fixed at RCC–masonry junction (during brickwork): min 300mm either side of junction; galvanised mesh.",
+    "Joint treatment: apply approved fibre mesh (min 300mm either side of junction, galvanised) at concrete–brickwork junctions and other specified locations.",
     "Surface preparation: ensure background is clean, sound, and prepared to the approved method; provide bonding treatment where specified.",
-    "B2.4 — Plaster thickness correct (during plastering): 12mm internal; check with pin at 3 points per wall.",
-    "B2.5 — Tap test, zero hollow plaster allowed (after plastering): 100% tap test; any hollow area broken out and redone.",
-    "Sign-off required: Quality Inspector tap test on every apartment before next stage begins."
+    "Finish, level, and plumb: check thickness (12mm internal, verified with pin at 3 points per wall), flatness, corners, edges, line, level, and verticality.",
+    "Tap test: 100% tap test after plastering — zero hollow plaster allowed; any hollow area broken out and redone."
   ],
   "Waterproofing Inspection": [
-    "W3.1 — All surface cracks sealed before WP coat (before application): approved crack filler; inspector confirms surface is ready.",
-    "W3.2 — Two coats applied, turned up 150mm on all walls (during application): overlap 150mm at joints; full turn-up at floor-wall junction.",
-    "W3.3 — Flood test, 50mm water ponding for 24 hours (after WP, before tiling): non-negotiable; inspector present at start and end.",
-    "W3.4 — Ceiling below inspected for seepage (after 24 hours): zero leaks to proceed; any seepage means redo WP and retest.",
-    "Sign-off required: flood test result recorded with date, time, and inspector name — photo mandatory."
+    "All surface cracks sealed before WP coat: approved crack filler; inspector confirms surface is ready.",
+    "Two coats applied, turned up 150mm on all walls: overlap 150mm at joints, full turn-up at floor-wall junction.",
+    "Flood test — 50mm water ponding for 24 hours: non-negotiable; inspector present at start and end.",
+    "Ceiling below inspected for seepage after 24 hours: zero leaks to proceed; any seepage means redo WP and retest.",
+    "Sign-off: flood test result recorded with date, time, and inspector name — photo mandatory."
   ],
   "Tile Work Inspection": [
     "Floor level and slope: verify finished levels and required slope toward floor traps/drains in wet areas.",
@@ -100,13 +97,12 @@ export const QC_CHECKLISTS: Record<string, string[]> = {
     "Protection and cleaning: clean grout residue and protect finished tiles from damage until handover."
   ],
   "Finishing & Handover Inspection": [
-    "F5.1 — All punch list items from Stages 1-4 closed: zero open NCRs; verified by Quality Inspector.",
-    "F5.2 — Doors & windows: operation, gaps, locks: smooth operation, gaps under 5mm on all sides, locks functional.",
-    "F5.3 — All fixtures working: taps, switches, fans, geysers tested — no snag.",
-    "F5.4 — Flooring: no hollow tiles, clean grout: 100% tap test on all floor tiles, uniform grout joints.",
-    "F5.5 — Paint: no peeling, uniform finish, no patches: visual check in daylight; touch-up not acceptable over peeling.",
-    "F5.6 — Customer walkthrough checklist signed: customer signs, any observation noted and resolved before possession.",
-    "Sign-off required: Rishabh (Quality Head) final sign-off on each apartment before possession is granted."
+    "All punch list items from earlier stages closed: zero open NCRs, verified by Quality Inspector.",
+    "Doors & windows: smooth operation, gaps under 5mm on all sides, locks functional.",
+    "All fixtures working: taps, switches, fans, geysers tested — no snag.",
+    "Flooring: no hollow tiles, clean grout — 100% tap test on all floor tiles, uniform grout joints.",
+    "Paint: no peeling, uniform finish, no patches — visual check in daylight; touch-up not acceptable over peeling.",
+    "Customer walkthrough checklist signed: customer signs, any observation noted and resolved before possession."
   ]
 };
 type ChecklistStatus = (typeof CHECKLIST_STATUSES)[number];
