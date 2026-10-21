@@ -35,6 +35,7 @@ const COLLECTIONS = [
   "workMeasurements", // Independently measured quantity per Project → Tower/Floor/Flat/Area → Work Category, reference-only link to a VMS scope item (workMeasurementRules.js)
   "teamDailyReports", // One per Team per date — end-of-day activity summary, signed off by the team's own leader (teamDailyReports.js)
   "customSlabNames", // Shared list of slab names typed via Quality Inspection's "Select Slabs" Custom option, so every inspector sees ones others already added
+  "customAreaNames", // Shared list of wet-area names typed via Quality Inspection's Waterproofing "Select Areas" Custom option, same pattern as customSlabNames
   "caseStudies" // Quality issue writeups (root cause / corrective action / lessons learned) — standalone, optionally linked to a QualityInspection
 ];
 
