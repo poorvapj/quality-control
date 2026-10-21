@@ -29,14 +29,21 @@ export function boardLensFor(data: BoardData | null, role: string | null | undef
 const counts = (a?: Approval) => a?.status !== "rejected";
 const awaiting = (a?: Approval) => a?.status === "pending";
 
-export type QualityState = "checked" | "pending" | "failed" | "none";
+// A flat only turns fully green once it clears the very last stage —
+// Finishing & Handover. Any earlier stage passing (brickwork, plastering,
+// tile work…) just means work is under way, not done.
+const FINAL_STAGE_WORK_TYPE = "Finishing & Handover Inspection";
+
+export type QualityState = "checked" | "in-progress" | "pending" | "failed" | "none";
 export interface UnitQuality { state: QualityState; latest?: QualityInspection }
 
 /** Per unit: where its quality checks stand. A flat can have several inspections
  *  (brickwork, plastering, tile work…), so the LATEST non-rejected inspection is
  *  taken per work type, then combined: any failed → failed, else any awaiting
- *  approval → pending, else every checked work type passed → checked. A failed
- *  flat turns green again once a re-inspection of that work type passes. */
+ *  approval → pending, else the final stage (Finishing & Handover) has passed →
+ *  checked, else some earlier stage has passed but the final one hasn't yet →
+ *  in-progress. A failed flat turns green again once a re-inspection of that
+ *  work type passes, and only once Finishing & Handover itself has passed. */
 export function qualityByUnit(inspections: QualityInspection[]): Map<string, UnitQuality> {
   const latest = new Map<string, QualityInspection>(); // unitId|workType -> newest inspection
   for (const i of inspections) {
@@ -53,8 +60,10 @@ export function qualityByUnit(inspections: QualityInspection[]): Map<string, Uni
   for (const [unitId, list] of byUnit) {
     const failed = list.find((i) => i.result !== "Pass");
     const pending = list.find((i) => awaiting(i.approval));
+    const finalStagePassed = list.find((i) => i.workType === FINAL_STAGE_WORK_TYPE && i.result === "Pass");
     const newest = [...list].sort((x, y) => (y.inspectionDate || "").localeCompare(x.inspectionDate || "") || (y.createdAt || 0) - (x.createdAt || 0))[0];
-    out.set(unitId, { state: failed ? "failed" : pending ? "pending" : "checked", latest: failed || pending || newest });
+    const state: QualityState = failed ? "failed" : pending ? "pending" : finalStagePassed ? "checked" : "in-progress";
+    out.set(unitId, { state, latest: failed || pending || newest });
   }
   return out;
 }

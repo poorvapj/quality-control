@@ -9,9 +9,10 @@ import { boardLensFor, qualityByUnit, qualityByFloor, measurementByUnit, LENS_LA
 
 const ALL_FLOORS = "__all__";
 type StatusFilter = "" | "open-snag" | "qc-fail" | "locked" | "handed-over" | "not-started"
-  | "ex-done" | "q-checked" | "q-failed" | "q-pending" | "q-none" | "m-done" | "m-pending" | "m-none";
+  | "ex-done" | "q-checked" | "q-in-progress" | "q-failed" | "q-pending" | "q-none" | "m-done" | "m-pending" | "m-none";
 const LENSES: BoardLens[] = ["all", "execution", "quality", "measurement"];
 const AMBER = "#f59e0b";
+const IN_PROGRESS_BLUE = "#3b82f6";
 
 export default function TowerBoard() {
   const { data, currentProjectId, setCurrentProjectId, currentUserId, openDrawer, myRole } = useApp();
@@ -46,7 +47,7 @@ export default function TowerBoard() {
   const qualityByFloorMap = useMemo(() => qualityByFloor(inspectionsColl), [inspectionsColl]);
   const measureMap = useMemo(() => measurementByUnit(measurementsColl), [measurementsColl]);
   const statusOptions = lens === "quality"
-    ? [{ value: "", label: "All Statuses" }, { value: "q-checked", label: "Quality checked" }, { value: "q-failed", label: "Failed / rework" }, { value: "q-pending", label: "Awaiting approval" }, { value: "q-none", label: "Not inspected" }]
+    ? [{ value: "", label: "All Statuses" }, { value: "q-checked", label: "Quality checked" }, { value: "q-in-progress", label: "In progress" }, { value: "q-failed", label: "Failed / rework" }, { value: "q-pending", label: "Awaiting approval" }, { value: "q-none", label: "Not inspected" }]
     : lens === "measurement"
     ? [{ value: "", label: "All Statuses" }, { value: "m-done", label: "Measured" }, { value: "m-pending", label: "Awaiting approval" }, { value: "m-none", label: "Not measured" }]
     : [
@@ -175,6 +176,7 @@ export default function TowerBoard() {
               fStatus === "" ? true
               : fStatus === "ex-done" ? exDone
               : fStatus === "q-checked" ? qs === "checked"
+              : fStatus === "q-in-progress" ? qs === "in-progress"
               : fStatus === "q-failed" ? qs === "failed"
               : fStatus === "q-pending" ? qs === "pending"
               : fStatus === "q-none" ? qs === "none"
@@ -222,12 +224,13 @@ export default function TowerBoard() {
                   let textColor: string | undefined;
                   let tip = `${u.name} · ${u.type || ""}`;
                   if (lens === "quality") {
-                    bg = qs === "checked" ? "var(--color-pass)" : qs === "failed" ? "var(--color-fail)" : qs === "pending" ? AMBER : "var(--bg-subtle)";
+                    bg = qs === "checked" ? "var(--color-pass)" : qs === "failed" ? "var(--color-fail)" : qs === "pending" ? AMBER : qs === "in-progress" ? IN_PROGRESS_BLUE : "var(--bg-subtle)";
                     if (qs === "none") textColor = "var(--text-sub)";
                     const failing = (qualityMap.get(u.id) ?? qualityByFloorMap.get(f.id))?.latest;
-                    tip += qs === "checked" ? " · quality check passed"
+                    tip += qs === "checked" ? " · quality check passed — Finishing & Handover cleared"
                       : qs === "failed" ? ` · quality check ${(failing?.result || "failed").toLowerCase()}${failing?.workType ? " — " + failing.workType : ""}${failing && !failing.unitId ? " (whole floor)" : ""}`
                       : qs === "pending" ? " · quality check passed — awaiting leader approval"
+                      : qs === "in-progress" ? " · quality checks in progress — Finishing & Handover not cleared yet"
                       : " · not inspected yet";
                   } else if (lens === "measurement") {
                     bg = ms === "measured" ? "var(--color-pass)" : ms === "pending" ? AMBER : "var(--bg-subtle)";
@@ -246,7 +249,7 @@ export default function TowerBoard() {
                       + (hasSnag ? " · " + s.snags + " open snag(s)" : "")
                       + (closedSnags ? " · " + closedSnags + " resolved snag(s)" : "");
                     if (exDone) tip += " · execution work completed";
-                    if (lens === "all") tip += qs === "checked" ? " · quality checked" : qs === "failed" ? " · quality check failed" : "";
+                    if (lens === "all") tip += qs === "checked" ? " · quality checked" : qs === "failed" ? " · quality check failed" : qs === "in-progress" ? " · quality checks in progress" : "";
                   }
                   return (
                     <div
@@ -280,7 +283,8 @@ export default function TowerBoard() {
         })}
         <div className="legend-bar">
           {(lens === "quality" ? [
-            { c: "var(--color-pass)", t: "Quality check passed" },
+            { c: "var(--color-pass)", t: "Quality check passed (Finishing & Handover cleared)" },
+            { c: IN_PROGRESS_BLUE, t: "In progress — earlier stages passed, Finishing & Handover not yet cleared" },
             { c: "var(--color-fail)", t: "Failed / rework" },
             { c: AMBER, t: "Passed — awaiting approval" },
             { c: "var(--bg-subtle)", t: "Not inspected", border: true }
