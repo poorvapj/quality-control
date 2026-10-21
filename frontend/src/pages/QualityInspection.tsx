@@ -9,8 +9,8 @@ import { buildEventOp } from "../shared/eventLog";
 import { hasModuleGrant } from "../shared/permissionMatrix";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
-import { approvalFor, effectiveApproval, canDecide } from "../shared/approval";
-import { ApprovalBadge, ApprovalActions, ApprovalReviewPanel, SendApprovalsToSlackButton } from "../components/ApprovalControls";
+import { approvalFor, effectiveApproval } from "../shared/approval";
+import { ApprovalBadge, ApprovalActions, ApprovalReviewPanel } from "../components/ApprovalControls";
 import PhotoGroupUploader from "../components/PhotoGroupUploader";
 import SidePanel from "../components/SidePanel";
 import StatTile from "../components/StatTile";
@@ -52,41 +52,44 @@ export const QC_CHECKLISTS: Record<string, string[]> = {
   ],
   "R.C.C. Slab Inspection": [
     "Shuttering check: verify slab level, thickness, dimensions, support/props, stability, tight joints, and cleanliness.",
-    "Reinforcement steel: check bar diameter, spacing, top and bottom reinforcement, extra bars, laps, anchorage, and openings as per drawings.",
+    "S1.1 — Reinforcement cover & bar spacing verified against drawing (before pour): cover blocks in place; spacing per structural drawing.",
     "Cover and embedded services: verify cover blocks, electrical conduits, sleeves, and other inserts do not displace reinforcement.",
-    "Slump test at pour point: record the value and reject the batch if it falls outside the design mix range.",
-    "Cube samples taken: minimum 3 cubes per 5 cum, labelled with floor and date.",
-    "Vibration done correctly: poker at max 500mm centres, no cold joints — no gap over 30 minutes between layers.",
-    "Curing started within 24 hours of pour: wet gunny or curing compound, minimum 7 days.",
-    "Pre-pour approval: confirm inspection clearance, concrete grade, pour sequence, access, and curing arrangements."
+    "S1.2 — Slump test at pour point (during pour): record the value; reject if outside design mix range.",
+    "S1.3 — Cube samples taken (during pour): minimum 3 cubes per 5 cum, labelled with floor and date.",
+    "S1.4 — Vibration done correctly, no cold joints (during pour): poker at max 500mm centres; no gap over 30 minutes between layers.",
+    "S1.5 — Curing started within 24 hours (after pour): wet gunny or curing compound, minimum 7 days.",
+    "Pre-pour approval: confirm inspection clearance, concrete grade, pour sequence, access, and curing arrangements.",
+    "Sign-off required: Quality Inspector signature before shuttering removal."
   ],
   "Brickwork Inspection": [
-    "Brickwork layout: check wall location, thickness, openings, and alignment against approved drawings.",
-    "Line, level, and plumb: check courses and wall faces regularly using suitable instruments — plumb check every 3 courses, max deviation 3mm per 3m.",
+    "B2.1 — Wall layout matches drawing: door & window positions correct (before brickwork), verified by DRI against approved drawing.",
+    "B2.2 — Plumb check every 3 courses (during brickwork): spirit level; max deviation 3mm per 3m.",
     "Bond and joints: ensure proper bond, staggered vertical joints, uniform joint thickness, and fully filled mortar joints.",
     "Mortar and bricks: verify approved materials, mortar mix, brick condition, and appropriate wetting where specified.",
     "Laying and curing: ensure proper laying technique, toothed/keyed junctions where specified, and curing as required."
   ],
   "Plumbing & Electrical Inspection": [
-    "Pipe pressure test before concealment: 1.5x working pressure for 30 minutes, zero pressure drop.",
-    "All sleeves placed before structural pour: DRI confirms — no chasing of RCC members allowed.",
-    "Earthing continuity confirmed floor by floor: continuity tester, each floor signed off separately.",
-    "ELCB trip test done after panel installation: trip time within IS specification, recorded in register.",
-    "As-built drawing updated and filed before handover: attached to the QC file for this apartment."
+    "M4.1 — Pipe pressure test before concealment (before plastering): 1.5x working pressure for 30 minutes; zero pressure drop.",
+    "M4.2 — All sleeves placed before structural pour (before pour): DRI confirms; no chasing of RCC members allowed.",
+    "M4.3 — Earthing continuity confirmed floor by floor (during installation): continuity tester; each floor signed off separately.",
+    "M4.4 — ELCB trip test done and time recorded (after panel installation): trip time within IS specification; recorded in register.",
+    "M4.5 — As-built drawing updated and filed (before handover): updated drawing attached to the QC file for this apartment.",
+    "Sign-off required: pressure test result + ELCB trip time recorded before wall plastering is approved."
   ],
   "Plastering Inspection": [
     "Pre-plaster services: check plumbing pipes, electrical conduits/boxes, and A.C. pipe/fittings before plastering.",
-    "Joint treatment: apply approved fibre mesh (min 300mm either side of junction, galvanised) at concrete–brickwork junctions and other specified locations.",
+    "B2.3 — Chicken mesh fixed at RCC–masonry junction (during brickwork): min 300mm either side of junction; galvanised mesh.",
     "Surface preparation: ensure background is clean, sound, and prepared to the approved method; provide bonding treatment where specified.",
-    "Finish, level, and plumb: check thickness (12mm internal, verified with pin at 3 points per wall), flatness, corners, edges, line, level, and verticality.",
-    "Tap test: 100% tap test after plastering — zero hollow plaster allowed; any hollow area broken out and redone."
+    "B2.4 — Plaster thickness correct (during plastering): 12mm internal; check with pin at 3 points per wall.",
+    "B2.5 — Tap test, zero hollow plaster allowed (after plastering): 100% tap test; any hollow area broken out and redone.",
+    "Sign-off required: Quality Inspector tap test on every apartment before next stage begins."
   ],
   "Waterproofing Inspection": [
-    "All surface cracks sealed before WP coat: approved crack filler; inspector confirms surface is ready.",
-    "Two coats applied, turned up 150mm on all walls: overlap 150mm at joints, full turn-up at floor-wall junction.",
-    "Flood test — 50mm water ponding for 24 hours: non-negotiable; inspector present at start and end.",
-    "Ceiling below inspected for seepage after 24 hours: zero leaks to proceed; any seepage means redo WP and retest.",
-    "Sign-off: flood test result recorded with date, time, and inspector name — photo mandatory."
+    "W3.1 — All surface cracks sealed before WP coat (before application): approved crack filler; inspector confirms surface is ready.",
+    "W3.2 — Two coats applied, turned up 150mm on all walls (during application): overlap 150mm at joints; full turn-up at floor-wall junction.",
+    "W3.3 — Flood test, 50mm water ponding for 24 hours (after WP, before tiling): non-negotiable; inspector present at start and end.",
+    "W3.4 — Ceiling below inspected for seepage (after 24 hours): zero leaks to proceed; any seepage means redo WP and retest.",
+    "Sign-off required: flood test result recorded with date, time, and inspector name — photo mandatory."
   ],
   "Tile Work Inspection": [
     "Floor level and slope: verify finished levels and required slope toward floor traps/drains in wet areas.",
@@ -97,12 +100,13 @@ export const QC_CHECKLISTS: Record<string, string[]> = {
     "Protection and cleaning: clean grout residue and protect finished tiles from damage until handover."
   ],
   "Finishing & Handover Inspection": [
-    "All punch list items from earlier stages closed: zero open NCRs, verified by Quality Inspector.",
-    "Doors & windows: smooth operation, gaps under 5mm on all sides, locks functional.",
-    "All fixtures working: taps, switches, fans, geysers tested — no snag.",
-    "Flooring: no hollow tiles, clean grout — 100% tap test on all floor tiles, uniform grout joints.",
-    "Paint: no peeling, uniform finish, no patches — visual check in daylight; touch-up not acceptable over peeling.",
-    "Customer walkthrough checklist signed: customer signs, any observation noted and resolved before possession."
+    "F5.1 — All punch list items from Stages 1-4 closed: zero open NCRs; verified by Quality Inspector.",
+    "F5.2 — Doors & windows: operation, gaps, locks: smooth operation, gaps under 5mm on all sides, locks functional.",
+    "F5.3 — All fixtures working: taps, switches, fans, geysers tested — no snag.",
+    "F5.4 — Flooring: no hollow tiles, clean grout: 100% tap test on all floor tiles, uniform grout joints.",
+    "F5.5 — Paint: no peeling, uniform finish, no patches: visual check in daylight; touch-up not acceptable over peeling.",
+    "F5.6 — Customer walkthrough checklist signed: customer signs, any observation noted and resolved before possession.",
+    "Sign-off required: Rishabh (Quality Head) final sign-off on each apartment before possession is granted."
   ]
 };
 type ChecklistStatus = (typeof CHECKLIST_STATUSES)[number];
@@ -125,6 +129,12 @@ const COLUMN_OPTIONS = Array.from({ length: TOTAL_COLUMNS }, (_, i) => `Column $
 // can still add a custom one via the "Other…" option below.
 const TOTAL_SLABS = 10;
 const SLAB_OPTIONS = Array.from({ length: TOTAL_SLABS }, (_, i) => `Slab ${i + 1}`);
+
+// Waterproofing is checked by wet area WITHIN the flat, not the whole flat —
+// kitchen/bathrooms/balconies. Fixed common areas plus a custom option,
+// same pattern as Select Slabs above, for a flat with an extra wet area
+// (utility, dry balcony, etc.) not in this default list.
+const AREA_OPTIONS = ["Kitchen", "Bathroom 1", "Bathroom 2", "Bathroom 3", "Balcony 1", "Balcony 2"];
 
 // A sentinel, non-real Stage id used ONLY to tag snags that originated from
 // a Work Quality Inspection failure — never a real progression Stage
@@ -199,9 +209,6 @@ This cannot be undone.`)) return;
       <Btn label="History" color="secondary" size="sm" onClick={() => setHistoryFloor({ floorId: insp.floorId, floorLabel: insp.floorName })} />
       {canCreate && insp.result !== "Pass" && snag?.status !== "Closed" && (
         <Btn label="Re-inspect" color="secondary" size="sm" onClick={() => { setReInspectOf(insp); setPanelOpen(true); }} />
-      )}
-      {effectiveApproval(data, insp)?.status === "pending" && (isAdmin || canDecide(data, currentUserId, insp)) && (
-        <SendApprovalsToSlackButton label="Send to Slack" record={{ coll: "qualityInspections", id: insp.id }} />
       )}
       {isAdmin && <Btn label="Delete" color="secondary" size="sm" onClick={() => deleteInspection(insp)} />}
     </div>
@@ -389,7 +396,6 @@ This cannot be undone.`)) return;
         </div>
         <Btn label={generating ? "Generating…" : "Generate Report"} color="secondary" icon="download" onClick={generateReport} disabled={generating} />
         <Btn label="Fail Register" color="secondary" icon="bug" onClick={() => setActiveTab("qualityFails" as TabKey)} />
-        {isAdmin && <SendApprovalsToSlackButton label="Send pending approvals to Slack" />}
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
@@ -462,6 +468,7 @@ This cannot be undone.`)) return;
                       {insp.workType}
                       {insp.columns?.length ? ` · ${insp.columns.length} column${insp.columns.length === 1 ? "" : "s"}` : ""}
                       {insp.slabs?.length ? ` · ${insp.slabs.length} slab${insp.slabs.length === 1 ? "" : "s"}` : ""}
+                      {insp.areas?.length ? ` · ${insp.areas.join(", ")}` : ""}
                     </div>
                   )}
                 </TableCell>
@@ -543,6 +550,9 @@ function FloorHistoryPanel({
                 {insp.slabs && insp.slabs.length > 0 && (
                   <div className="text-[11px] text-[var(--text-muted)] mt-1">Slabs: {insp.slabs.join(", ")}</div>
                 )}
+                {insp.areas && insp.areas.length > 0 && (
+                  <div className="text-[11px] text-[var(--text-muted)] mt-1">Areas: {insp.areas.join(", ")}</div>
+                )}
                 {insp.checklistItems && insp.checklistItems.length > 0 && (
                   <div className="flex flex-col gap-1 mt-2">
                     {insp.checklistItems.map((c, idx) => (
@@ -597,6 +607,21 @@ function InspectionForm({
   const [selectedSlabs, setSelectedSlabs] = useState<string[]>([]);
   const [addingCustomSlab, setAddingCustomSlab] = useState(false);
   const [customSlabText, setCustomSlabText] = useState("");
+  const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
+  const [addingCustomArea, setAddingCustomArea] = useState(false);
+  const [customAreaText, setCustomAreaText] = useState("");
+  const savedCustomAreaNames = coll(data, "customAreaNames").map((c: any) => c.name as string);
+  const areaOptions = [...AREA_OPTIONS, ...savedCustomAreaNames.filter((n) => !AREA_OPTIONS.includes(n))];
+  function addCustomArea(rawText: string) {
+    const name = rawText.trim();
+    if (!name) return;
+    setSelectedAreas((prev) => (prev.includes(name) ? prev : [...prev, name]));
+    setCustomAreaText(""); setAddingCustomArea(false);
+    const exists = areaOptions.some((a) => a.toLowerCase() === name.toLowerCase());
+    if (!exists) {
+      apply([{ op: "upsert", coll: "customAreaNames", rec: { id: nextId("CARE", coll(data, "customAreaNames")), name } }]);
+    }
+  }
   // The fixed Slab 1-10 list plus any custom name a past inspector already
   // saved (CustomSlabName) — so this isn't a one-off, local-to-this-record
   // value; everyone's Select Slabs picks up what others have added.
@@ -643,10 +668,11 @@ function InspectionForm({
       setWorkType(reInspectOf.workType || "");
       setSelectedColumns(reInspectOf.columns || []);
       setSelectedSlabs(reInspectOf.slabs || []);
+      setSelectedAreas(reInspectOf.areas || []);
       setChecklist((reInspectOf.workType && QC_CHECKLISTS[reInspectOf.workType] || []).map((text) => ({ text, status: "", remarks: "" })));
     } else {
       setProjectId(""); setFloorId(""); setUnitId(""); setWorkOrderNo(""); setItemId("");
-      setWorkType(""); setSelectedColumns([]); setSelectedSlabs([]); setChecklist([]);
+      setWorkType(""); setSelectedColumns([]); setSelectedSlabs([]); setSelectedAreas([]); setChecklist([]);
     }
     setInspectionDate(todayStr());
     setContractor(""); setCustomContractor(false);
@@ -663,6 +689,7 @@ function InspectionForm({
     if (!isFlatWise(wt)) setUnitId(""); // floor-level checklist: no flat
     if (wt !== "Column Inspection") setSelectedColumns([]);
     if (wt !== "R.C.C. Slab Inspection") { setSelectedSlabs([]); setAddingCustomSlab(false); setCustomSlabText(""); }
+    if (wt !== "Waterproofing Inspection") { setSelectedAreas([]); setAddingCustomArea(false); setCustomAreaText(""); }
     setChecklist((QC_CHECKLISTS[wt] || []).map((text) => ({ text, status: "", remarks: "" })));
   }
   function setItemStatus(idx: number, status: ChecklistStatus) {
@@ -715,6 +742,7 @@ function InspectionForm({
     if (flatWise && !unitId) { toast("Pick the flat — Brickwork and the work after it is inspected flat by flat"); return; }
     if (workType === "Column Inspection" && selectedColumns.length === 0) { toast("Select at least one column"); return; }
     if (workType === "R.C.C. Slab Inspection" && selectedSlabs.length === 0) { toast("Select at least one slab"); return; }
+    if (workType === "Waterproofing Inspection" && selectedAreas.length === 0) { toast("Select at least one area (kitchen/bathroom/balcony)"); return; }
     if (checklist.some((row) => !row.status)) { toast("Mark every checklist point as OK / Not OK / N/A"); return; }
     if (photos.length === 0) { toast("Add at least one photo as evidence"); return; }
     if (result !== "Pass" && !remarks.trim()) { toast("Remarks are required for Fail / Rework Required"); return; }
@@ -747,6 +775,7 @@ function InspectionForm({
       workType,
       columns: workType === "Column Inspection" ? selectedColumns : undefined,
       slabs: workType === "R.C.C. Slab Inspection" ? selectedSlabs : undefined,
+      areas: workType === "Waterproofing Inspection" ? selectedAreas : undefined,
       contractor: contractor.trim() || undefined,
       checklistItems: checklist.map((row) => ({ text: row.text, status: row.status as "OK" | "Not OK" | "N/A", remarks: row.remarks.trim() || undefined })),
       inspectionDate, result,
@@ -917,6 +946,36 @@ function InspectionForm({
               </div>
             )}
             <div className="text-[11px] text-[var(--text-muted)] mt-1">{selectedSlabs.length} slab{selectedSlabs.length === 1 ? "" : "s"} selected.</div>
+          </div>
+        )}
+
+        {workType === "Waterproofing Inspection" && (
+          <div className="field full">
+            <label>Select Areas *</label>
+            <SearchDropdown
+              multi
+              multiValue={selectedAreas}
+              onChangeMulti={(vals) => {
+                if (vals.includes("__custom__")) { setAddingCustomArea(true); setSelectedAreas(vals.filter((v) => v !== "__custom__")); }
+                else setSelectedAreas(vals);
+              }}
+              options={[...areaOptions.map((a) => ({ value: a, label: a })), { value: "__custom__", label: "Custom…" }]}
+              onCreate={addCustomArea}
+            />
+            {addingCustomArea && (
+              <div className="flex gap-1.5 mt-1.5">
+                <input
+                  className="input" autoFocus placeholder="Type a custom area name"
+                  value={customAreaText} onChange={(e) => setCustomAreaText(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && customAreaText.trim()) addCustomArea(customAreaText.trim()); }}
+                />
+                <button
+                  type="button" className="btn btn-secondary" style={{ flexShrink: 0 }}
+                  onClick={() => { if (customAreaText.trim()) addCustomArea(customAreaText.trim()); }}
+                >Add</button>
+              </div>
+            )}
+            <div className="text-[11px] text-[var(--text-muted)] mt-1">Waterproofing is checked per wet area, not the whole flat — {selectedAreas.length} area{selectedAreas.length === 1 ? "" : "s"} selected.</div>
           </div>
         )}
 

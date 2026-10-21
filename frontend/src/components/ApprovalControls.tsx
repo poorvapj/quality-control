@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useApp, authHeaders } from "../context/AppContext";
-import { API_BASE } from "../services/config";
+import { useApp } from "../context/AppContext";
 import { buildEventOp } from "../shared/eventLog";
 import { canDecide, decideOp, describeRecord, effectiveApproval, KIND_LABEL, pendingFor, rejectedFor, type ApprovalColl } from "../shared/approval";
 import type { Approval } from "../types";
@@ -73,27 +72,6 @@ export function ApprovalActions({ collName, record }: { collName: ApprovalColl; 
   );
 }
 
-/** Sends what is waiting on this person (everything, for Admin) to Slack with
- *  Approve / Reject buttons — for work saved before Slack approvals existed. */
-export function SendApprovalsToSlackButton({ label = "Send to Slack", record }: { label?: string; record?: { coll: string; id: string } }) {
-  const { toast } = useApp();
-  const [busy, setBusy] = useState(false);
-  async function send() {
-    setBusy(true);
-    try {
-      const r = await fetch(API_BASE + "/api/approvals/slack-resend", { method: "POST", headers: { ...authHeaders(), "Content-Type": "application/json" }, body: JSON.stringify(record || {}) });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) toast(j.error || "Couldn't send to Slack");
-      else toast(record ? (j.queued ? "Sent to Slack" : "Nothing to send — already decided, or not waiting on you") : j.queued ? `Sending ${j.queued} approval${j.queued === 1 ? "" : "s"} to Slack…` : "Nothing is waiting for approval.");
-    } catch {
-      toast("Couldn't reach the server");
-    } finally {
-      setBusy(false);
-    }
-  }
-  return <Btn label={busy ? "Sending…" : label} color="secondary" size="sm" icon="send" onClick={send} disabled={busy} />;
-}
-
 const FIELD_LABEL = "text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-0.5";
 
 function Detail({ label, children }: { label: string; children?: React.ReactNode }) {
@@ -129,6 +107,7 @@ function RecordDetails({ collName, rec }: { collName: ApprovalColl; rec: any }) 
         <Detail label="Result"><b style={{ color }}>{rec.result}</b></Detail>
         <Detail label="Inspected by">{rec.inspectorName} · {rec.inspectionDate}</Detail>
         <Detail label="Contractor">{rec.contractor}</Detail>
+        <Detail label="Areas">{rec.areas?.length ? rec.areas.join(", ") : ""}</Detail>
         <Detail label="VMS item">{rec.itemDescription ? `${rec.workOrderNo || ""} · ${rec.itemDescription}` : ""}</Detail>
         {rec.checklistItems?.length > 0 && (
           <Detail label="Checklist points">
@@ -233,7 +212,6 @@ export function ApprovalQueue() {
     <>
       <div className="flex items-center justify-between gap-3 flex-wrap mb-2.5">
         <div className="text-[13px] font-bold tracking-tight text-[var(--text-sub)] uppercase flex items-center gap-2"><NavIcon name="award" size={13} /> Awaiting My Approval <span className="text-[11px] font-medium normal-case text-[var(--text-muted)]">· {items.length}</span></div>
-        <SendApprovalsToSlackButton label="Send these to Slack" />
       </div>
       <Card padded={false} className="mb-6">
         {(showAll ? items : items.slice(0, 8)).map(({ coll: c, rec }) => (

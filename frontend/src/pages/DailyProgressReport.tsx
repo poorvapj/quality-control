@@ -301,15 +301,14 @@ export default function DailyProgressReportPage() {
     // Drawing Requests: VMS's own list, so the report shows VMS's current
     // stage per ticket and includes tickets raised only in VMS. Same filters
     // as the page (project; a DRI sees only their own, matched by name since
-    // VMS has no QC user id) — AND the same date range as every other table
-    // in this report. Both the QC fallback list and the VMS fetch below used
-    // to skip this, so the KPI/table counted every drawing request ever
-    // raised regardless of the chosen period (e.g. picking "13 Oct–today"
-    // still pulled in tickets from months earlier) while VMS's own report
-    // correctly scopes to the period — the two counts could never match.
+    // VMS has no QC user id). The TABLE intentionally lists every drawing
+    // request in scope regardless of date — a request raised before the
+    // period is still open work someone needs to see — but the KPI count
+    // above it is scoped to the selected period (inBounds below), same as
+    // VMS's own report, so the two numbers actually mean the same thing.
     const inBounds = (createdAt: number) => !bounds || (() => { const d = ymd(new Date(createdAt)); return d >= bounds.from && d <= bounds.to; })();
-    type ReportDr = { ticketNo: string; description: string; projectName: string; driName: string; stageLabel: string; requestedOn: string; daysSince: number; open: boolean };
-    let reportDrawingRequests: ReportDr[] = allDrawingRequests.filter((r) => inBounds(r.createdAt)).map((r) => ({
+    type ReportDr = { ticketNo: string; description: string; projectName: string; driName: string; stageLabel: string; requestedOn: string; daysSince: number; open: boolean; createdAt: number };
+    let reportDrawingRequests: ReportDr[] = allDrawingRequests.map((r) => ({
       ticketNo: r.ticketNo,
       description: r.description,
       projectName: r.projectName || refLabel(data, "projects", r.projectId),
@@ -317,7 +316,8 @@ export default function DailyProgressReportPage() {
       stageLabel: STAGE_LABEL[r.reviewStatus] || r.reviewStatus,
       requestedOn: fmtDate(r.createdAt),
       daysSince: daysSince(r.createdAt),
-      open: r.reviewStatus !== "approved" && r.reviewStatus !== "returned"
+      open: r.reviewStatus !== "approved" && r.reviewStatus !== "returned",
+      createdAt: r.createdAt
     }));
     try {
       const vdr: { available: boolean; reason?: string; requests: { ticketNo: string; description: string; projectCode: string; projectName: string; driName: string; reviewStatus: string; createdAt: number }[] } =
@@ -328,7 +328,6 @@ export default function DailyProgressReportPage() {
         reportDrawingRequests = vdr.requests
           .filter((r) => !scopeProject || (r.projectCode ? r.projectCode === scopeProject.code : r.projectName.trim().toLowerCase() === scopeProject.name.trim().toLowerCase()))
           .filter((r) => !isDri || r.driName.trim().toLowerCase() === myName)
-          .filter((r) => inBounds(r.createdAt))
           .map((r) => ({
             ticketNo: r.ticketNo,
             description: r.description,
@@ -337,7 +336,8 @@ export default function DailyProgressReportPage() {
             stageLabel: vmsStageLabel(r.reviewStatus),
             requestedOn: fmtDate(r.createdAt),
             daysSince: daysSince(r.createdAt),
-            open: r.reviewStatus !== "approved" && r.reviewStatus !== "returned"
+            open: r.reviewStatus !== "approved" && r.reviewStatus !== "returned",
+            createdAt: r.createdAt
           }));
       } else {
         toast("VMS drawing requests unavailable — the report uses QC's copy for that table");
@@ -347,6 +347,7 @@ export default function DailyProgressReportPage() {
     }
 
     const periodLabel = rangeLabel;
+    const drawingRequestsInRange = reportDrawingRequests.filter((r) => inBounds(r.createdAt)).length;
     const OVERDUE_DAYS = 3;
     const overdueDrawingReqs = reportDrawingRequests.filter((r) => r.open && r.daysSince > OVERDUE_DAYS);
     const totalProjectsInScope = fProject ? 1 : projects.length;
@@ -372,12 +373,12 @@ export default function DailyProgressReportPage() {
         workTypes: workTypesLogged,
         reportingDays,
         reportsSubmitted: rows.length,
-        drawingRequests: reportDrawingRequests.length
+        drawingRequests: drawingRequestsInRange
       },
       projectSummary,
       workTypeSummary,
       workProgress,
-      drawingRequests: reportDrawingRequests.map(({ open: _open, ...row }) => row),
+      drawingRequests: reportDrawingRequests.map(({ open: _open, createdAt: _createdAt, ...row }) => row),
       actionItems
     });
   }

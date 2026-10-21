@@ -552,6 +552,10 @@ export interface QualityInspection extends BaseRecord {
   // CustomSlabName below) RCC slabs this inspection covers — only
   // meaningful when workType is "R.C.C. Slab Inspection".
   slabs?: string[];
+  // Which wet area(s) of the flat this inspection covers — only meaningful
+  // when workType is "Waterproofing Inspection" (kitchen/bathrooms/balconies,
+  // not the whole flat).
+  areas?: string[];
   checklistItems?: { text: string; status: "OK" | "Not OK" | "N/A"; remarks?: string }[];
   // Optional, manually-picked reference to a real VMS scope-item/sub-item —
   // never auto-matched to the Unit above. See the interface doc comment.
