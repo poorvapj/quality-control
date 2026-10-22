@@ -1925,6 +1925,17 @@ async function handleApi(req, res, urlPath) {
     const doc = await createBackup(session.userId);
     return sendJson(res, 200, summarizeBackup(doc));
   }
+  if (req.method === "POST" && urlPath === "/api/reports/weekly-qc/send-now") {
+    // Manual test trigger for the Saturday-1pm-IST weekly Quality Inspection
+    // report — Admin only, ignores the schedule/once-per-week marker, so it
+    // can be verified immediately instead of waiting for Saturday.
+    const session = getSession(req);
+    if (!session) return sendJson(res, 401, { error: "Sign-in required" });
+    if (!session.isAdmin) return sendJson(res, 403, { error: "Admin access required" });
+    if (!globalThis.__sendWeeklyQcReportNow) return sendJson(res, 503, { error: "Not ready yet — try again in a few seconds" });
+    const ok = await globalThis.__sendWeeklyQcReportNow();
+    return sendJson(res, 200, { sent: ok });
+  }
   if (req.method === "GET" && urlPath === "/api/execution-reconciliation") {
     // Read-only aggregation over VMS's own Work Order/Running Bill data
     // (reuses the same SOURCE_MONGO_URI connection the VMS DPR poller
@@ -2207,6 +2218,66 @@ connectMongo()
       };
       setTimeout(runSync, 10 * 1000); // give the first requests a head start instead of competing at boot
       setInterval(runSync, 30 * 60 * 1000); // every 30 minutes
+    }
+
+    // Weekly Work Quality Inspection report -> Slack, Saturday 1pm IST.
+    // Testing phase: goes to WEEKLY_QC_REPORT_RECIPIENT_EMAIL (defaults to
+    // Poorva) instead of Rakesh Bhargava until that's confirmed working —
+    // flip the env var to rakesh@neotericgrp.in when ready, no code change
+    // needed. A "meta" marker (keyed by the week's end date) stops a second
+    // send if this check fires more than once inside the match window.
+    {
+      const { buildWeeklyQcReportData, currentWeekBounds } = require("./weeklyQcReport.js");
+      const { renderQcInspectionPdfBuffer } = require("./qcInspectionPdfDocument.js");
+      const { sendPdfToEmail } = require("./weeklyReportSlack.js");
+      const RECIPIENT_EMAIL = process.env.WEEKLY_QC_REPORT_RECIPIENT_EMAIL || "poorva@neotericgrp.in";
+
+      async function sendWeeklyQcReport() {
+        const data = await buildWeeklyQcReportData(mongoDb);
+        const buffer = await renderQcInspectionPdfBuffer(data);
+        const slug = data.periodLabel.replace(/[^\w]+/g, "-");
+        const ok = await sendPdfToEmail(
+          RECIPIENT_EMAIL, buffer, `Quality-Inspection-Report-${slug}.pdf`,
+          `Work Quality Inspection Report — ${data.periodLabel}`,
+          `📋 Weekly Work Quality Inspection Report — ${data.periodLabel}\n${data.kpis.total} inspections · ${data.kpis.pass} pass · ${data.kpis.fail} fail · ${data.kpis.rework} rework · ${data.kpis.passRate}% pass rate · ${data.kpis.overdue} overdue`
+        );
+        await mongoDb.collection("events").insertOne({
+          ts: Date.now(), userId: "", action: "WEEKLY_QC_REPORT_SENT", targetId: "", stageId: "",
+          detail: `Weekly Quality Inspection report (${data.periodLabel}) ${ok ? "sent to " + RECIPIENT_EMAIL : "FAILED to send to " + RECIPIENT_EMAIL}`
+        });
+        return ok;
+      }
+
+      let weeklyQcCheckInFlight = false;
+      const checkWeeklyQcSchedule = () => {
+        if (weeklyQcCheckInFlight) return;
+        weeklyQcCheckInFlight = true;
+        (async () => {
+          const istNow = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+          const isSaturday = istNow.getUTCDay() === 6;
+          const hour = istNow.getUTCHours();
+          if (!isSaturday || hour !== 13) return; // only fires within the 13:00-13:59 IST hour, Saturday
+          const { to } = currentWeekBounds();
+          const markerId = "weeklyQcReportSent:" + to;
+          const already = await mongoDb.collection("meta").findOne({ _id: markerId });
+          if (already) return;
+          // Claim the marker BEFORE sending — an error sending still leaves
+          // the real failure visible in the event log above, and prevents
+          // a slow/hung send from being retried every 5 minutes meanwhile.
+          await mongoDb.collection("meta").updateOne({ _id: markerId }, { $set: { sentAt: Date.now() } }, { upsert: true });
+          try {
+            await sendWeeklyQcReport();
+          } catch (e) {
+            console.error("  [weekly-qc-report] failed:", e && e.stack ? e.stack : e);
+          }
+        })().finally(() => { weeklyQcCheckInFlight = false; });
+      };
+      setInterval(checkWeeklyQcSchedule, 5 * 60 * 1000);
+      checkWeeklyQcSchedule(); // in case the process starts mid-window
+
+      // Manual test trigger — Admin only, ignores the schedule/marker, so
+      // this can be verified immediately instead of waiting for Saturday.
+      globalThis.__sendWeeklyQcReportNow = sendWeeklyQcReport;
     }
   })
   .catch((e) => {
