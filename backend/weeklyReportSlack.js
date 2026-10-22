@@ -18,18 +18,11 @@ async function slackUserIdByEmail(email) {
   return json.user.id;
 }
 
-async function openDm(slackUserId) {
-  const res = await fetch("https://slack.com/api/conversations.open", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}`, "Content-Type": "application/json; charset=utf-8" },
-    body: JSON.stringify({ users: slackUserId })
-  });
-  const json = await res.json();
-  if (!json.ok) { console.error("Slack conversations.open:", json.error); return null; }
-  return json.channel.id;
-}
-
-/** Uploads `buffer` as `filename` and shares it in `channelId` with `title`/`initialComment`. */
+/** Uploads `buffer` as `filename` and shares it in `channelId` with `title`/`initialComment`.
+ *  `channelId` can be a plain Slack user id here too — same as
+ *  chat.postMessage elsewhere in this app, Slack auto-opens the DM, so this
+ *  needs only the `chat:write` scope the bot already has (no `im:write`/
+ *  conversations.open round-trip, which the bot isn't authorized for). */
 async function uploadPdfToChannel(channelId, buffer, filename, title, initialComment) {
   const urlRes = await fetch("https://slack.com/api/files.getUploadURLExternal", {
     method: "POST",
@@ -56,14 +49,12 @@ async function uploadPdfToChannel(channelId, buffer, filename, title, initialCom
   return true;
 }
 
-/** Looks up `recipientEmail` on Slack, opens a DM, and sends the PDF there. */
+/** Looks up `recipientEmail` on Slack and sends the PDF to their DM. */
 async function sendPdfToEmail(recipientEmail, buffer, filename, title, initialComment) {
   if (!SLACK_BOT_TOKEN) { console.log("Weekly report Slack send skipped: SLACK_BOT_TOKEN not configured"); return false; }
   const userId = await slackUserIdByEmail(recipientEmail);
   if (!userId) { console.log("Weekly report Slack send skipped: no Slack user found for", recipientEmail); return false; }
-  const channelId = await openDm(userId);
-  if (!channelId) return false;
-  return uploadPdfToChannel(channelId, buffer, filename, title, initialComment);
+  return uploadPdfToChannel(userId, buffer, filename, title, initialComment);
 }
 
 module.exports = { sendPdfToEmail };
