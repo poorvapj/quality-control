@@ -690,8 +690,8 @@ function seedData() {
   // Column Inspection's "Select Columns" and R.C.C. Slab Inspection's
   // "Select Slabs" pickers read from these two masters — seed the same
   // defaults the old hardcoded 1-60 / 1-10 lists used to provide.
-  for (let i = 1; i <= 60; i++) d.columnMaster.push({ id: "COL-" + String(i).padStart(4, "0"), name: "Column " + i, seq: i, active: true });
-  for (let i = 1; i <= 10; i++) d.slabMaster.push({ id: "SLB-" + String(i).padStart(4, "0"), name: "Slab " + i, seq: i, active: true });
+  for (let i = 1; i <= 60; i++) d.columnMaster.push({ id: "COL-" + String(i).padStart(4, "0"), projectId, name: "Column " + i, seq: i, active: true });
+  for (let i = 1; i <= 10; i++) d.slabMaster.push({ id: "SLB-" + String(i).padStart(4, "0"), projectId, name: "Slab " + i, seq: i, active: true });
 
   return d;
 }

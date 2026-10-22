@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { MASTERS } from "../services/config";
-import { coll, byId, refLabel } from "../shared/rules";
+import { coll, byId, refLabel, myProjects } from "../shared/rules";
+import SearchDropdown from "../components/SearchDropdown";
 import { exportSnagCsv } from "../shared/exportSnagCsv";
 import { downloadCsv } from "../shared/csv";
 import { buildEventOp } from "../shared/eventLog";
@@ -9,6 +10,7 @@ import { hasModuleGrant, effectiveRoleGrants } from "../shared/permissionMatrix"
 import { ROLES } from "../services/config";
 import NavIcon from "../components/NavIcon";
 import WorkTargetBulkImport from "../components/WorkTargetBulkImport";
+import BulkAddNumberedList from "../components/BulkAddNumberedList";
 import CustomFormFill from "../components/CustomFormFill";
 import SidePanel from "../components/SidePanel";
 import type { MasterKey } from "../types";
@@ -20,7 +22,14 @@ export default function Masters() {
     openRecordModal, apply, toast, setActiveTab
   } = useApp();
   const [q, setQ] = useState("");
+  // VMS-style explicit "All Projects" filter — only shown for masters whose
+  // records actually carry a projectId. Replaces the old silent scoping to
+  // whatever currentProjectId happened to be set elsewhere, so switching
+  // projects (or seeing every project's records at once) doesn't require
+  // leaving this page.
+  const [fProject, setFProject] = useState("");
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
+  const [bulkAddListOpen, setBulkAddListOpen] = useState(false);
   const [fillFormId, setFillFormId] = useState<string | null>(null);
   const [viewSubmissionsFormId, setViewSubmissionsFormId] = useState<string | null>(null);
   const isAdmin = currentUserId === "U-ADMIN";
@@ -29,10 +38,12 @@ export default function Masters() {
   // Every other master stays fully open to any signed-in user.
   const activeMaster: MasterKey = (rawActiveMaster === "users" && !isAdmin) ? "projects" : rawActiveMaster;
   const master = MASTERS[activeMaster];
+  const isProjectScoped = master.fields.some((f) => f.k === "projectId");
+  const allProjects = myProjects(data, currentUserId);
 
   let rows: any[] = coll(data, activeMaster).slice();
-  if (master.fields.some((f) => f.k === "projectId")) {
-    rows = rows.filter((r: any) => !r.projectId || r.projectId === currentProjectId);
+  if (isProjectScoped) {
+    rows = rows.filter((r: any) => !r.projectId || !fProject || r.projectId === fProject);
   }
   if (activeMaster === "roles") {
     // Built-in role default-permission overrides (saved from Permission
@@ -149,10 +160,23 @@ export default function Masters() {
             ))}
         </div>
         <div className="toolbar">
+          {isProjectScoped && (
+            <div style={{ width: 180, flexShrink: 0 }}>
+              <SearchDropdown
+                value={fProject}
+                onChange={setFProject}
+                neutralActive
+                options={[{ value: "", label: "All Projects" }, ...allProjects.map((p) => ({ value: p.id, label: p.name }))]}
+              />
+            </div>
+          )}
           <input className="input grow" placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} />
           <button className="btn btn-secondary btn-sm" onClick={exportMasterCsv}>⬇ Export CSV</button>
           {editable && activeMaster === "workTargets" && (
             <button className="btn btn-secondary btn-sm" onClick={() => setBulkImportOpen(true)}>📋 Bulk Import</button>
+          )}
+          {editable && (activeMaster === "columnMaster" || activeMaster === "slabMaster") && (
+            <button className="btn btn-secondary btn-sm" onClick={() => setBulkAddListOpen(true)}>⚡ Bulk Add</button>
           )}
           {editable && (
             <button
@@ -168,6 +192,14 @@ export default function Masters() {
         </div>
 
         {bulkImportOpen && <WorkTargetBulkImport onClose={() => setBulkImportOpen(false)} />}
+        {bulkAddListOpen && (
+          <BulkAddNumberedList
+            master={activeMaster as "columnMaster" | "slabMaster"}
+            idPrefix={activeMaster === "columnMaster" ? "COL" : "SLB"}
+            namePrefix={activeMaster === "columnMaster" ? "Column" : "Slab"}
+            onClose={() => setBulkAddListOpen(false)}
+          />
+        )}
         <div className="table-scroll" style={{ maxHeight: 560, overflowY: "auto" }}>
           {rows.length === 0 ? (
             <div className="empty">No {master.label.toLowerCase()} records yet.</div>

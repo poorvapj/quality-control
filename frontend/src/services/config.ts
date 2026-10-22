@@ -98,9 +98,10 @@ export const MASTERS: Record<MasterKey, MasterDef> = {
   },
   columnMaster: {
     label: "Column", icon: "🏛️", prefix: "COL",
-    desc: "Column Inspection's \"Select Columns\" option list.",
-    cols: ["name", "seq", "active"],
+    desc: "Column Inspection's \"Select Columns\" option list — per project.",
+    cols: ["projectId", "name", "seq", "active"],
     fields: [
+      { k: "projectId", label: "Project", type: "ref", coll: "projects", required: true },
       { k: "name", label: "Column name", type: "text", required: true },
       { k: "seq", label: "Display order", type: "number" },
       { k: "active", label: "Active", type: "bool" }
@@ -108,9 +109,10 @@ export const MASTERS: Record<MasterKey, MasterDef> = {
   },
   slabMaster: {
     label: "Slab", icon: "🧊", prefix: "SLB",
-    desc: "R.C.C. Slab Inspection's \"Select Slabs\" option list.",
-    cols: ["name", "seq", "active"],
+    desc: "R.C.C. Slab Inspection's \"Select Slabs\" option list — per project.",
+    cols: ["projectId", "name", "seq", "active"],
     fields: [
+      { k: "projectId", label: "Project", type: "ref", coll: "projects", required: true },
       { k: "name", label: "Slab name", type: "text", required: true },
       { k: "seq", label: "Display order", type: "number" },
       { k: "active", label: "Active", type: "bool" }

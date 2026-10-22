@@ -230,8 +230,8 @@ const UNIT_FINAL_STAGES = [
 // Column/Slab option lists now come from Masters ▸ Column Master / Slab
 // Master (coll(data, "columnMaster"/"slabMaster")) instead of a fixed
 // Column 1-60 / Slab 1-10 — see activeNames() below.
-const activeNames = (rows: { name: string; seq?: number; active?: boolean }[]) =>
-  rows.filter((r) => r.active !== false).sort((a, b) => (a.seq || 0) - (b.seq || 0)).map((r) => r.name);
+const activeNames = (rows: { name: string; seq?: number; active?: boolean; projectId?: string }[], projectId: string) =>
+  rows.filter((r) => r.active !== false && r.projectId === projectId).sort((a, b) => (a.seq || 0) - (b.seq || 0)).map((r) => r.name);
 
 // Waterproofing is checked by wet area WITHIN the flat, not the whole flat —
 // kitchen/bathrooms/balconies. Fixed common areas plus a custom option,
@@ -730,8 +730,8 @@ function InspectionForm({
   // "Custom…" still quick-adds a new one on the fly, straight into Slab
   // Master, so it's immediately a real, manageable master record rather
   // than a one-off local value.
-  const columnOptions = activeNames(coll(data, "columnMaster"));
-  const slabOptions = activeNames(coll(data, "slabMaster"));
+  const columnOptions = activeNames(coll(data, "columnMaster"), projectId);
+  const slabOptions = activeNames(coll(data, "slabMaster"), projectId);
   function addCustomSlab(rawText: string) {
     const name = rawText.trim();
     if (!name) return;
@@ -740,8 +740,8 @@ function InspectionForm({
     const exists = slabOptions.some((s) => s.toLowerCase() === name.toLowerCase());
     if (!exists) {
       const slabs = coll(data, "slabMaster");
-      const maxSeq = slabs.reduce((m, s: any) => Math.max(m, s.seq || 0), 0);
-      apply([{ op: "upsert", coll: "slabMaster", rec: { id: nextId("SLB", slabs), name, seq: maxSeq + 1, active: true } }]);
+      const maxSeq = slabs.filter((s: any) => s.projectId === projectId).reduce((m, s: any) => Math.max(m, s.seq || 0), 0);
+      apply([{ op: "upsert", coll: "slabMaster", rec: { id: nextId("SLB", slabs), projectId, name, seq: maxSeq + 1, active: true } }]);
     }
   }
   const [contractor, setContractor] = useState("");

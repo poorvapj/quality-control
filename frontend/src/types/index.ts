@@ -824,10 +824,12 @@ export interface CustomAreaName extends BaseRecord {
  *  pickers are built from, editable instead of the old fixed Column 1-60 /
  *  Slab 1-10 + ad-hoc "Custom…" names. `seq` controls display order. */
 export interface ColumnMaster extends BaseRecord {
+  projectId: string;
   name: string;
   seq?: number;
 }
 export interface SlabMaster extends BaseRecord {
+  projectId: string;
   name: string;
   seq?: number;
 }
