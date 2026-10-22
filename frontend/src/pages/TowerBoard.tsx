@@ -240,8 +240,18 @@ export default function TowerBoard() {
                       : ms === "pending" ? " · measurement awaiting leader approval"
                       : " · not measured yet";
                   } else {
+                    // Execution's own "done"/"complete" only tracks trade
+                    // progress — it knew nothing about a Quality Inspection
+                    // sitting unapproved or failed on this same unit, so a
+                    // flat could show plain green here while the Quality
+                    // lens, looking at the exact same unit, showed amber
+                    // (awaiting approval) or red (failed) for it. Quality's
+                    // failed/pending state now overrides the execution
+                    // colour here too, so the two lenses never disagree on
+                    // the same unit.
                     if (s.locked) bg = "var(--color-locked)";
-                    else if (s.fail) bg = "var(--color-fail)";
+                    else if (s.fail || qs === "failed") bg = "var(--color-fail)";
+                    else if (qs === "pending") bg = AMBER;
                     else if (exDone) bg = "var(--color-pass)";
                     else if (s.complete) bg = "#64748b";
                     else if (s.done > 0) bg = "var(--color-mep)";
@@ -249,7 +259,7 @@ export default function TowerBoard() {
                       + (hasSnag ? " · " + s.snags + " open snag(s)" : "")
                       + (closedSnags ? " · " + closedSnags + " resolved snag(s)" : "");
                     if (exDone) tip += " · execution work completed";
-                    if (lens === "all") tip += qs === "checked" ? " · quality checked" : qs === "failed" ? " · quality check failed" : qs === "in-progress" ? " · quality checks in progress" : "";
+                    if (lens === "all") tip += qs === "checked" ? " · quality checked" : qs === "failed" ? " · quality check failed" : qs === "pending" ? " · quality check awaiting leader approval" : qs === "in-progress" ? " · quality checks in progress" : "";
                   }
                   return (
                     <div
@@ -291,6 +301,7 @@ export default function TowerBoard() {
           ] : lens === "execution" ? [
             { c: "var(--color-pass)", t: "Work completed (all trades done)" },
             { c: "var(--color-mep)", t: "Trades in progress" },
+            { c: AMBER, t: "Quality check awaiting approval" },
             { c: "var(--color-fail)", t: "QC fail / rework" },
             { c: "var(--bg-subtle)", t: "Not started", border: true },
             { c: "var(--color-locked)", t: "Structure not released" },
@@ -303,6 +314,7 @@ export default function TowerBoard() {
           ] : [
             { c: "#64748b", t: "Handed over" },
             { c: "var(--color-mep)", t: "Trades in progress" },
+            { c: AMBER, t: "Quality check awaiting approval" },
             { c: "var(--color-fail)", t: "QC fail / rework" },
             { c: "var(--bg-subtle)", t: "Not started", border: true },
             { c: "var(--color-locked)", t: "Structure not released" },
