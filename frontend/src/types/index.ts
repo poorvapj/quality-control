@@ -777,6 +777,8 @@ export interface BoardData {
   teamDailyReports: TeamDailyReport[];
   customSlabNames: CustomSlabName[];
   customAreaNames: CustomAreaName[];
+  columnMaster: ColumnMaster[];
+  slabMaster: SlabMaster[];
   progress: Record<string, ProgressPatch>;
   events: EventLog[];
   [key: string]: unknown;
@@ -817,6 +819,19 @@ export interface CustomAreaName extends BaseRecord {
   name: string;
 }
 
+/** Masters ▸ Column Master / Slab Master — the option lists Column
+ *  Inspection / R.C.C. Slab Inspection's "Select Columns"/"Select Slabs"
+ *  pickers are built from, editable instead of the old fixed Column 1-60 /
+ *  Slab 1-10 + ad-hoc "Custom…" names. `seq` controls display order. */
+export interface ColumnMaster extends BaseRecord {
+  name: string;
+  seq?: number;
+}
+export interface SlabMaster extends BaseRecord {
+  name: string;
+  seq?: number;
+}
+
 export type CollectionName = keyof Omit<BoardData, "progress" | "events">;
 
 export type Op =
@@ -826,7 +841,7 @@ export type Op =
   | { op: "event"; ev: EventLog };
 
 export type TabKey = "dash" | "misDashboard" | "userMis" | "executionReconciliation" | "qualityInspection" | "qualityFails" | "caseStudies" | "unitExecutionWorkflow" | "measurement" | "progressAnalysis" | "purchaseOrders" | "work" | "board" | "handoverChecklist" | "handoverInternal" | "handoverOwner" | "snags" | "team" | "masters" | "addUser" | "dpr" | "drawingRequests" | "backups" | "auditLog" | "permissionMatrix";
-export type MasterKey = "projects" | "floors" | "units" | "stages" | "qparams" | "checklists" | "stagemap" | "users" | "permissions" | "workTargets" | "teams" | "roles" | "forms";
+export type MasterKey = "projects" | "floors" | "units" | "columnMaster" | "slabMaster" | "stages" | "qparams" | "checklists" | "stagemap" | "users" | "permissions" | "workTargets" | "teams" | "roles" | "forms";
 
 export type FieldType = "text" | "number" | "date" | "color" | "select" | "ref" | "bool" | "textarea" | "items" | "password" | "permissionGrid" | "formFields";
 

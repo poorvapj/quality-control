@@ -227,15 +227,11 @@ const UNIT_FINAL_STAGES = [
   "Tile Work Inspection"
 ];
 
-// Fixed across every project/floor — confirmed with the person who asked
-// for this field, not read from any per-floor master data.
-const TOTAL_COLUMNS = 60;
-const COLUMN_OPTIONS = Array.from({ length: TOTAL_COLUMNS }, (_, i) => `Column ${i + 1}`);
-
-// "Up to 10" per the person who asked — not a hard ceiling, a bigger floor
-// can still add a custom one via the "Other…" option below.
-const TOTAL_SLABS = 10;
-const SLAB_OPTIONS = Array.from({ length: TOTAL_SLABS }, (_, i) => `Slab ${i + 1}`);
+// Column/Slab option lists now come from Masters ▸ Column Master / Slab
+// Master (coll(data, "columnMaster"/"slabMaster")) instead of a fixed
+// Column 1-60 / Slab 1-10 — see activeNames() below.
+const activeNames = (rows: { name: string; seq?: number; active?: boolean }[]) =>
+  rows.filter((r) => r.active !== false).sort((a, b) => (a.seq || 0) - (b.seq || 0)).map((r) => r.name);
 
 // Waterproofing is checked by wet area WITHIN the flat, not the whole flat —
 // kitchen/bathrooms/balconies. Fixed common areas plus a custom option,
@@ -729,11 +725,13 @@ function InspectionForm({
       apply([{ op: "upsert", coll: "customAreaNames", rec: { id: nextId("CARE", coll(data, "customAreaNames")), name } }]);
     }
   }
-  // The fixed Slab 1-10 list plus any custom name a past inspector already
-  // saved (CustomSlabName) — so this isn't a one-off, local-to-this-record
-  // value; everyone's Select Slabs picks up what others have added.
-  const savedCustomSlabNames = coll(data, "customSlabNames").map((c: any) => c.name as string);
-  const slabOptions = [...SLAB_OPTIONS, ...savedCustomSlabNames.filter((n) => !SLAB_OPTIONS.includes(n))];
+  // Column/Slab option lists live in Masters ▸ Column Master / Slab Master
+  // now (editable there), instead of a fixed Column 1-60 / Slab 1-10 list —
+  // "Custom…" still quick-adds a new one on the fly, straight into Slab
+  // Master, so it's immediately a real, manageable master record rather
+  // than a one-off local value.
+  const columnOptions = activeNames(coll(data, "columnMaster"));
+  const slabOptions = activeNames(coll(data, "slabMaster"));
   function addCustomSlab(rawText: string) {
     const name = rawText.trim();
     if (!name) return;
@@ -741,7 +739,9 @@ function InspectionForm({
     setCustomSlabText(""); setAddingCustomSlab(false);
     const exists = slabOptions.some((s) => s.toLowerCase() === name.toLowerCase());
     if (!exists) {
-      apply([{ op: "upsert", coll: "customSlabNames", rec: { id: nextId("CSLB", coll(data, "customSlabNames")), name } }]);
+      const slabs = coll(data, "slabMaster");
+      const maxSeq = slabs.reduce((m, s: any) => Math.max(m, s.seq || 0), 0);
+      apply([{ op: "upsert", coll: "slabMaster", rec: { id: nextId("SLB", slabs), name, seq: maxSeq + 1, active: true } }]);
     }
   }
   const [contractor, setContractor] = useState("");
@@ -1114,9 +1114,9 @@ function InspectionForm({
               multi
               multiValue={selectedColumns}
               onChangeMulti={setSelectedColumns}
-              options={COLUMN_OPTIONS.map((c) => ({ value: c, label: c }))}
+              options={columnOptions.map((c) => ({ value: c, label: c }))}
             />
-            <div className="text-[11px] text-[var(--text-muted)] mt-1">{selectedColumns.length} of {TOTAL_COLUMNS} column{selectedColumns.length === 1 ? "" : "s"} selected.</div>
+            <div className="text-[11px] text-[var(--text-muted)] mt-1">{selectedColumns.length} of {columnOptions.length} column{selectedColumns.length === 1 ? "" : "s"} selected.</div>
           </div>
         )}
 

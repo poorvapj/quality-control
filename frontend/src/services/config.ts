@@ -96,6 +96,26 @@ export const MASTERS: Record<MasterKey, MasterDef> = {
       { k: "active", label: "Active", type: "bool" }
     ]
   },
+  columnMaster: {
+    label: "Column", icon: "🏛️", prefix: "COL",
+    desc: "Column Inspection's \"Select Columns\" option list.",
+    cols: ["name", "seq", "active"],
+    fields: [
+      { k: "name", label: "Column name", type: "text", required: true },
+      { k: "seq", label: "Display order", type: "number" },
+      { k: "active", label: "Active", type: "bool" }
+    ]
+  },
+  slabMaster: {
+    label: "Slab", icon: "🧊", prefix: "SLB",
+    desc: "R.C.C. Slab Inspection's \"Select Slabs\" option list.",
+    cols: ["name", "seq", "active"],
+    fields: [
+      { k: "name", label: "Slab name", type: "text", required: true },
+      { k: "seq", label: "Display order", type: "number" },
+      { k: "active", label: "Active", type: "bool" }
+    ]
+  },
   stages: {
     label: "Stage", icon: "📋", prefix: "STG",
     desc: "The vocabulary of work. Gates are QC hold points; hidden work needs DET measurement first.",

@@ -36,6 +36,8 @@ const COLLECTIONS = [
   "teamDailyReports", // One per Team per date — end-of-day activity summary, signed off by the team's own leader (teamDailyReports.js)
   "customSlabNames", // Shared list of slab names typed via Quality Inspection's "Select Slabs" Custom option, so every inspector sees ones others already added
   "customAreaNames", // Shared list of wet-area names typed via Quality Inspection's Waterproofing "Select Areas" Custom option, same pattern as customSlabNames
+  "columnMaster", // Masters ▸ Column Master — Column Inspection's "Select Columns" option list (replaces the old fixed Column 1-60)
+  "slabMaster", // Masters ▸ Slab Master — R.C.C. Slab Inspection's "Select Slabs" option list (replaces the old fixed Slab 1-10 + customSlabNames)
   "caseStudies" // Quality issue writeups (root cause / corrective action / lessons learned) — standalone, optionally linked to a QualityInspection
 ];
 
@@ -684,6 +686,12 @@ function seedData() {
 
   d.events.sort((a, b) => b.ts - a.ts);
   if (d.events.length > 5000) d.events.length = 5000;
+
+  // Column Inspection's "Select Columns" and R.C.C. Slab Inspection's
+  // "Select Slabs" pickers read from these two masters — seed the same
+  // defaults the old hardcoded 1-60 / 1-10 lists used to provide.
+  for (let i = 1; i <= 60; i++) d.columnMaster.push({ id: "COL-" + String(i).padStart(4, "0"), name: "Column " + i, seq: i, active: true });
+  for (let i = 1; i <= 10; i++) d.slabMaster.push({ id: "SLB-" + String(i).padStart(4, "0"), name: "Slab " + i, seq: i, active: true });
 
   return d;
 }
