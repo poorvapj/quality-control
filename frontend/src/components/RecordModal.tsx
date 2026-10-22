@@ -31,6 +31,7 @@ export default function RecordModal() {
   const [values, setValues] = useState<Record<string, any>>({});
   const [items, setItems] = useState<ChecklistItem[]>([]);
   const [formFields, setFormFields] = useState<CustomFormField[]>([]);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!recordModal || !master) return;
@@ -181,36 +182,47 @@ export default function RecordModal() {
   }
 
   async function save() {
-    const out: any = recordModal!.id ? Object.assign({}, rec) : { id: nextId(master!.prefix, coll(data, recordModal!.master)) };
-    for (const f of master!.fields) {
-      if (f.type === "items") { out.items = items; continue; }
-      if (f.type === "formFields") { out.fields = formFields; continue; }
-      let v = values[f.k];
-      if (f.type === "number") v = v === "" ? null : Number(v);
-      if (f.required && (v === "" || v == null)) { toast(f.label + " is required"); return; }
-      out[f.k] = v;
-    }
-    if (!out.code && out.id) out.code = out.id;
-    if (master!.fields.some((f) => f.k === "projectId") && !out.projectId) out.projectId = currentProjectId;
+    // The modal stays open for a moment while apply() round-trips — without
+    // this guard, a second click in that window re-ran nextId() against the
+    // same (not-yet-updated) `data`, handing out the SAME id twice and
+    // creating a duplicate/overwriting record. Button is disabled below too,
+    // but the guard is here as well in case save() is ever reached another way.
+    if (saving) return;
+    setSaving(true);
+    try {
+      const out: any = recordModal!.id ? Object.assign({}, rec) : { id: nextId(master!.prefix, coll(data, recordModal!.master)) };
+      for (const f of master!.fields) {
+        if (f.type === "items") { out.items = items; continue; }
+        if (f.type === "formFields") { out.fields = formFields; continue; }
+        let v = values[f.k];
+        if (f.type === "number") v = v === "" ? null : Number(v);
+        if (f.required && (v === "" || v == null)) { toast(f.label + " is required"); return; }
+        out[f.k] = v;
+      }
+      if (!out.code && out.id) out.code = out.id;
+      if (master!.fields.some((f) => f.k === "projectId") && !out.projectId) out.projectId = currentProjectId;
 
-    // A second active Work Target for the same project+category would
-    // silently double the "planned" total the DPR report rolls up (it sums
-    // every matching target) without any visible sign why — block it here
-    // rather than let two rows quietly disagree with what DprForm's own
-    // single-target lookup shows.
-    if (recordModal!.master === "workTargets") {
-      const dup = coll(data, "workTargets").some(
-        (t: any) => t.id !== out.id && t.active !== false && t.projectId === out.projectId && t.category === out.category
-      );
-      if (dup) { toast("A Work Target for this project + category already exists"); return; }
-    }
+      // A second active Work Target for the same project+category would
+      // silently double the "planned" total the DPR report rolls up (it sums
+      // every matching target) without any visible sign why — block it here
+      // rather than let two rows quietly disagree with what DprForm's own
+      // single-target lookup shows.
+      if (recordModal!.master === "workTargets") {
+        const dup = coll(data, "workTargets").some(
+          (t: any) => t.id !== out.id && t.active !== false && t.projectId === out.projectId && t.category === out.category
+        );
+        if (dup) { toast("A Work Target for this project + category already exists"); return; }
+      }
 
-    await apply([
-      { op: "upsert", coll: recordModal!.master, rec: out },
-      buildEventOp(currentUserId, "MASTER_SAVE", out.id, "", `${master!.label} · ${recordModal!.id ? "updated" : "created"} · ${out.name || out.code || out.id}`)
-    ]);
-    closeRecordModal();
-    toast((recordModal!.id ? "Updated " : "Created ") + (out.name || out.code || out.id));
+      await apply([
+        { op: "upsert", coll: recordModal!.master, rec: out },
+        buildEventOp(currentUserId, "MASTER_SAVE", out.id, "", `${master!.label} · ${recordModal!.id ? "updated" : "created"} · ${out.name || out.code || out.id}`)
+      ]);
+      closeRecordModal();
+      toast((recordModal!.id ? "Updated " : "Created ") + (out.name || out.code || out.id));
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -222,8 +234,8 @@ export default function RecordModal() {
       onClose={closeRecordModal}
       footer={
         <>
-          <button className="btn btn-secondary" onClick={closeRecordModal}>Cancel</button>
-          <button className="btn btn-primary" onClick={save}>{recordModal.id ? "Save changes" : "Create " + master.label}</button>
+          <button className="btn btn-secondary" onClick={closeRecordModal} disabled={saving}>Cancel</button>
+          <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? "Saving…" : recordModal.id ? "Save changes" : "Create " + master.label}</button>
         </>
       }
     >
