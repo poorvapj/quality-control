@@ -22,8 +22,8 @@ const CATEGORY_OPTIONS = Object.keys(QC_CHECKLISTS);
 export default function CaseStudies() {
   const { data, currentUserId, myRole, apply, toast, me, caseStudyDraft, setCaseStudyDraft } = useApp();
   const isAdmin = currentUserId === "U-ADMIN";
-  // Not Quality-only — Execution and Measurement people log these too.
-  const canCreate = isAdmin || ["qualityInspection", "unitExecution", "measurement", "caseStudies"].some((m) => hasModuleGrant(data, currentUserId, m, "create"));
+  // Strictly its own Permission Matrix grant — see canAccessTab's "caseStudies" case.
+  const canCreate = isAdmin || hasModuleGrant(data, currentUserId, "caseStudies", "create");
   const allProjects = myProjects(data, currentUserId);
   const allowedProjectCodes = new Set(allProjects.map((p) => p.code));
   const caseStudies = coll(data, "caseStudies")

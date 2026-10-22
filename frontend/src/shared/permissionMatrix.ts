@@ -179,8 +179,7 @@ export const TAB_ACCESS: Record<string, TabAccess> = {
   // Required), not a separately grantable module.
   qualityFails: { module: "qualityInspection", mode: "grant" },
   // caseStudies is handled as a special case in canAccessTab() below, not
-  // here — it's OR'd across qualityInspection/unitExecution/measurement
-  // PLUS its own standalone "caseStudies" module grant.
+  // here — strictly its own standalone "caseStudies" module grant.
   unitExecutionWorkflow: { module: "unitExecution", mode: "grant" },
   measurement: { module: "measurement", mode: "grant" },
   progressAnalysis: { module: "progressAnalysis", mode: "grant" },
@@ -215,13 +214,12 @@ export function canAccessTab(data: BoardData | null, userId: string | null, tab:
   if (tab === "permissionMatrix") return false;
   // the create-user screen needs the same right as editing Masters
   if (tab === "addUser") return hasModuleGrant(data, userId, "masters", "edit");
-  // Case Studies isn't Quality-only — Execution and Measurement people log
-  // them too, so it's visible to anyone granted ANY of those three modules,
-  // OR an explicit standalone "Case Studies" grant (its own MATRIX_MODULES
-  // row, for an admin who wants to hand someone just this without also
-  // opening up Quality Inspection/Measurement/Unit Execution).
+  // Case Studies follows its own Permission Matrix row only — it used to
+  // also open up for anyone granted Quality Inspection/Unit Execution/
+  // Measurement, which meant it showed up for people an admin never
+  // actually granted it to. Now it's strictly its own explicit grant.
   if (tab === "caseStudies") {
-    return ["qualityInspection", "unitExecution", "measurement", "caseStudies"].some((m) => hasModuleGrant(data, userId, m, "view"));
+    return hasModuleGrant(data, userId, "caseStudies", "view");
   }
   const t = TAB_ACCESS[tab];
   if (!t) return true;
