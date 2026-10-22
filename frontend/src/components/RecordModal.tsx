@@ -5,6 +5,7 @@ import { byId, coll, refLabel } from "../shared/rules";
 import { nextId } from "../shared/helpers";
 import { buildEventOp } from "../shared/eventLog";
 import Modal from "./Modal";
+import SearchDropdown from "./SearchDropdown";
 import type { ChecklistItem, CustomFormField, CustomFormFieldType, MasterField, ModuleAction } from "../types";
 import PermissionGrid from "./PermissionGrid";
 
@@ -99,10 +100,11 @@ export default function RecordModal() {
         ? [...(f.options || []), ...coll(data, "roles").filter((r: any) => r.active !== false && !r.builtin).map((r: any) => r.name)]
         : (f.options || []);
       inner = (
-        <select className="select" value={v ?? ""} onChange={(e) => setV(f.k, e.target.value)}>
-          {!f.required && <option value="">—</option>}
-          {options.map((o) => <option key={o} value={o}>{o}</option>)}
-        </select>
+        <SearchDropdown
+          value={v ?? ""}
+          onChange={(val) => setV(f.k, val)}
+          options={[...(!f.required ? [{ value: "", label: "—" }] : []), ...options.map((o) => ({ value: o, label: o }))]}
+        />
       );
     } else if (isNewUnit && f.k === "floorId") {
       const floors = coll(data, "floors").filter((fl: any) => fl.active !== false && fl.projectId === values.projectId);
@@ -137,20 +139,20 @@ export default function RecordModal() {
       if (f.coll === "floors" || f.coll === "units") opts = opts.filter((r: any) => r.projectId === currentProjectId);
       if (isUsers) opts = [...opts].sort((a: any, b: any) => String(a.name || "").localeCompare(String(b.name || "")));
       inner = (
-        <select
-          className="select"
+        <SearchDropdown
           value={v ?? ""}
-          onChange={(e) => { setV(f.k, e.target.value); if (isNewUnit && f.k === "projectId") setMultiFloorIds([]); }}
-        >
-          <option value="">—</option>
-          {opts.map((o: any) => {
-            const inactive = isUsers && o.active === false;
-            const label = isUsers
-              ? `${refLabel(data, f.coll!, o.id)} · ${(ROLES as any)[o.role]?.name || o.role || "no role"}${inactive ? " (inactive)" : ""}`
-              : refLabel(data, f.coll!, o.id);
-            return <option key={o.id} value={o.id} disabled={inactive && o.id !== v}>{label}</option>;
-          })}
-        </select>
+          onChange={(val) => { setV(f.k, val); if (isNewUnit && f.k === "projectId") setMultiFloorIds([]); }}
+          options={[
+            { value: "", label: "—" },
+            ...opts.map((o: any) => {
+              const inactive = isUsers && o.active === false;
+              const label = isUsers
+                ? `${refLabel(data, f.coll!, o.id)} · ${(ROLES as any)[o.role]?.name || o.role || "no role"}${inactive ? " (inactive)" : ""}`
+                : refLabel(data, f.coll!, o.id);
+              return { value: o.id, label };
+            })
+          ]}
+        />
       );
     } else if (f.type === "bool") {
       return (
