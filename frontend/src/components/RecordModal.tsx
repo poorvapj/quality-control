@@ -32,6 +32,13 @@ export default function RecordModal() {
   const [items, setItems] = useState<ChecklistItem[]>([]);
   const [formFields, setFormFields] = useState<CustomFormField[]>([]);
   const [saving, setSaving] = useState(false);
+  // Creating a brand-new Unit can target several floors at once (same unit
+  // code/name repeated per floor — e.g. "1014" exists on every floor of a
+  // tower) instead of one "New Unit" round-trip per floor. Only for new
+  // records: editing an existing unit still moves it to exactly one floor,
+  // via the normal single-select "ref" field.
+  const [multiFloorIds, setMultiFloorIds] = useState<string[]>([]);
+  const isNewUnit = recordModal?.master === "units" && !recordModal?.id;
 
   useEffect(() => {
     if (!recordModal || !master) return;
@@ -44,6 +51,7 @@ export default function RecordModal() {
     setValues(base);
     setItems((rec as any)?.items || []);
     setFormFields((rec as any)?.fields || []);
+    setMultiFloorIds([]);
   }, [recordModal?.master, recordModal?.id]);
 
   if (!recordModal) return null;
@@ -96,6 +104,28 @@ export default function RecordModal() {
           {options.map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
       );
+    } else if (isNewUnit && f.k === "floorId") {
+      const floors = coll(data, "floors").filter((fl: any) => fl.active !== false && fl.projectId === values.projectId);
+      const toggle = (id: string) => setMultiFloorIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
+      return (
+        <div className="field full" key={f.k}>
+          <label>{f.label} * <span style={{ fontWeight: 400, color: "var(--text-muted)" }}>— pick one or more; the same unit code/name is created on each floor picked</span></label>
+          {!values.projectId ? (
+            <div className="hint">Pick a project first</div>
+          ) : floors.length === 0 ? (
+            <div className="hint">This project has no floors yet</div>
+          ) : (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px", border: "1px solid var(--border)", borderRadius: 8, padding: 10 }}>
+              {floors.map((fl: any) => (
+                <label key={fl.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
+                  <input type="checkbox" checked={multiFloorIds.includes(fl.id)} onChange={() => toggle(fl.id)} />
+                  {fl.name}
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      );
     } else if (f.type === "ref") {
       // A person picker (Team Leader, Permission user…) lists EVERYONE, sorted by
       // name, with their role beside the name — so "Rishi" and "Rishabh" can't be
@@ -107,7 +137,11 @@ export default function RecordModal() {
       if (f.coll === "floors" || f.coll === "units") opts = opts.filter((r: any) => r.projectId === currentProjectId);
       if (isUsers) opts = [...opts].sort((a: any, b: any) => String(a.name || "").localeCompare(String(b.name || "")));
       inner = (
-        <select className="select" value={v ?? ""} onChange={(e) => setV(f.k, e.target.value)}>
+        <select
+          className="select"
+          value={v ?? ""}
+          onChange={(e) => { setV(f.k, e.target.value); if (isNewUnit && f.k === "projectId") setMultiFloorIds([]); }}
+        >
           <option value="">—</option>
           {opts.map((o: any) => {
             const inactive = isUsers && o.active === false;
@@ -190,6 +224,36 @@ export default function RecordModal() {
     if (saving) return;
     setSaving(true);
     try {
+      if (isNewUnit) {
+        if (multiFloorIds.length === 0) { toast("Pick at least one floor"); return; }
+        const existingUnits = coll(data, "units");
+        // Same running-id pattern as WorkTargetBulkImport's takeNextId(): one
+        // nextId() scan, then bump it ourselves per new row — calling
+        // nextId() again inside the loop would hand every floor the same id
+        // (it never sees the ones already queued in this same batch).
+        let nextNewId = nextId("UNT", existingUnits);
+        const ops: any[] = [];
+        for (const floorId of multiFloorIds) {
+          const out: any = { id: nextNewId };
+          const n = parseInt(nextNewId.split("-")[1], 10);
+          nextNewId = "UNT-" + String(n + 1).padStart(4, "0");
+          for (const f of master!.fields) {
+            if (f.k === "floorId") { out.floorId = floorId; continue; }
+            let v = values[f.k];
+            if (f.type === "number") v = v === "" ? null : Number(v);
+            if (f.required && (v === "" || v == null)) { toast(f.label + " is required"); return; }
+            out[f.k] = v;
+          }
+          if (!out.code) out.code = out.id;
+          ops.push({ op: "upsert", coll: "units", rec: out });
+          ops.push(buildEventOp(currentUserId, "MASTER_SAVE", out.id, "", `${master!.label} · created · ${out.name || out.code}`));
+        }
+        await apply(ops);
+        closeRecordModal();
+        toast(`Created ${multiFloorIds.length} unit${multiFloorIds.length === 1 ? "" : "s"}`);
+        return;
+      }
+
       const out: any = recordModal!.id ? Object.assign({}, rec) : { id: nextId(master!.prefix, coll(data, recordModal!.master)) };
       for (const f of master!.fields) {
         if (f.type === "items") { out.items = items; continue; }
@@ -235,7 +299,9 @@ export default function RecordModal() {
       footer={
         <>
           <button className="btn btn-secondary" onClick={closeRecordModal} disabled={saving}>Cancel</button>
-          <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? "Saving…" : recordModal.id ? "Save changes" : "Create " + master.label}</button>
+          <button className="btn btn-primary" onClick={save} disabled={saving}>
+            {saving ? "Saving…" : recordModal.id ? "Save changes" : isNewUnit && multiFloorIds.length > 1 ? `Create ${multiFloorIds.length} Units` : "Create " + master.label}
+          </button>
         </>
       }
     >
