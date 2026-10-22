@@ -144,7 +144,7 @@ export default function AddUser() {
           <div>
             <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Team</div>
             <select className="select w-full" value={teamId} onChange={(e) => setTeamId(e.target.value)}>
-              <option value="">— None —</option>
+              <option value="">None</option>
               {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </div>
