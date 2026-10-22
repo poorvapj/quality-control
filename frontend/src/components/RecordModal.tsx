@@ -103,7 +103,7 @@ export default function RecordModal() {
         <SearchDropdown
           value={v ?? ""}
           onChange={(val) => setV(f.k, val)}
-          options={[...(!f.required ? [{ value: "", label: "—" }] : []), ...options.map((o) => ({ value: o, label: o }))]}
+          options={[...(!f.required ? [{ value: "", label: "Choose…" }] : []), ...options.map((o) => ({ value: o, label: o }))]}
         />
       );
     } else if (isNewUnit && f.k === "floorId") {
@@ -143,7 +143,7 @@ export default function RecordModal() {
           value={v ?? ""}
           onChange={(val) => { setV(f.k, val); if (isNewUnit && f.k === "projectId") setMultiFloorIds([]); }}
           options={[
-            { value: "", label: "—" },
+            { value: "", label: "Choose…" },
             ...opts.map((o: any) => {
               const inactive = isUsers && o.active === false;
               const label = isUsers

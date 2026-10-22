@@ -116,7 +116,7 @@ export default function SearchDropdown({
       || (() => { const g = options.find((o) => o.groupValue === value); return g ? { value, label: g.group || g.label } : undefined; })();
   const currentLabel = multi
     ? (mv.length === 0 ? "Choose" : mv.length === 1 ? (options.find((o) => o.value === mv[0])?.label ?? "1 selected") : mv.length + " selected")
-    : current?.label ?? "—";
+    : current?.label ?? "Choose…";
   const filtered = q.trim()
     ? options.filter((o) => o.label.toLowerCase().includes(q.trim().toLowerCase()))
     : options;
