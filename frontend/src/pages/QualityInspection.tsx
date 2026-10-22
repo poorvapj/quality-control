@@ -912,6 +912,7 @@ function InspectionForm({
     if (phaseInfo?.group.name === "R.C.C. Slab Inspection" && selectedSlabs.length === 0) { toast("Select at least one slab"); return; }
     if (requiresAreas(workType) && selectedAreas.length === 0) { toast("Select at least one area (kitchen/bathroom/balcony)"); return; }
     if (checklist.some((row) => !row.status)) { toast("Mark every checklist point as OK / Not OK / N/A"); return; }
+    if (photos.length === 0) { toast("Add at least one photo as evidence"); return; }
     if (result !== "Pass" && !remarks.trim()) { toast("Remarks are required for Fail / Rework Required"); return; }
     if (result !== "Pass" && !assignedToUserId) { toast("A responsible DRI must be assigned for Fail / Rework Required"); return; }
     if (result !== "Pass" && !targetDate) { toast("A target date is required for the corrective action"); return; }
@@ -1264,8 +1265,8 @@ function InspectionForm({
         </div>
 
         <div className="field full">
-          <label>Photo Evidence</label>
-          <PhotoGroupUploader label="Inspection photos (optional)" photos={photos} onChange={setPhotos} />
+          <label>Photo Evidence <span style={{ color: "var(--danger, #d92d20)" }}>*</span></label>
+          <PhotoGroupUploader label="Inspection photos (at least 1)" photos={photos} onChange={setPhotos} />
         </div>
 
         {result !== "Pass" && (
