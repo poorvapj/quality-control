@@ -38,6 +38,19 @@ export default function BulkAddNumberedList({
     if (!prefix.trim()) { toast("Name prefix is required"); return; }
     if (!Number.isFinite(fromN) || !Number.isFinite(toN) || fromN < 1 || toN < fromN) { toast("Enter a valid From/To range"); return; }
     if (toN - fromN + 1 > 500) { toast("That's a lot in one go — split it into smaller batches"); return; }
+    // A typo'd range (e.g. redoing "5-15" after already adding "1-10") would
+    // otherwise silently create duplicate-looking entries ("Column 5" twice,
+    // as two different records) — block instead of guessing which one to skip.
+    const existingNamesForProject = new Set(existingForProject.map((r) => r.name));
+    const collisions: string[] = [];
+    for (let i = fromN; i <= toN; i++) {
+      const name = `${prefix.trim()} ${i}`;
+      if (existingNamesForProject.has(name)) collisions.push(name);
+    }
+    if (collisions.length > 0) {
+      toast(`Already exist for this project: ${collisions.slice(0, 5).join(", ")}${collisions.length > 5 ? `, +${collisions.length - 5} more` : ""} — adjust the range`);
+      return;
+    }
     setSaving(true);
     try {
       let nextNewId = nextId(idPrefix, existing);

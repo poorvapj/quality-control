@@ -2259,12 +2259,25 @@ connectMongo()
           if (!isSaturday || hour !== 13) return; // only fires within the 13:00-13:59 IST hour, Saturday
           const { to } = currentWeekBounds();
           const markerId = "weeklyQcReportSent:" + to;
-          const already = await mongoDb.collection("meta").findOne({ _id: markerId });
-          if (already) return;
-          // Claim the marker BEFORE sending — an error sending still leaves
-          // the real failure visible in the event log above, and prevents
-          // a slow/hung send from being retried every 5 minutes meanwhile.
-          await mongoDb.collection("meta").updateOne({ _id: markerId }, { $set: { sentAt: Date.now() } }, { upsert: true });
+          // Atomic claim (findOneAndUpdate, not findOne-then-updateOne) —
+          // the previous check-then-act version let two overlapping
+          // processes (e.g. a deploy restart during the match window, or
+          // horizontal scaling) both see "not sent yet" and send twice.
+          // $setOnInsert so a second racer's update is a no-op that still
+          // reports the pre-existing doc, which it can tell apart from a
+          // genuine first claim (returns null before the write) only via
+          // the upsert's own "didn't exist before" signal — MongoDB gives
+          // us that by returning the PRE-update document (null = we just
+          // created it = we won the race).
+          // mongodb driver v6 returns the document directly (or null) here —
+          // not the legacy {value, ok} wrapper — since includeResultMetadata
+          // now defaults to false.
+          const claim = await mongoDb.collection("meta").findOneAndUpdate(
+            { _id: markerId },
+            { $setOnInsert: { sentAt: Date.now() } },
+            { upsert: true, returnDocument: "before" }
+          );
+          if (claim) return; // already existed — someone else (or an earlier tick) claimed it first
           try {
             await sendWeeklyQcReport();
           } catch (e) {

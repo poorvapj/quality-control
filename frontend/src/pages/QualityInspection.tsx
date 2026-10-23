@@ -1032,7 +1032,14 @@ function InspectionForm({
           <SearchDropdown
             value={projectId}
             disabled={!!reInspectOf}
-            onChange={(v) => { setProjectId(v); setFloorId(""); setUnitId(""); }}
+            onChange={(v) => {
+              setProjectId(v); setFloorId(""); setUnitId("");
+              // Column/Slab Master is per-project — a selection made under
+              // the old project would otherwise survive the switch and get
+              // submitted against the new one, where it may not even exist.
+              setSelectedColumns([]);
+              setSelectedSlabs([]); setAddingCustomSlab(false); setCustomSlabText("");
+            }}
             options={[{ value: "", label: "Select project…" }, ...allProjects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))]}
           />
         </div>
