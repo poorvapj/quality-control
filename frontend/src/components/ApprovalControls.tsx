@@ -107,6 +107,8 @@ function RecordDetails({ collName, rec }: { collName: ApprovalColl; rec: any }) 
         <Detail label="Result"><b style={{ color }}>{rec.result}</b></Detail>
         <Detail label="Inspected by">{rec.inspectorName} · {rec.inspectionDate}</Detail>
         <Detail label="Contractor">{rec.contractor}</Detail>
+        <Detail label="Columns">{rec.columns?.length ? rec.columns.join(", ") : ""}</Detail>
+        <Detail label="Slabs">{rec.slabs?.length ? rec.slabs.join(", ") : ""}</Detail>
         <Detail label="Areas">{rec.areas?.length ? rec.areas.join(", ") : ""}</Detail>
         <Detail label="VMS item">{rec.itemDescription ? `${rec.workOrderNo || ""} · ${rec.itemDescription}` : ""}</Detail>
         {rec.checklistItems?.length > 0 && (
