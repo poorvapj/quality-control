@@ -518,7 +518,8 @@ This cannot be undone.`)) return;
         <Btn label="Fail Register" color="secondary" icon="bug" onClick={() => setActiveTab("qualityFails" as TabKey)} />
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5">
+        <StatTile label="Total Inspections" value={inspections.length} icon="eye" />
         <StatTile label="Open Quality Issues" value={openIssues} icon="bug" valueClassName={openIssues > 0 ? "text-[var(--color-fail)]" : undefined} />
         <StatTile label="Failed Inspections" value={failedCount} icon="bug" />
         <StatTile label="Overdue Corrective Actions" value={overdueCount} icon="clock" valueClassName={overdueCount > 0 ? "text-[var(--color-fail)]" : undefined} />
