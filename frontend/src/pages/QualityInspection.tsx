@@ -923,6 +923,7 @@ function InspectionForm({
     if (!projectId || !floorId) { toast("Project and Floor are required"); return; }
     if (!workType) { toast("Select a checklist (Work Type) first"); return; }
     if (flatWise && !unitId) { toast("Pick the flat — Brickwork and the work after it is inspected flat by flat"); return; }
+    if (blockedByPriorStages) { toast(`Finish and pass ${pendingPriorStages.join(", ")} for this flat first`); return; }
     if (workType === "Column Inspection" && selectedColumns.length === 0) { toast("Select at least one column"); return; }
     if (phaseInfo?.group.name === "R.C.C. Slab Inspection" && selectedSlabs.length === 0) { toast("Select at least one slab"); return; }
     if (requiresAreas(workType) && selectedAreas.length === 0) { toast("Select at least one area (kitchen/bathroom/balcony)"); return; }
@@ -1037,7 +1038,7 @@ function InspectionForm({
       footer={
         <>
           <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save Inspection"}</button>
+          <button className="btn btn-primary" onClick={save} disabled={saving || blockedByPriorStages}>{saving ? "Saving…" : "Save Inspection"}</button>
         </>
       }
     >
@@ -1108,8 +1109,8 @@ function InspectionForm({
 
         {blockedByPriorStages && (
           <div className="field full">
-            <div className="text-[12.5px] font-semibold p-3 rounded-radius-md" style={{ background: "rgba(217,119,6,0.08)", color: "#d97706" }}>
-              Heads up: this is the final gate and not every earlier stage has passed for this flat yet. Still pending: {pendingPriorStages.join(", ")} — you can still proceed.
+            <div className="text-[12.5px] font-semibold p-3 rounded-radius-md" style={{ background: "rgba(239,68,68,0.08)", color: "var(--color-fail)" }}>
+              This is the final gate — it can't be filled in until every earlier stage has passed for this flat. Still pending: {pendingPriorStages.join(", ")}.
             </div>
           </div>
         )}
@@ -1203,7 +1204,7 @@ function InspectionForm({
           </div>
         )}
 
-        {checklist.length > 0 && (
+        {checklist.length > 0 && !blockedByPriorStages && (
           <div className="field full">
             <div className="overflow-x-auto border border-[var(--border)] rounded-radius-md">
               <table className="w-full text-[12px] border-collapse">
