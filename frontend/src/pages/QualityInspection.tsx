@@ -396,10 +396,14 @@ This cannot be undone.`)) return;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inspections, fProjectId, fFloorId, fResult, fDri, fSnagStatus, dateBounds, snags]);
 
-  const openIssues = inspections.filter((i) => { const s = linkedSnag(i); return s && s.status !== "Closed"; }).length;
-  const failedCount = inspections.filter((i) => i.result === "Fail").length;
-  const overdueCount = inspections.filter((i) => { const s = linkedSnag(i); return s && s.status !== "Closed" && s.dueAt && s.dueAt < Date.now(); }).length;
-  const resolvedCount = inspections.filter((i) => { const s = linkedSnag(i); return s && s.status === "Closed"; }).length;
+  // Off `filtered` (Project/Floor/Date/DRI/Result/Snag Status all applied),
+  // not the page's full unfiltered `inspections` — so the tiles track
+  // whatever's currently selected above instead of always showing the
+  // global total regardless of filters.
+  const openIssues = filtered.filter((i) => { const s = linkedSnag(i); return s && s.status !== "Closed"; }).length;
+  const failedCount = filtered.filter((i) => i.result === "Fail").length;
+  const overdueCount = filtered.filter((i) => { const s = linkedSnag(i); return s && s.status !== "Closed" && s.dueAt && s.dueAt < Date.now(); }).length;
+  const resolvedCount = filtered.filter((i) => { const s = linkedSnag(i); return s && s.status === "Closed"; }).length;
 
   const projectOptions = allProjects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }));
   const driOptions = users.filter((u) => inspections.some((i) => i.correctiveAction?.assignedToUserId === u.id)).map((u) => ({ value: u.id, label: u.name }));
@@ -520,7 +524,7 @@ This cannot be undone.`)) return;
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5">
         <StatTile
-          label="Total Inspections" value={inspections.length} icon="eye"
+          label="Total Inspections" value={filtered.length} icon="eye"
           onClick={() => { setFResult(""); setFSnagStatus(""); }}
         />
         <StatTile
