@@ -82,7 +82,6 @@ function QcDocument({ data: s }: { data: QcInspectionPdfData }) {
           { label: "Total Inspections", value: String(s.kpis.total) },
           { label: "Pass", value: String(s.kpis.pass), color: GREEN },
           { label: "Fail", value: String(s.kpis.fail), color: RED },
-          { label: "Rework Required", value: String(s.kpis.rework), color: AMBER },
           { label: "Pass Rate", value: `${s.kpis.passRate}%` },
           { label: "Overdue Corrective Actions", value: String(s.kpis.overdue), color: s.kpis.overdue > 0 ? RED : undefined }
         ]} />
