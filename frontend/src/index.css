@@ -1053,6 +1053,23 @@
       line-height: 1.6;
     }
 
+    /* On a phone, .qitem's row layout squeezes qitem-main (flex:1,
+       min-width:0) down to almost nothing once the due-date badge +
+       Accept/Done buttons on the right (flex-shrink:0, several buttons
+       wide) take their share — the title/subtext then wraps one word per
+       line in a column a few characters wide. Stack title and actions
+       instead, each getting the full row width. */
+    @media (max-width: 640px) {
+      .qitem {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .qitem > div:last-child {
+        flex-wrap: wrap;
+        justify-content: flex-start;
+      }
+    }
+
     .empty {
       padding: 30px 20px;
       text-align: center;

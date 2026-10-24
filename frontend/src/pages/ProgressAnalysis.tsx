@@ -217,31 +217,52 @@ function ProjectList({ projects, purchaseOrders, onSelect, onOpenPurchaseOrders 
         </Card>
       )}
 
-      <Card padded={false} className="p-[18px]">
-        <Table
-          columns={["Project", "Work Orders", "Items", "Variance", "Pending Sign-off", "Unbilled Qty", ""]}
-          colWidths={["34%", "12%", "10%", "12%", "16%", "12%", "4%"]}
-          colAligns={["left", "right", "right", "right", "right", "right", "left"]}
-        >
+      <Card padded={false} className="p-3 md:p-[18px]">
+        {/* phones: one card per project instead of a 7-column table squeezed sideways */}
+        <div className="md:hidden flex flex-col gap-2.5">
           {projects.map((p) => {
             const s = projectStats(p);
             return (
-              <TableRow key={p.projectCode}>
-                <TableCell strong className="cursor-pointer" onClick={() => onSelect(p.projectCode)}>
-                  <span className="text-primary">{p.projectCode}</span> — {p.projectName}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">{s.workOrders}</TableCell>
-                <TableCell className="text-right tabular-nums">{s.items}</TableCell>
-                <TableCell className={"text-right tabular-nums" + (s.variance > 0 ? " text-[var(--color-fail)] font-semibold" : "")}>{s.variance}</TableCell>
-                <TableCell className={"text-right tabular-nums" + (s.pendingSignOff > 0 ? " text-[var(--color-fail)] font-semibold" : "")}>{s.pendingSignOff}</TableCell>
-                <TableCell className="text-right tabular-nums whitespace-nowrap">{qty(s.unbilled)}</TableCell>
-                <TableCell className="text-right">
-                  <Btn label="Open" color="secondary" size="sm" onClick={() => onSelect(p.projectCode)} />
-                </TableCell>
-              </TableRow>
+              <div key={p.projectCode} className="border border-[var(--border)] rounded-radius-md p-3.5 bg-[var(--bg-card)] cursor-pointer" onClick={() => onSelect(p.projectCode)}>
+                <div className="text-[14px] font-bold leading-snug"><span className="text-primary">{p.projectCode}</span> — {p.projectName}</div>
+                <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[12px]">
+                  <div><span className="text-[var(--text-muted)]">Work Orders: </span><span className="font-semibold tabular-nums">{s.workOrders}</span></div>
+                  <div><span className="text-[var(--text-muted)]">Items: </span><span className="font-semibold tabular-nums">{s.items}</span></div>
+                  <div><span className="text-[var(--text-muted)]">Variance: </span><span className={"font-semibold tabular-nums" + (s.variance > 0 ? " text-[var(--color-fail)]" : "")}>{s.variance}</span></div>
+                  <div><span className="text-[var(--text-muted)]">Pending Sign-off: </span><span className={"font-semibold tabular-nums" + (s.pendingSignOff > 0 ? " text-[var(--color-fail)]" : "")}>{s.pendingSignOff}</span></div>
+                </div>
+                <div className="text-[12px] mt-1"><span className="text-[var(--text-muted)]">Unbilled Qty: </span><span className="font-semibold tabular-nums">{qty(s.unbilled)}</span></div>
+              </div>
             );
           })}
-        </Table>
+        </div>
+
+        <div className="hidden md:block">
+          <Table
+            columns={["Project", "Work Orders", "Items", "Variance", "Pending Sign-off", "Unbilled Qty", ""]}
+            colWidths={["34%", "12%", "10%", "12%", "16%", "12%", "4%"]}
+            colAligns={["left", "right", "right", "right", "right", "right", "left"]}
+          >
+            {projects.map((p) => {
+              const s = projectStats(p);
+              return (
+                <TableRow key={p.projectCode}>
+                  <TableCell strong className="cursor-pointer" onClick={() => onSelect(p.projectCode)}>
+                    <span className="text-primary">{p.projectCode}</span> — {p.projectName}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{s.workOrders}</TableCell>
+                  <TableCell className="text-right tabular-nums">{s.items}</TableCell>
+                  <TableCell className={"text-right tabular-nums" + (s.variance > 0 ? " text-[var(--color-fail)] font-semibold" : "")}>{s.variance}</TableCell>
+                  <TableCell className={"text-right tabular-nums" + (s.pendingSignOff > 0 ? " text-[var(--color-fail)] font-semibold" : "")}>{s.pendingSignOff}</TableCell>
+                  <TableCell className="text-right tabular-nums whitespace-nowrap">{qty(s.unbilled)}</TableCell>
+                  <TableCell className="text-right">
+                    <Btn label="Open" color="secondary" size="sm" onClick={() => onSelect(p.projectCode)} />
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </Table>
+        </div>
       </Card>
     </>
   );
@@ -339,62 +360,114 @@ function ProjectDetailPanel({
         </div>
       )}
 
-      <Card padded={false} className="p-[14px]">
-        <Table
-          columns={["Work Order", "Item", "Planned", "Completed", "% of Plan", "Variance / Sign-off", "Billed / Unbilled", ""]}
-          colAligns={["left", "left", "right", "right", "right", "left", "right", "left"]}
-          maxHeight="440px"
-          empty="No items match these filters."
-        >
+      <Card padded={false} className="p-3 md:p-[14px]">
+        {/* phones: one card per item instead of an 8-column table squeezed sideways */}
+        <div className="md:hidden flex flex-col gap-2.5 max-h-[440px] overflow-y-auto">
+          {rows.length === 0 && <div className="py-6 text-center text-[13px] text-[var(--text-muted)]">No items match these filters.</div>}
           {rows.map(({ workOrderNo, item, completedQty, billedQty, unbilledQty, locations }) => {
             const pct = item.plannedQty > 0 ? Math.round((completedQty / item.plannedQty) * 100) : null;
             const overPlan = pct !== null && pct > 100;
             return (
-              <React.Fragment key={item.itemId}>
-                <TableRow>
-                  <TableCell muted className="whitespace-nowrap">{workOrderNo}</TableCell>
-                  <TableCell strong>{item.itemType === "subItem" ? "↳ " : ""}{item.description}</TableCell>
-                  <TableCell className="text-right tabular-nums whitespace-nowrap">{qty(item.plannedQty)} {item.unit}</TableCell>
-                  <TableCell className="text-right tabular-nums whitespace-nowrap">{qty(completedQty)} {item.unit}</TableCell>
-                  <TableCell className={"text-right tabular-nums whitespace-nowrap" + (overPlan ? " text-[var(--color-fail)] font-semibold" : "")}>
-                    {pct === null ? <span className="text-[var(--text-sub)] font-normal">Data unavailable</span> : `${pct}%`}
-                  </TableCell>
-                  <TableCell>
-                    {!item.varianceFlag ? <span className="text-[var(--text-sub)]">—</span> : (
-                      <div>
-                        <Badge color={item.varianceApproved ? "green" : "red"}>
-                          <span className="whitespace-nowrap">{item.varianceApproved ? "Signed off" : "Pending"}</span>
-                        </Badge>
-                        {item.varianceApproved && item.varianceApprovedByName && (
-                          <div className="text-[10.5px] text-[var(--text-muted)] mt-1 truncate">{item.varianceApprovedByName} · at {item.varianceApprovedAtQty} {item.unit}</div>
-                        )}
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell muted className="text-right tabular-nums whitespace-nowrap">{qty(billedQty)} / {qty(unbilledQty)} {item.unit}</TableCell>
-                  <TableCell className="text-right">
-                    {locations.length > 0 && (
-                      <Btn label={expanded.has(item.itemId) ? "Hide" : "Locations"} color="secondary" size="sm" onClick={() => toggle(item.itemId)} />
-                    )}
-                  </TableCell>
-                </TableRow>
-                {expanded.has(item.itemId) && (
-                  <TableRow>
-                    <TableCell colSpan={8} className="bg-[var(--bg-subtle)]">
-                      <div className="flex flex-wrap gap-2 py-1.5">
+              <div key={item.itemId} className="border border-[var(--border)] rounded-radius-md p-3.5 bg-[var(--bg-card)]">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="text-[13.5px] font-bold leading-snug">{item.itemType === "subItem" ? "↳ " : ""}{item.description}</div>
+                  {item.varianceFlag && (
+                    <Badge color={item.varianceApproved ? "green" : "red"}>
+                      <span className="whitespace-nowrap">{item.varianceApproved ? "Signed off" : "Pending"}</span>
+                    </Badge>
+                  )}
+                </div>
+                <div className="text-[11.5px] text-[var(--text-muted)] mt-0.5">{workOrderNo}</div>
+                <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[12px]">
+                  <div><span className="text-[var(--text-muted)]">Planned: </span><span className="font-semibold tabular-nums">{qty(item.plannedQty)} {item.unit}</span></div>
+                  <div><span className="text-[var(--text-muted)]">Completed: </span><span className="font-semibold tabular-nums">{qty(completedQty)} {item.unit}</span></div>
+                  <div>
+                    <span className="text-[var(--text-muted)]">% of Plan: </span>
+                    <span className={"font-semibold tabular-nums" + (overPlan ? " text-[var(--color-fail)]" : "")}>
+                      {pct === null ? "Data unavailable" : `${pct}%`}
+                    </span>
+                  </div>
+                  <div><span className="text-[var(--text-muted)]">Billed/Unbilled: </span><span className="font-semibold tabular-nums">{qty(billedQty)} / {qty(unbilledQty)} {item.unit}</span></div>
+                </div>
+                {item.varianceFlag && item.varianceApproved && item.varianceApprovedByName && (
+                  <div className="text-[10.5px] text-[var(--text-muted)] mt-1.5">{item.varianceApprovedByName} · at {item.varianceApprovedAtQty} {item.unit}</div>
+                )}
+                {locations.length > 0 && (
+                  <>
+                    <Btn label={expanded.has(item.itemId) ? "Hide locations" : `Locations (${locations.length})`} color="secondary" size="sm" className="mt-2.5" onClick={() => toggle(item.itemId)} />
+                    {expanded.has(item.itemId) && (
+                      <div className="flex flex-wrap gap-2 mt-2">
                         {locations.map((l) => (
-                          <div key={l.location} className="text-[11px] border border-[var(--border)] rounded-radius-sm px-2 py-1 bg-[var(--bg-card)] whitespace-nowrap">
+                          <div key={l.location} className="text-[11px] border border-[var(--border)] rounded-radius-sm px-2 py-1 bg-[var(--bg-subtle)] whitespace-nowrap">
                             <span className="font-semibold">{l.location}</span>: {qty(l.qty)} {item.unit} (billed {qty(l.billedQty)}, unbilled {qty(l.unbilledQty)})
                           </div>
                         ))}
                       </div>
-                    </TableCell>
-                  </TableRow>
+                    )}
+                  </>
                 )}
-              </React.Fragment>
+              </div>
             );
           })}
-        </Table>
+        </div>
+
+        <div className="hidden md:block">
+          <Table
+            columns={["Work Order", "Item", "Planned", "Completed", "% of Plan", "Variance / Sign-off", "Billed / Unbilled", ""]}
+            colAligns={["left", "left", "right", "right", "right", "left", "right", "left"]}
+            maxHeight="440px"
+            empty="No items match these filters."
+          >
+            {rows.map(({ workOrderNo, item, completedQty, billedQty, unbilledQty, locations }) => {
+              const pct = item.plannedQty > 0 ? Math.round((completedQty / item.plannedQty) * 100) : null;
+              const overPlan = pct !== null && pct > 100;
+              return (
+                <React.Fragment key={item.itemId}>
+                  <TableRow>
+                    <TableCell muted className="whitespace-nowrap">{workOrderNo}</TableCell>
+                    <TableCell strong>{item.itemType === "subItem" ? "↳ " : ""}{item.description}</TableCell>
+                    <TableCell className="text-right tabular-nums whitespace-nowrap">{qty(item.plannedQty)} {item.unit}</TableCell>
+                    <TableCell className="text-right tabular-nums whitespace-nowrap">{qty(completedQty)} {item.unit}</TableCell>
+                    <TableCell className={"text-right tabular-nums whitespace-nowrap" + (overPlan ? " text-[var(--color-fail)] font-semibold" : "")}>
+                      {pct === null ? <span className="text-[var(--text-sub)] font-normal">Data unavailable</span> : `${pct}%`}
+                    </TableCell>
+                    <TableCell>
+                      {!item.varianceFlag ? <span className="text-[var(--text-sub)]">—</span> : (
+                        <div>
+                          <Badge color={item.varianceApproved ? "green" : "red"}>
+                            <span className="whitespace-nowrap">{item.varianceApproved ? "Signed off" : "Pending"}</span>
+                          </Badge>
+                          {item.varianceApproved && item.varianceApprovedByName && (
+                            <div className="text-[10.5px] text-[var(--text-muted)] mt-1 truncate">{item.varianceApprovedByName} · at {item.varianceApprovedAtQty} {item.unit}</div>
+                          )}
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell muted className="text-right tabular-nums whitespace-nowrap">{qty(billedQty)} / {qty(unbilledQty)} {item.unit}</TableCell>
+                    <TableCell className="text-right">
+                      {locations.length > 0 && (
+                        <Btn label={expanded.has(item.itemId) ? "Hide" : "Locations"} color="secondary" size="sm" onClick={() => toggle(item.itemId)} />
+                      )}
+                    </TableCell>
+                  </TableRow>
+                  {expanded.has(item.itemId) && (
+                    <TableRow>
+                      <TableCell colSpan={8} className="bg-[var(--bg-subtle)]">
+                        <div className="flex flex-wrap gap-2 py-1.5">
+                          {locations.map((l) => (
+                            <div key={l.location} className="text-[11px] border border-[var(--border)] rounded-radius-sm px-2 py-1 bg-[var(--bg-card)] whitespace-nowrap">
+                              <span className="font-semibold">{l.location}</span>: {qty(l.qty)} {item.unit} (billed {qty(l.billedQty)}, unbilled {qty(l.unbilledQty)})
+                            </div>
+                          ))}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </Table>
+        </div>
       </Card>
     </SidePanel>
   );

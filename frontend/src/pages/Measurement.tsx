@@ -158,61 +158,110 @@ export default function Measurement() {
       </Card>
       {comparisonNote && <div className="text-[12px] text-[var(--text-muted)] mb-3">VMS execution figures unavailable: {comparisonNote}</div>}
 
-      <Card padded={false} className="mb-5 p-[18px]">
-        <Table
-          columns={["Date", "Project", "Location", "Category", "Measured", "Planned (VMS)", "VMS executed (here)", "Difference", "VMS link", ""]}
-          colAligns={["left", "left", "left", "left", "right", "right", "right", "right", "left", "left"]}
-          maxHeight="560px"
-          empty="No measurements recorded yet."
-        >
+      <Card padded={false} className="mb-5 p-3 md:p-[18px]">
+        {/* phones: one card per measurement instead of a 10-column table squeezed sideways */}
+        <div className="md:hidden flex flex-col gap-2.5">
+          {shown.length === 0 && <div className="py-6 text-center text-[13px] text-[var(--text-muted)]">No measurements recorded yet.</div>}
           {shown.map((m) => {
             const c = m.linkedItemId ? comparisons[m.id] : undefined;
             return (
-              <TableRow key={m.id}>
-                <TableCell muted className="whitespace-nowrap">{m.measurementDate}</TableCell>
-                <TableCell className="whitespace-nowrap">{m.projectCode}</TableCell>
-                <TableCell>{loc(m.location)}</TableCell>
-                <TableCell strong>{m.category}</TableCell>
-                <TableCell className="text-right tabular-nums whitespace-nowrap">
-                  {qty(m.measuredQty)} {m.measuredUnit}
-                  {m.dimensions && Object.values(m.dimensions).some((v) => v != null) && (
-                    <div className="text-[10.5px] text-[var(--text-muted)] font-normal">
-                      {([["L", m.dimensions.length], ["W", m.dimensions.width], ["H", m.dimensions.height], ["T", m.dimensions.thickness]] as const)
-                        .filter(([, v]) => v != null).map(([k, v]) => `${k} ${v}`).join(" × ")}
-                    </div>
-                  )}
-                </TableCell>
-                <TableCell className="text-right tabular-nums whitespace-nowrap">
-                  {c?.found ? <>{qty(c.plannedQty || 0)} {c.executedUnit}</> : <span className="text-[var(--text-sub)]">—</span>}
-                </TableCell>
-                <TableCell className="text-right tabular-nums whitespace-nowrap">
-                  {c?.found ? <>{qty(c.executedQty || 0)} {c.executedUnit}</> : <span className="text-[var(--text-sub)]">—</span>}
-                </TableCell>
-                <TableCell className="text-right tabular-nums whitespace-nowrap">
-                  {c?.found
-                    ? (c.comparable
-                      ? <span style={{ color: (c.variance || 0) === 0 ? undefined : "var(--color-fail)", fontWeight: 600 }}>
-                          {(c.variance || 0) > 0 ? "+" : ""}{qty(c.variance || 0)}{c.variancePct != null ? ` (${c.variancePct}%)` : ""}
-                        </span>
-                      : <span className="text-[var(--text-sub)]" title="Measured and VMS units differ, so no difference is computed">Units differ</span>)
-                    : <span className="text-[var(--text-sub)]">—</span>}
-                </TableCell>
-                <TableCell>
-                  <LinkBadge m={m} />
-                  {m.linkedItemId && <div className="text-[10.5px] text-[var(--text-muted)] mt-1">{m.linkedWorkOrderNo} · {m.linkedItemDescription}</div>}
-                  {!m.linkedItemId && m.linkNote && <div className="text-[10.5px] text-[var(--text-muted)] mt-1 max-w-[220px] whitespace-normal">{REASON[m.linkNote] || m.linkNote}</div>}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex flex-col items-end gap-1">
-                    <ApprovalBadge approval={effectiveApproval(data, m)} />
-                    <ApprovalActions collName="workMeasurements" record={m} />
+              <div key={m.id} className="border border-[var(--border)] rounded-radius-md p-3.5 bg-[var(--bg-card)]">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-[14px] font-bold leading-snug">{m.category}</div>
+                    <div className="text-[11.5px] text-[var(--text-muted)] mt-0.5">{loc(m.location)}</div>
                   </div>
+                  <LinkBadge m={m} />
+                </div>
+                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-[11.5px] text-[var(--text-muted)]">
+                  <span>{m.measurementDate}</span>
+                  <span>{m.projectCode}</span>
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[12px]">
+                  <div><span className="text-[var(--text-muted)]">Measured: </span><span className="font-semibold tabular-nums">{qty(m.measuredQty)} {m.measuredUnit}</span></div>
+                  <div><span className="text-[var(--text-muted)]">Planned (VMS): </span><span className="font-semibold tabular-nums">{c?.found ? <>{qty(c.plannedQty || 0)} {c.executedUnit}</> : "—"}</span></div>
+                  <div><span className="text-[var(--text-muted)]">VMS executed: </span><span className="font-semibold tabular-nums">{c?.found ? <>{qty(c.executedQty || 0)} {c.executedUnit}</> : "—"}</span></div>
+                  <div>
+                    <span className="text-[var(--text-muted)]">Difference: </span>
+                    <span className="font-semibold tabular-nums">
+                      {c?.found
+                        ? (c.comparable
+                          ? <span style={{ color: (c.variance || 0) === 0 ? undefined : "var(--color-fail)" }}>
+                              {(c.variance || 0) > 0 ? "+" : ""}{qty(c.variance || 0)}{c.variancePct != null ? ` (${c.variancePct}%)` : ""}
+                            </span>
+                          : "Units differ")
+                        : "—"}
+                    </span>
+                  </div>
+                </div>
+                {m.linkedItemId && <div className="text-[10.5px] text-[var(--text-muted)] mt-1.5">{m.linkedWorkOrderNo} · {m.linkedItemDescription}</div>}
+                {!m.linkedItemId && m.linkNote && <div className="text-[10.5px] text-[var(--text-muted)] mt-1.5">{REASON[m.linkNote] || m.linkNote}</div>}
+                <div className="flex items-center justify-between gap-2 mt-2.5">
+                  <ApprovalBadge approval={effectiveApproval(data, m)} />
                   {m.linkStatus === "ambiguous" && canCreate && <Btn label="Choose link" color="secondary" size="sm" onClick={() => setConfirming(m)} />}
-                </TableCell>
-              </TableRow>
+                </div>
+                <div className="mt-1.5"><ApprovalActions collName="workMeasurements" record={m} /></div>
+              </div>
             );
           })}
-        </Table>
+        </div>
+
+        <div className="hidden md:block">
+          <Table
+            columns={["Date", "Project", "Location", "Category", "Measured", "Planned (VMS)", "VMS executed (here)", "Difference", "VMS link", ""]}
+            colAligns={["left", "left", "left", "left", "right", "right", "right", "right", "left", "left"]}
+            maxHeight="560px"
+            empty="No measurements recorded yet."
+          >
+            {shown.map((m) => {
+              const c = m.linkedItemId ? comparisons[m.id] : undefined;
+              return (
+                <TableRow key={m.id}>
+                  <TableCell muted className="whitespace-nowrap">{m.measurementDate}</TableCell>
+                  <TableCell className="whitespace-nowrap">{m.projectCode}</TableCell>
+                  <TableCell>{loc(m.location)}</TableCell>
+                  <TableCell strong>{m.category}</TableCell>
+                  <TableCell className="text-right tabular-nums whitespace-nowrap">
+                    {qty(m.measuredQty)} {m.measuredUnit}
+                    {m.dimensions && Object.values(m.dimensions).some((v) => v != null) && (
+                      <div className="text-[10.5px] text-[var(--text-muted)] font-normal">
+                        {([["L", m.dimensions.length], ["W", m.dimensions.width], ["H", m.dimensions.height], ["T", m.dimensions.thickness]] as const)
+                          .filter(([, v]) => v != null).map(([k, v]) => `${k} ${v}`).join(" × ")}
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums whitespace-nowrap">
+                    {c?.found ? <>{qty(c.plannedQty || 0)} {c.executedUnit}</> : <span className="text-[var(--text-sub)]">—</span>}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums whitespace-nowrap">
+                    {c?.found ? <>{qty(c.executedQty || 0)} {c.executedUnit}</> : <span className="text-[var(--text-sub)]">—</span>}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums whitespace-nowrap">
+                    {c?.found
+                      ? (c.comparable
+                        ? <span style={{ color: (c.variance || 0) === 0 ? undefined : "var(--color-fail)", fontWeight: 600 }}>
+                            {(c.variance || 0) > 0 ? "+" : ""}{qty(c.variance || 0)}{c.variancePct != null ? ` (${c.variancePct}%)` : ""}
+                          </span>
+                        : <span className="text-[var(--text-sub)]" title="Measured and VMS units differ, so no difference is computed">Units differ</span>)
+                      : <span className="text-[var(--text-sub)]">—</span>}
+                  </TableCell>
+                  <TableCell>
+                    <LinkBadge m={m} />
+                    {m.linkedItemId && <div className="text-[10.5px] text-[var(--text-muted)] mt-1">{m.linkedWorkOrderNo} · {m.linkedItemDescription}</div>}
+                    {!m.linkedItemId && m.linkNote && <div className="text-[10.5px] text-[var(--text-muted)] mt-1 max-w-[220px] whitespace-normal">{REASON[m.linkNote] || m.linkNote}</div>}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex flex-col items-end gap-1">
+                      <ApprovalBadge approval={effectiveApproval(data, m)} />
+                      <ApprovalActions collName="workMeasurements" record={m} />
+                    </div>
+                    {m.linkStatus === "ambiguous" && canCreate && <Btn label="Choose link" color="secondary" size="sm" onClick={() => setConfirming(m)} />}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </Table>
+        </div>
       </Card>
 
       <MeasurementPanel

@@ -167,26 +167,46 @@ export default function AuditLog() {
             </div>
           </Card>
 
-          <Card padded={false} className="p-[18px]">
+          <Card padded={false} className="p-3 md:p-[18px]">
             {shown.length === 0 ? (
               <div className="py-6 text-center text-[var(--text-muted)] text-[13px]">No events match these filters.</div>
             ) : (
-              <Table columns={["Date & Time", "User", "Action", "Details"]} maxHeight="560px">
-                {shown.map((e, i) => (
-                  <TableRow key={i}>
-                    <TableCell muted className="whitespace-nowrap" >
-                      <span title={fmtDT(e.ts)}>{ago(e.ts)}</span>
-                    </TableCell>
-                    <TableCell strong>{e.userId === currentUserId ? "You" : refLabel(data, "users", e.userId)}</TableCell>
-                    <TableCell>
-                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide bg-[var(--bg-subtle)] text-[var(--text-muted)]">
-                        {ACTION_LABEL[e.action] || e.action}
-                      </span>
-                    </TableCell>
-                    <TableCell muted>{e.detail}</TableCell>
-                  </TableRow>
-                ))}
-              </Table>
+              <>
+                {/* phones: one card per event instead of a 4-column table squeezed sideways */}
+                <div className="md:hidden flex flex-col gap-2 max-h-[560px] overflow-y-auto">
+                  {shown.map((e, i) => (
+                    <div key={i} className="border border-[var(--border)] rounded-radius-md p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide bg-[var(--bg-subtle)] text-[var(--text-muted)]">
+                          {ACTION_LABEL[e.action] || e.action}
+                        </span>
+                        <span className="text-[11px] text-[var(--text-muted)] whitespace-nowrap shrink-0" title={fmtDT(e.ts)}>{ago(e.ts)}</span>
+                      </div>
+                      <div className="text-[12.5px] font-bold mt-1.5">{e.userId === currentUserId ? "You" : refLabel(data, "users", e.userId)}</div>
+                      <div className="text-[11.5px] text-[var(--text-muted)] mt-0.5">{e.detail}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="hidden md:block">
+                  <Table columns={["Date & Time", "User", "Action", "Details"]} maxHeight="560px">
+                    {shown.map((e, i) => (
+                      <TableRow key={i}>
+                        <TableCell muted className="whitespace-nowrap" >
+                          <span title={fmtDT(e.ts)}>{ago(e.ts)}</span>
+                        </TableCell>
+                        <TableCell strong>{e.userId === currentUserId ? "You" : refLabel(data, "users", e.userId)}</TableCell>
+                        <TableCell>
+                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide bg-[var(--bg-subtle)] text-[var(--text-muted)]">
+                            {ACTION_LABEL[e.action] || e.action}
+                          </span>
+                        </TableCell>
+                        <TableCell muted>{e.detail}</TableCell>
+                      </TableRow>
+                    ))}
+                  </Table>
+                </div>
+              </>
             )}
             {rows.length > ROW_CAP && (
               <div className="text-[11px] text-[var(--text-muted)] pt-3 mt-1">

@@ -281,44 +281,77 @@ export default function HandoverChecklist({ initialTab }: { initialTab?: "intern
             />
           </div>
 
-          <Card padded={false} className="p-[18px]">
-            <Table
-              columns={tab === "internal" ? ["Unit", "Internal Possession"] : ["Unit", "Owner Possession"]}
-              colWidths={["25%", "75%"]}
-              empty="No units match these filters."
-              maxHeight="560px"
-            >
+          <Card padded={false} className="p-3 md:p-[18px]">
+            {/* phones: one card per unit instead of a cramped 2-column table */}
+            <div className="md:hidden flex flex-col gap-2.5">
+              {units.length === 0 && <div className="py-6 text-center text-[13px] text-[var(--text-muted)]">No units match these filters.</div>}
               {units.map((u) => {
                 const floorName = refLabel(data, "floors", u.floorId);
                 return (
-                  <TableRow key={u.id}>
-                    <TableCell>
-                      <span className="inline-flex items-center gap-2 font-bold">
-                        <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
-                        {u.name}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      {tab === "internal" ? (
-                        <StageCell
-                          unitId={u.id} unitName={u.name} floorName={floorName} projectName={project?.name || ""}
-                          idx={hoiIdx} joined={hoiStage!} myRole={myRole} onOpenForm={setActiveForm} data={data}
-                          currentProjectId={projectId} currentUserId={currentUserId} solid
-                          stageDesc="Civil / QC internal inspection before owner possession."
-                        />
-                      ) : (
-                        <StageCell
-                          unitId={u.id} unitName={u.name} floorName={floorName} projectName={project?.name || ""}
-                          idx={hooIdx} joined={hooStage!} myRole={myRole} onOpenForm={setActiveForm} data={data}
-                          currentProjectId={projectId} currentUserId={currentUserId} solid={false}
-                          stageDesc="Final owner possession and handover inspection."
-                        />
-                      )}
-                    </TableCell>
-                  </TableRow>
+                  <div key={u.id} className="border border-[var(--border)] rounded-radius-md p-3.5 bg-[var(--bg-card)]">
+                    <div className="inline-flex items-center gap-2 font-bold text-[14px] mb-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                      {u.name}
+                    </div>
+                    {tab === "internal" ? (
+                      <StageCell
+                        unitId={u.id} unitName={u.name} floorName={floorName} projectName={project?.name || ""}
+                        idx={hoiIdx} joined={hoiStage!} myRole={myRole} onOpenForm={setActiveForm} data={data}
+                        currentProjectId={projectId} currentUserId={currentUserId} solid
+                        stageDesc="Civil / QC internal inspection before owner possession."
+                      />
+                    ) : (
+                      <StageCell
+                        unitId={u.id} unitName={u.name} floorName={floorName} projectName={project?.name || ""}
+                        idx={hooIdx} joined={hooStage!} myRole={myRole} onOpenForm={setActiveForm} data={data}
+                        currentProjectId={projectId} currentUserId={currentUserId} solid={false}
+                        stageDesc="Final owner possession and handover inspection."
+                      />
+                    )}
+                  </div>
                 );
               })}
-            </Table>
+            </div>
+
+            <div className="hidden md:block">
+              <Table
+                columns={tab === "internal" ? ["Unit", "Internal Possession"] : ["Unit", "Owner Possession"]}
+                colWidths={["25%", "75%"]}
+                empty="No units match these filters."
+                maxHeight="560px"
+              >
+                {units.map((u) => {
+                  const floorName = refLabel(data, "floors", u.floorId);
+                  return (
+                    <TableRow key={u.id}>
+                      <TableCell>
+                        <span className="inline-flex items-center gap-2 font-bold">
+                          <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                          {u.name}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        {tab === "internal" ? (
+                          <StageCell
+                            unitId={u.id} unitName={u.name} floorName={floorName} projectName={project?.name || ""}
+                            idx={hoiIdx} joined={hoiStage!} myRole={myRole} onOpenForm={setActiveForm} data={data}
+                            currentProjectId={projectId} currentUserId={currentUserId} solid
+                            stageDesc="Civil / QC internal inspection before owner possession."
+                          />
+                        ) : (
+                          <StageCell
+                            unitId={u.id} unitName={u.name} floorName={floorName} projectName={project?.name || ""}
+                            idx={hooIdx} joined={hooStage!} myRole={myRole} onOpenForm={setActiveForm} data={data}
+                            currentProjectId={projectId} currentUserId={currentUserId} solid={false}
+                            stageDesc="Final owner possession and handover inspection."
+                          />
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </Table>
+            </div>
           </Card>
         </>
       )}

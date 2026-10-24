@@ -256,22 +256,41 @@ export default function ExecutionReconciliation() {
           <div className="text-[13px] font-bold tracking-tight text-[var(--text-sub)] uppercase flex items-center gap-2 mb-2.5">
             <NavIcon name="bug" size={13} /> Unmapped billed lines ({unmappedBilled.length})
           </div>
-          <Card padded={false} className="p-[18px]">
-            <Table
-              columns={["Bill No", "Work Order", "Qty", "Value", "Reason"]}
-              colAligns={["left", "left", "right", "right", "left"]}
-              maxHeight={TABLE_MAX_HEIGHT}
-            >
+          <Card padded={false} className="p-3 md:p-[18px]">
+            {/* phones: one card per unmapped bill instead of a 5-column table squeezed sideways */}
+            <div className="md:hidden flex flex-col gap-2 max-h-[480px] overflow-y-auto">
               {unmappedBilled.map((u, i) => (
-                <TableRow key={i}>
-                  <TableCell strong className="whitespace-nowrap">{u.billNo || "—"}</TableCell>
-                  <TableCell className="whitespace-nowrap">{u.workOrderNo || "—"}</TableCell>
-                  <TableCell className="text-right tabular-nums whitespace-nowrap">{qty(u.qty)}</TableCell>
-                  <TableCell className="text-right tabular-nums whitespace-nowrap">₹{money(u.value)}</TableCell>
-                  <TableCell muted>{u.reason}</TableCell>
-                </TableRow>
+                <div key={i} className="border border-[var(--border)] rounded-radius-md p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="text-[13px] font-bold">{u.billNo || "—"}</div>
+                    <div className="text-[11.5px] text-[var(--text-muted)] whitespace-nowrap">{u.workOrderNo || "—"}</div>
+                  </div>
+                  <div className="flex gap-3 mt-1.5 text-[12px]">
+                    <span className="font-semibold tabular-nums">{qty(u.qty)}</span>
+                    <span className="font-semibold tabular-nums">₹{money(u.value)}</span>
+                  </div>
+                  <div className="text-[11.5px] text-[var(--text-muted)] mt-1">{u.reason}</div>
+                </div>
               ))}
-            </Table>
+            </div>
+
+            <div className="hidden md:block">
+              <Table
+                columns={["Bill No", "Work Order", "Qty", "Value", "Reason"]}
+                colAligns={["left", "left", "right", "right", "left"]}
+                maxHeight={TABLE_MAX_HEIGHT}
+              >
+                {unmappedBilled.map((u, i) => (
+                  <TableRow key={i}>
+                    <TableCell strong className="whitespace-nowrap">{u.billNo || "—"}</TableCell>
+                    <TableCell className="whitespace-nowrap">{u.workOrderNo || "—"}</TableCell>
+                    <TableCell className="text-right tabular-nums whitespace-nowrap">{qty(u.qty)}</TableCell>
+                    <TableCell className="text-right tabular-nums whitespace-nowrap">₹{money(u.value)}</TableCell>
+                    <TableCell muted>{u.reason}</TableCell>
+                  </TableRow>
+                ))}
+              </Table>
+            </div>
           </Card>
         </div>
       )}
@@ -279,33 +298,59 @@ export default function ExecutionReconciliation() {
       <div className="text-[13px] font-bold tracking-tight text-[var(--text-sub)] uppercase flex items-center gap-2 mb-2.5">
         <NavIcon name="board" size={13} /> Reconciliation — by work item
       </div>
-      <Card padded={false} className="p-[18px]">
-        <Table
-          columns={["Project", "Work Order", "Item", "Unit", "Executed Qty", "Executed Value", "Billed Qty", "Billed Value", "Status", "Location(s)"]}
-          colAligns={["left", "left", "left", "left", "right", "right", "right", "right", "left", "left"]}
-          maxHeight={TABLE_MAX_HEIGHT}
-        >
+      <Card padded={false} className="p-3 md:p-[18px]">
+        {/* phones: one card per work item instead of a 10-column table squeezed sideways */}
+        <div className="md:hidden flex flex-col gap-2.5 max-h-[480px] overflow-y-auto">
           {filteredRows.map((r) => (
-            <TableRow key={r.itemId}>
-              <TableCell className="whitespace-nowrap">{r.projectCode}</TableCell>
-              <TableCell className="whitespace-nowrap">{r.workOrderNo}</TableCell>
-              <TableCell strong className={"min-w-[180px] " + (r.itemType === "subItem" ? "pl-5" : "")}>
-                {r.itemType === "subItem" ? "↳ " : ""}{r.description || "—"}
-              </TableCell>
-              <TableCell muted className="whitespace-nowrap">{r.unit || "—"}</TableCell>
-              <TableCell className="text-right tabular-nums whitespace-nowrap">{qty(r.executedQty)}</TableCell>
-              <TableCell className="text-right tabular-nums whitespace-nowrap">₹{money(r.executedValue)}</TableCell>
-              <TableCell className="text-right tabular-nums whitespace-nowrap">{r.billedQty > 0 ? qty(r.billedQty) : "—"}</TableCell>
-              <TableCell className="text-right tabular-nums whitespace-nowrap">{r.billedValue > 0 ? "₹" + money(r.billedValue) : "—"}</TableCell>
-              <TableCell className="whitespace-nowrap">
+            <div key={r.itemId} className="border border-[var(--border)] rounded-radius-md p-3.5 bg-[var(--bg-card)]">
+              <div className="flex items-start justify-between gap-3">
+                <div className={"min-w-0 text-[13.5px] font-bold leading-snug " + (r.itemType === "subItem" ? "pl-3" : "")}>
+                  {r.itemType === "subItem" ? "↳ " : ""}{r.description || "—"}
+                </div>
                 {r.billedQty > 0 || r.billedValue > 0
                   ? <Badge color="green">Billed</Badge>
                   : <Badge color="gray">Not yet billed</Badge>}
-              </TableCell>
-              <TableCell muted className="min-w-[120px]">{r.locations.join(", ") || "—"}</TableCell>
-            </TableRow>
+              </div>
+              <div className="text-[11.5px] text-[var(--text-muted)] mt-1">{r.projectCode} · {r.workOrderNo}</div>
+              <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[12px]">
+                <div><span className="text-[var(--text-muted)]">Executed: </span><span className="font-semibold tabular-nums">{qty(r.executedQty)} {r.unit || ""}</span></div>
+                <div><span className="text-[var(--text-muted)]">Value: </span><span className="font-semibold tabular-nums">₹{money(r.executedValue)}</span></div>
+                <div><span className="text-[var(--text-muted)]">Billed: </span><span className="font-semibold tabular-nums">{r.billedQty > 0 ? qty(r.billedQty) : "—"}</span></div>
+                <div><span className="text-[var(--text-muted)]">Billed value: </span><span className="font-semibold tabular-nums">{r.billedValue > 0 ? "₹" + money(r.billedValue) : "—"}</span></div>
+              </div>
+              {r.locations.length > 0 && <div className="text-[11px] text-[var(--text-muted)] mt-1.5">{r.locations.join(", ")}</div>}
+            </div>
           ))}
-        </Table>
+        </div>
+
+        <div className="hidden md:block">
+          <Table
+            columns={["Project", "Work Order", "Item", "Unit", "Executed Qty", "Executed Value", "Billed Qty", "Billed Value", "Status", "Location(s)"]}
+            colAligns={["left", "left", "left", "left", "right", "right", "right", "right", "left", "left"]}
+            maxHeight={TABLE_MAX_HEIGHT}
+          >
+            {filteredRows.map((r) => (
+              <TableRow key={r.itemId}>
+                <TableCell className="whitespace-nowrap">{r.projectCode}</TableCell>
+                <TableCell className="whitespace-nowrap">{r.workOrderNo}</TableCell>
+                <TableCell strong className={"min-w-[180px] " + (r.itemType === "subItem" ? "pl-5" : "")}>
+                  {r.itemType === "subItem" ? "↳ " : ""}{r.description || "—"}
+                </TableCell>
+                <TableCell muted className="whitespace-nowrap">{r.unit || "—"}</TableCell>
+                <TableCell className="text-right tabular-nums whitespace-nowrap">{qty(r.executedQty)}</TableCell>
+                <TableCell className="text-right tabular-nums whitespace-nowrap">₹{money(r.executedValue)}</TableCell>
+                <TableCell className="text-right tabular-nums whitespace-nowrap">{r.billedQty > 0 ? qty(r.billedQty) : "—"}</TableCell>
+                <TableCell className="text-right tabular-nums whitespace-nowrap">{r.billedValue > 0 ? "₹" + money(r.billedValue) : "—"}</TableCell>
+                <TableCell className="whitespace-nowrap">
+                  {r.billedQty > 0 || r.billedValue > 0
+                    ? <Badge color="green">Billed</Badge>
+                    : <Badge color="gray">Not yet billed</Badge>}
+                </TableCell>
+                <TableCell muted className="min-w-[120px]">{r.locations.join(", ") || "—"}</TableCell>
+              </TableRow>
+            ))}
+          </Table>
+        </div>
       </Card>
     </div>
   );

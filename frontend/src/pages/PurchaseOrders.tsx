@@ -108,50 +108,98 @@ export default function PurchaseOrders() {
         )}
       </Card>
 
-      <Card padded={false} className="p-[18px]">
-        <Table
-          columns={["PO ID", "Project", "Vendor", "Status", "Items", "Order Date", "Delivery Date"]}
-          colWidths={["11%", "17%", "14%", "12%", "26%", "10%", "10%"]}
-          colAligns={["left", "left", "left", "left", "left", "left", "left"]}
-          empty="No Purchase Orders received from IMS yet."
-          maxHeight="640px"
-        >
+      <Card padded={false} className="p-3 md:p-[18px]">
+        {/* phones: one card per PO instead of a 7-column table squeezed sideways */}
+        <div className="md:hidden flex flex-col gap-2.5">
+          {filtered.length === 0 && <div className="py-6 text-center text-[13px] text-[var(--text-muted)]">No Purchase Orders received from IMS yet.</div>}
           {filtered.map((po) => (
-            <TableRow key={po.id}>
-              <TableCell strong className="whitespace-nowrap cursor-pointer" onClick={() => setSelected(po)}>
-                {po.id}
-                {po.deleted && <Badge color="gray"><span className="whitespace-nowrap ml-1">Deleted</span></Badge>}
-              </TableCell>
-              <TableCell className="whitespace-nowrap cursor-pointer" onClick={() => setSelected(po)}>
-                {po.projectCode ? `${po.projectCode}` : (
-                  <span title={`IMS sent project name "${po.projectNameRaw}" which didn't match any real QC project`}>
-                    <Badge color="red"><span className="whitespace-nowrap">Unmatched</span></Badge>
-                  </span>
-                )}
-                <div className="text-[10.5px] text-[var(--text-muted)] mt-0.5 truncate max-w-[160px]">{po.projectNameRaw}</div>
-              </TableCell>
-              <TableCell muted className="truncate max-w-0 cursor-pointer" onClick={() => setSelected(po)}>{po.vendorName || "—"}</TableCell>
-              <TableCell className="cursor-pointer" onClick={() => setSelected(po)}>
-                <Badge color={statusColor(po.status)}><span className="whitespace-nowrap">{po.status}</span></Badge>
-              </TableCell>
-              <TableCell className="cursor-pointer" onClick={() => setSelected(po)}>
-                <div className="flex flex-wrap gap-1 items-center">
-                  {po.items.slice(0, ITEMS_PREVIEW_COUNT).map((it, idx) => (
-                    <span key={idx} className="text-[11px] border border-[var(--border)] rounded-radius-sm px-1.5 py-0.5 whitespace-nowrap">
-                      {it.itemName}: {qty(it.qty)} {it.unit}
-                    </span>
-                  ))}
-                  {po.items.length > ITEMS_PREVIEW_COUNT && (
-                    <span className="text-[11px] text-[var(--text-muted)] font-semibold whitespace-nowrap">+{po.items.length - ITEMS_PREVIEW_COUNT} more</span>
-                  )}
-                  {po.items.length === 0 && <span className="text-[var(--text-sub)]">—</span>}
+            <div
+              key={po.id}
+              className="border border-[var(--border)] rounded-radius-md p-3.5 bg-[var(--bg-card)] cursor-pointer"
+              onClick={() => setSelected(po)}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[14px] font-bold leading-snug flex items-center gap-1.5 flex-wrap">
+                    {po.id}
+                    {po.deleted && <Badge color="gray"><span className="whitespace-nowrap">Deleted</span></Badge>}
+                  </div>
+                  <div className="text-[11.5px] text-[var(--text-muted)] mt-0.5">{po.vendorName || "—"}</div>
                 </div>
-              </TableCell>
-              <TableCell muted className="whitespace-nowrap cursor-pointer" onClick={() => setSelected(po)}>{fmtDate(po.date)}</TableCell>
-              <TableCell muted className="whitespace-nowrap cursor-pointer" onClick={() => setSelected(po)}>{fmtDate(po.deliveryDate)}</TableCell>
-            </TableRow>
+                <Badge color={statusColor(po.status)}><span className="whitespace-nowrap">{po.status}</span></Badge>
+              </div>
+              <div className="mt-2 text-[11.5px]">
+                {po.projectCode ? (
+                  <span className="font-semibold">{po.projectCode}</span>
+                ) : (
+                  <Badge color="red"><span className="whitespace-nowrap">Unmatched</span></Badge>
+                )}
+                <span className="text-[var(--text-muted)]"> · {po.projectNameRaw}</span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1 items-center">
+                {po.items.slice(0, ITEMS_PREVIEW_COUNT).map((it, idx) => (
+                  <span key={idx} className="text-[11px] border border-[var(--border)] rounded-radius-sm px-1.5 py-0.5 whitespace-nowrap">
+                    {it.itemName}: {qty(it.qty)} {it.unit}
+                  </span>
+                ))}
+                {po.items.length > ITEMS_PREVIEW_COUNT && (
+                  <span className="text-[11px] text-[var(--text-muted)] font-semibold whitespace-nowrap">+{po.items.length - ITEMS_PREVIEW_COUNT} more</span>
+                )}
+                {po.items.length === 0 && <span className="text-[var(--text-sub)]">—</span>}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-[11.5px] text-[var(--text-muted)]">
+                <span>Order: {fmtDate(po.date)}</span>
+                <span>Delivery: {fmtDate(po.deliveryDate)}</span>
+              </div>
+            </div>
           ))}
-        </Table>
+        </div>
+
+        <div className="hidden md:block">
+          <Table
+            columns={["PO ID", "Project", "Vendor", "Status", "Items", "Order Date", "Delivery Date"]}
+            colWidths={["11%", "17%", "14%", "12%", "26%", "10%", "10%"]}
+            colAligns={["left", "left", "left", "left", "left", "left", "left"]}
+            empty="No Purchase Orders received from IMS yet."
+            maxHeight="640px"
+          >
+            {filtered.map((po) => (
+              <TableRow key={po.id}>
+                <TableCell strong className="whitespace-nowrap cursor-pointer" onClick={() => setSelected(po)}>
+                  {po.id}
+                  {po.deleted && <Badge color="gray"><span className="whitespace-nowrap ml-1">Deleted</span></Badge>}
+                </TableCell>
+                <TableCell className="whitespace-nowrap cursor-pointer" onClick={() => setSelected(po)}>
+                  {po.projectCode ? `${po.projectCode}` : (
+                    <span title={`IMS sent project name "${po.projectNameRaw}" which didn't match any real QC project`}>
+                      <Badge color="red"><span className="whitespace-nowrap">Unmatched</span></Badge>
+                    </span>
+                  )}
+                  <div className="text-[10.5px] text-[var(--text-muted)] mt-0.5 truncate max-w-[160px]">{po.projectNameRaw}</div>
+                </TableCell>
+                <TableCell muted className="truncate max-w-0 cursor-pointer" onClick={() => setSelected(po)}>{po.vendorName || "—"}</TableCell>
+                <TableCell className="cursor-pointer" onClick={() => setSelected(po)}>
+                  <Badge color={statusColor(po.status)}><span className="whitespace-nowrap">{po.status}</span></Badge>
+                </TableCell>
+                <TableCell className="cursor-pointer" onClick={() => setSelected(po)}>
+                  <div className="flex flex-wrap gap-1 items-center">
+                    {po.items.slice(0, ITEMS_PREVIEW_COUNT).map((it, idx) => (
+                      <span key={idx} className="text-[11px] border border-[var(--border)] rounded-radius-sm px-1.5 py-0.5 whitespace-nowrap">
+                        {it.itemName}: {qty(it.qty)} {it.unit}
+                      </span>
+                    ))}
+                    {po.items.length > ITEMS_PREVIEW_COUNT && (
+                      <span className="text-[11px] text-[var(--text-muted)] font-semibold whitespace-nowrap">+{po.items.length - ITEMS_PREVIEW_COUNT} more</span>
+                    )}
+                    {po.items.length === 0 && <span className="text-[var(--text-sub)]">—</span>}
+                  </div>
+                </TableCell>
+                <TableCell muted className="whitespace-nowrap cursor-pointer" onClick={() => setSelected(po)}>{fmtDate(po.date)}</TableCell>
+                <TableCell muted className="whitespace-nowrap cursor-pointer" onClick={() => setSelected(po)}>{fmtDate(po.deliveryDate)}</TableCell>
+              </TableRow>
+            ))}
+          </Table>
+        </div>
       </Card>
 
       <PurchaseOrderDetail po={selected} onClose={() => setSelected(null)} />

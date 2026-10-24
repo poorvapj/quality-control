@@ -134,35 +134,71 @@ export default function UnitExecutionWorkflow() {
         </div>
       </Card>
 
-      <Card padded={false} className="p-[18px]">
-        <Table
-          columns={["Date", "Project", "Floor / Unit", "VMS Item", "Measured Qty", "Material Consumed", "Unused / Wastage", "Recorded By"]}
-          colAligns={["left", "left", "left", "left", "right", "right", "right", "left"]}
-          maxHeight="560px"
-          empty="No measurements recorded yet."
-        >
+      <Card padded={false} className="p-3 md:p-[18px]">
+        {/* phones: one card per measurement instead of an 8-column table squeezed sideways */}
+        <div className="md:hidden flex flex-col gap-2.5">
+          {records.length === 0 && <div className="py-6 text-center text-[13px] text-[var(--text-muted)]">No measurements recorded yet.</div>}
           {records.map((m) => (
-            <TableRow key={m.id}>
-              <TableCell muted className="whitespace-nowrap">{m.measurementDate}</TableCell>
-              <TableCell className="whitespace-nowrap">{m.projectCode}</TableCell>
-              <TableCell strong className="whitespace-nowrap">{m.floorName} / {m.unitName}</TableCell>
-              <TableCell>
-                {m.itemDescription
-                  ? <>{m.itemDescription}<div className="text-[10.5px] text-[var(--text-muted)] font-normal">{m.itemIsCustom ? "Not in VMS (typed in)" : m.workOrderNo}</div></>
-                  : <span className="text-[var(--text-sub)]">—</span>}
-                {m.remarks && <div className="text-[10.5px] text-[var(--text-muted)] font-normal max-w-[260px] truncate" title={m.remarks}>{m.remarks}</div>}
-              </TableCell>
-              <TableCell className="text-right tabular-nums whitespace-nowrap">{qty(m.measuredQty)} {m.measuredUnit}</TableCell>
-              <TableCell className="text-right tabular-nums whitespace-nowrap">{qty(m.materialConsumedQty)} {m.materialUnit}</TableCell>
-              <TableCell muted className="text-right tabular-nums whitespace-nowrap">{qty(m.unusedBalanceQty)} / {qty(m.wastageQty)} {m.materialUnit}</TableCell>
-              <TableCell muted>
-                <div className="whitespace-nowrap">{m.recordedByName}</div>
-                <div className="mt-1"><ApprovalBadge approval={effectiveApproval(data, m)} /></div>
-                <ApprovalActions collName="materialMeasurements" record={m} />
-              </TableCell>
-            </TableRow>
+            <div key={m.id} className="border border-[var(--border)] rounded-radius-md p-3.5 bg-[var(--bg-card)]">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[14px] font-bold leading-snug">{m.floorName} / {m.unitName}</div>
+                  {m.itemDescription && (
+                    <div className="text-[11.5px] text-[var(--text-muted)] mt-0.5">
+                      {m.itemDescription} · {m.itemIsCustom ? "Not in VMS" : m.workOrderNo}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-[11.5px] text-[var(--text-muted)]">
+                <span>{m.measurementDate}</span>
+                <span>{m.projectCode}</span>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[12px]">
+                <div><span className="text-[var(--text-muted)]">Measured: </span><span className="font-semibold tabular-nums">{qty(m.measuredQty)} {m.measuredUnit}</span></div>
+                <div><span className="text-[var(--text-muted)]">Consumed: </span><span className="font-semibold tabular-nums">{qty(m.materialConsumedQty)} {m.materialUnit}</span></div>
+                <div className="col-span-2"><span className="text-[var(--text-muted)]">Unused/Wastage: </span><span className="font-semibold tabular-nums">{qty(m.unusedBalanceQty)} / {qty(m.wastageQty)} {m.materialUnit}</span></div>
+              </div>
+              {m.remarks && <div className="text-[11px] text-[var(--text-muted)] mt-1.5">{m.remarks}</div>}
+              <div className="flex items-center justify-between gap-2 mt-2.5">
+                <span className="text-[11.5px] text-[var(--text-muted)]">{m.recordedByName}</span>
+                <ApprovalBadge approval={effectiveApproval(data, m)} />
+              </div>
+              <div className="mt-1"><ApprovalActions collName="materialMeasurements" record={m} /></div>
+            </div>
           ))}
-        </Table>
+        </div>
+
+        <div className="hidden md:block">
+          <Table
+            columns={["Date", "Project", "Floor / Unit", "VMS Item", "Measured Qty", "Material Consumed", "Unused / Wastage", "Recorded By"]}
+            colAligns={["left", "left", "left", "left", "right", "right", "right", "left"]}
+            maxHeight="560px"
+            empty="No measurements recorded yet."
+          >
+            {records.map((m) => (
+              <TableRow key={m.id}>
+                <TableCell muted className="whitespace-nowrap">{m.measurementDate}</TableCell>
+                <TableCell className="whitespace-nowrap">{m.projectCode}</TableCell>
+                <TableCell strong className="whitespace-nowrap">{m.floorName} / {m.unitName}</TableCell>
+                <TableCell>
+                  {m.itemDescription
+                    ? <>{m.itemDescription}<div className="text-[10.5px] text-[var(--text-muted)] font-normal">{m.itemIsCustom ? "Not in VMS (typed in)" : m.workOrderNo}</div></>
+                    : <span className="text-[var(--text-sub)]">—</span>}
+                  {m.remarks && <div className="text-[10.5px] text-[var(--text-muted)] font-normal max-w-[260px] truncate" title={m.remarks}>{m.remarks}</div>}
+                </TableCell>
+                <TableCell className="text-right tabular-nums whitespace-nowrap">{qty(m.measuredQty)} {m.measuredUnit}</TableCell>
+                <TableCell className="text-right tabular-nums whitespace-nowrap">{qty(m.materialConsumedQty)} {m.materialUnit}</TableCell>
+                <TableCell muted className="text-right tabular-nums whitespace-nowrap">{qty(m.unusedBalanceQty)} / {qty(m.wastageQty)} {m.materialUnit}</TableCell>
+                <TableCell muted>
+                  <div className="whitespace-nowrap">{m.recordedByName}</div>
+                  <div className="mt-1"><ApprovalBadge approval={effectiveApproval(data, m)} /></div>
+                  <ApprovalActions collName="materialMeasurements" record={m} />
+                </TableCell>
+              </TableRow>
+            ))}
+          </Table>
+        </div>
       </Card>
 
       <MeasurementForm

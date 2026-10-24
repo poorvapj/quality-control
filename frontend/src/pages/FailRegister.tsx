@@ -160,44 +160,45 @@ export default function FailRegister() {
         <StatTile label="Resolved" value={resolvedCount} icon="award" />
       </div>
 
-      <Card padded={false} className="p-[18px]">
-        <Table
-          columns={["Date", "Project", "Floor", "Checklist", "Result", "Inspector", "Assigned DRI", "Snag Status", ""]}
-          colWidths={["100px", "90px", "160px", "180px", "120px", "120px", "130px", "110px", "150px"]}
-          maxHeight="560px"
-        >
+      <Card padded={false} className="p-3 md:p-[18px]">
+        {/* phones: one card per failed inspection instead of a 9-column table squeezed sideways */}
+        <div className="md:hidden flex flex-col gap-2.5">
           {filtered.map((insp) => {
             const snag = insp.linkedSnagId ? byId(snags, insp.linkedSnagId) : null;
             const overdue = !!snag && snag.status !== "Closed" && !!snag.dueAt && snag.dueAt < Date.now();
             const canReinspect = insp.result !== "Pass" && snag?.status !== "Closed";
             return (
-              <TableRow
+              <div
                 key={insp.id}
+                className={"border border-[var(--border)] rounded-radius-md p-3.5 bg-[var(--bg-card)]" + (canReinspect ? " cursor-pointer" : "")}
                 onClick={canReinspect ? () => { setReInspectQualityId(insp.id); setActiveTab("qualityInspection" as TabKey); } : undefined}
               >
-                <TableCell muted className="whitespace-nowrap">{insp.inspectionDate}</TableCell>
-                <TableCell className="whitespace-nowrap">{insp.projectCode}</TableCell>
-                <TableCell strong>{insp.floorName}{insp.unitName ? ` / ${insp.unitName}` : ""}</TableCell>
-                <TableCell muted>{insp.workType || "—"}</TableCell>
-                <TableCell>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-[14px] font-bold leading-snug">{insp.floorName}{insp.unitName ? ` / ${insp.unitName}` : ""}</div>
+                    {insp.workType && <div className="text-[11.5px] text-[var(--text-muted)] mt-0.5">{insp.workType}</div>}
+                  </div>
                   <Badge color={insp.result === "Fail" ? "red" : "amber"}><span className="whitespace-nowrap">{insp.result}</span></Badge>
-                </TableCell>
-                <TableCell muted className="truncate max-w-0">{insp.inspectorName}</TableCell>
-                <TableCell muted className="truncate max-w-0">{insp.correctiveAction?.assignedToName || byId(users, insp.correctiveAction?.assignedToUserId || null)?.name || "—"}</TableCell>
-                <TableCell>
-                  {!snag ? <span className="text-[var(--text-sub)]">—</span> : (
+                </div>
+                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-[11.5px] text-[var(--text-muted)]">
+                  <span>{insp.inspectionDate}</span>
+                  <span>{insp.projectCode}</span>
+                  <span>by {insp.inspectorName}</span>
+                </div>
+                <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                  <span className="text-[11.5px] text-[var(--text-muted)]">DRI: {insp.correctiveAction?.assignedToName || byId(users, insp.correctiveAction?.assignedToUserId || null)?.name || "—"}</span>
+                  {snag && (
                     <Badge color={snag.status === "Closed" ? "green" : overdue ? "red" : "amber"}>
                       <span className="whitespace-nowrap">{snag.status === "Closed" ? "Resolved" : overdue ? "Overdue" : snag.status}</span>
                     </Badge>
                   )}
-                </TableCell>
-                <TableCell>
+                </div>
+                <div className="mt-2.5" onClick={(e) => e.stopPropagation()}>
                   <Btn
                     label="Write up as Case Study"
                     color="secondary"
                     size="sm"
-                    onClick={(e: React.MouseEvent) => {
-                      e.stopPropagation();
+                    onClick={() => {
                       setCaseStudyDraft({
                         projectId: insp.projectId,
                         floorId: insp.floorId,
@@ -207,11 +208,65 @@ export default function FailRegister() {
                       setActiveTab("caseStudies" as TabKey);
                     }}
                   />
-                </TableCell>
-              </TableRow>
+                </div>
+              </div>
             );
           })}
-        </Table>
+        </div>
+
+        <div className="hidden md:block">
+          <Table
+            columns={["Date", "Project", "Floor", "Checklist", "Result", "Inspector", "Assigned DRI", "Snag Status", ""]}
+            colWidths={["100px", "90px", "160px", "180px", "120px", "120px", "130px", "110px", "150px"]}
+            maxHeight="560px"
+          >
+            {filtered.map((insp) => {
+              const snag = insp.linkedSnagId ? byId(snags, insp.linkedSnagId) : null;
+              const overdue = !!snag && snag.status !== "Closed" && !!snag.dueAt && snag.dueAt < Date.now();
+              const canReinspect = insp.result !== "Pass" && snag?.status !== "Closed";
+              return (
+                <TableRow
+                  key={insp.id}
+                  onClick={canReinspect ? () => { setReInspectQualityId(insp.id); setActiveTab("qualityInspection" as TabKey); } : undefined}
+                >
+                  <TableCell muted className="whitespace-nowrap">{insp.inspectionDate}</TableCell>
+                  <TableCell className="whitespace-nowrap">{insp.projectCode}</TableCell>
+                  <TableCell strong>{insp.floorName}{insp.unitName ? ` / ${insp.unitName}` : ""}</TableCell>
+                  <TableCell muted>{insp.workType || "—"}</TableCell>
+                  <TableCell>
+                    <Badge color={insp.result === "Fail" ? "red" : "amber"}><span className="whitespace-nowrap">{insp.result}</span></Badge>
+                  </TableCell>
+                  <TableCell muted className="truncate max-w-0">{insp.inspectorName}</TableCell>
+                  <TableCell muted className="truncate max-w-0">{insp.correctiveAction?.assignedToName || byId(users, insp.correctiveAction?.assignedToUserId || null)?.name || "—"}</TableCell>
+                  <TableCell>
+                    {!snag ? <span className="text-[var(--text-sub)]">—</span> : (
+                      <Badge color={snag.status === "Closed" ? "green" : overdue ? "red" : "amber"}>
+                        <span className="whitespace-nowrap">{snag.status === "Closed" ? "Resolved" : overdue ? "Overdue" : snag.status}</span>
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Btn
+                      label="Write up as Case Study"
+                      color="secondary"
+                      size="sm"
+                      onClick={(e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        setCaseStudyDraft({
+                          projectId: insp.projectId,
+                          floorId: insp.floorId,
+                          category: insp.workType,
+                          linkedInspectionId: insp.id
+                        });
+                        setActiveTab("caseStudies" as TabKey);
+                      }}
+                    />
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </Table>
+        </div>
       </Card>
     </div>
   );

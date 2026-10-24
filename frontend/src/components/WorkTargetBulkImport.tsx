@@ -162,22 +162,39 @@ export default function WorkTargetBulkImport({ onClose }: { onClose: () => void 
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
             {validRows.length} valid · {errorRows.length} with errors
           </div>
-          <Table columns={["Line", "Project", "Category", "Unit", "Planned Qty", "Status"]} maxHeight="280px">
+          <div className="md:hidden flex flex-col gap-2 max-h-[280px] overflow-y-auto">
             {parsed.map((r) => (
-              <TableRow key={r.line}>
-                <TableCell>{r.line}</TableCell>
-                <TableCell>{r.projectRaw}</TableCell>
-                <TableCell>{r.categoryRaw}</TableCell>
-                <TableCell>{r.unit}</TableCell>
-                <TableCell>{r.plannedQty}</TableCell>
-                <TableCell>
+              <div key={r.line} className="border border-[var(--border)] rounded-radius-md p-2.5 bg-[var(--bg-card)]">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="text-[13px] font-bold">#{r.line} {r.projectRaw}</div>
                   {r.error
-                    ? <span className="badge-tag fail">{r.error}</span>
-                    : <span className="badge-tag pass">OK</span>}
-                </TableCell>
-              </TableRow>
+                    ? <span className="badge-tag fail whitespace-nowrap">Error</span>
+                    : <span className="badge-tag pass whitespace-nowrap">OK</span>}
+                </div>
+                <div className="text-[11.5px] text-[var(--text-muted)] mt-1">{r.categoryRaw} · {r.unit} · Qty {r.plannedQty}</div>
+                {r.error && <div className="text-[11.5px] text-[var(--color-fail)] mt-1">{r.error}</div>}
+              </div>
             ))}
-          </Table>
+          </div>
+
+          <div className="hidden md:block">
+            <Table columns={["Line", "Project", "Category", "Unit", "Planned Qty", "Status"]} maxHeight="280px">
+              {parsed.map((r) => (
+                <TableRow key={r.line}>
+                  <TableCell>{r.line}</TableCell>
+                  <TableCell>{r.projectRaw}</TableCell>
+                  <TableCell>{r.categoryRaw}</TableCell>
+                  <TableCell>{r.unit}</TableCell>
+                  <TableCell>{r.plannedQty}</TableCell>
+                  <TableCell>
+                    {r.error
+                      ? <span className="badge-tag fail">{r.error}</span>
+                      : <span className="badge-tag pass">OK</span>}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </Table>
+          </div>
         </div>
       )}
     </Modal>
