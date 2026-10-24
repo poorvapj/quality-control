@@ -519,11 +519,26 @@ This cannot be undone.`)) return;
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5">
-        <StatTile label="Total Inspections" value={inspections.length} icon="eye" />
-        <StatTile label="Open Quality Issues" value={openIssues} icon="bug" valueClassName={openIssues > 0 ? "text-[var(--color-fail)]" : undefined} />
-        <StatTile label="Failed Inspections" value={failedCount} icon="bug" />
-        <StatTile label="Overdue Corrective Actions" value={overdueCount} icon="clock" valueClassName={overdueCount > 0 ? "text-[var(--color-fail)]" : undefined} />
-        <StatTile label="Resolved Issues" value={resolvedCount} icon="award" />
+        <StatTile
+          label="Total Inspections" value={inspections.length} icon="eye"
+          onClick={() => { setFResult(""); setFSnagStatus(""); }}
+        />
+        <StatTile
+          label="Open Quality Issues" value={openIssues} icon="bug" valueClassName={openIssues > 0 ? "text-[var(--color-fail)]" : undefined}
+          onClick={() => { setFResult(""); setFSnagStatus("open"); }}
+        />
+        <StatTile
+          label="Failed Inspections" value={failedCount} icon="bug"
+          onClick={() => { setFResult("Fail"); setFSnagStatus(""); }}
+        />
+        <StatTile
+          label="Overdue Corrective Actions" value={overdueCount} icon="clock" valueClassName={overdueCount > 0 ? "text-[var(--color-fail)]" : undefined}
+          onClick={() => { setFResult(""); setFSnagStatus("overdue"); }}
+        />
+        <StatTile
+          label="Resolved Issues" value={resolvedCount} icon="award"
+          onClick={() => { setFResult(""); setFSnagStatus("closed"); }}
+        />
       </div>
 
       <Card padded={false} className="p-3 md:p-[18px]">
