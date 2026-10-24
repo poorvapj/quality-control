@@ -227,6 +227,22 @@ const UNIT_FINAL_STAGES = [
   "Tile Work Inspection"
 ];
 
+// Real site work was already recorded (and passed) under the OLD,
+// pre-phase-gating checklist names before this phase split existed —
+// Zen Garden had flats fully Brickwork/Plastering-passed the old way, and
+// the new gate had no idea that satisfied anything, blocking the next
+// phase for work that was genuinely already done. Each entry here says
+// "a Pass on this OLD workType counts as a Pass on this NEW phase" for
+// gating purposes — new inspections are never written under the old
+// names again, this only makes pre-existing history count.
+const LEGACY_PHASE_EQUIVALENT: Record<string, string> = {
+  "Brickwork & Plaster — During Brickwork": "Brickwork Inspection",
+  "Brickwork & Plaster — During Plastering": "Plastering Inspection",
+  "R.C.C. Slab Inspection — After Pour": "R.C.C. Slab Inspection",
+  "Waterproofing Inspection — After 24 Hours": "Waterproofing Inspection",
+  "Plumbing & Electrical Inspection — Before Handover": "Plumbing & Electrical Inspection"
+};
+
 // Column/Slab option lists now come from Masters ▸ Column Master / Slab
 // Master (coll(data, "columnMaster"/"slabMaster")) instead of a fixed
 // Column 1-60 / Slab 1-10 — see activeNames() below.
@@ -826,8 +842,9 @@ function InspectionForm({
   // Waterproofing's per-area phases). Only the latest attempt counts, so a
   // phase that failed and was later re-inspected to Pass still clears it.
   function latestResult(stageWorkType: string, forUnitId: string, area?: string): QualityInspectionResult | undefined {
+    const legacyWorkType = LEGACY_PHASE_EQUIVALENT[stageWorkType];
     const matches = allInspections
-      .filter((i) => i.workType === stageWorkType && (forUnitId ? i.unitId === forUnitId : !i.unitId && i.floorId === floorId))
+      .filter((i) => (i.workType === stageWorkType || (legacyWorkType && i.workType === legacyWorkType)) && (forUnitId ? i.unitId === forUnitId : !i.unitId && i.floorId === floorId))
       .filter((i) => !area || i.areas?.includes(area))
       .sort((a, b) => b.createdAt - a.createdAt);
     return matches[0]?.result;
