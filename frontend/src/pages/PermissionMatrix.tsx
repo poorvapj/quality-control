@@ -19,6 +19,7 @@ type Mode = "user" | "role";
 export default function PermissionMatrix() {
   const { data, apply, currentUserId, toast } = useApp();
   const [mode, setMode] = useState<Mode>("user");
+  const [saving, setSaving] = useState(false);
 
   const users = coll(data, "users").filter((u) => u.id !== "U-ADMIN");
   const [userId, setUserId] = useState(users[0]?.id || "");
@@ -97,27 +98,37 @@ export default function PermissionMatrix() {
   }
 
   async function save() {
-    if (!userId) return;
-    const rec: ModuleGrant = { id: "MG-" + userId, userId, roleLabel: roleLabel.trim() || undefined, grants };
-    const stageRec = { id: existingStageGrants?.id || nextId("PRM", coll(data, "permissions")), userId, ...stageGrants };
-    await apply([
-      { op: "upsert", coll: "moduleGrants", rec },
-      { op: "upsert", coll: "permissions", rec: stageRec },
-      buildEventOp(currentUserId, "PERMISSION_UPDATE", userId, "", `Updated module grants for ${user?.name || userId}`)
-    ]);
-    toast("Permissions saved");
+    if (!userId || saving) return;
+    setSaving(true);
+    try {
+      const rec: ModuleGrant = { id: "MG-" + userId, userId, roleLabel: roleLabel.trim() || undefined, grants };
+      const stageRec = { id: existingStageGrants?.id || nextId("PRM", coll(data, "permissions")), userId, ...stageGrants };
+      await apply([
+        { op: "upsert", coll: "moduleGrants", rec },
+        { op: "upsert", coll: "permissions", rec: stageRec },
+        buildEventOp(currentUserId, "PERMISSION_UPDATE", userId, "", `Updated module grants for ${user?.name || userId}`)
+      ]);
+      toast("Permissions saved");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function saveRole() {
-    if (!roleName) return;
-    const rec = existingRoleRec
-      ? { ...existingRoleRec, grants: roleGrants, ...roleStageGrants }
-      : { id: "ROLE-OVERRIDE-" + roleName.toUpperCase(), name: roleName, builtin: true, grants: roleGrants, ...roleStageGrants };
-    await apply([
-      { op: "upsert", coll: "roles", rec },
-      buildEventOp(currentUserId, "PERMISSION_UPDATE", rec.id, "", `Updated default permissions for role ${roleName}`)
-    ]);
-    toast("Role permissions saved");
+    if (!roleName || saving) return;
+    setSaving(true);
+    try {
+      const rec = existingRoleRec
+        ? { ...existingRoleRec, grants: roleGrants, ...roleStageGrants }
+        : { id: "ROLE-OVERRIDE-" + roleName.toUpperCase(), name: roleName, builtin: true, grants: roleGrants, ...roleStageGrants };
+      await apply([
+        { op: "upsert", coll: "roles", rec },
+        buildEventOp(currentUserId, "PERMISSION_UPDATE", rec.id, "", `Updated default permissions for role ${roleName}`)
+      ]);
+      toast("Role permissions saved");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -186,7 +197,7 @@ export default function PermissionMatrix() {
 
           {userId && (
             <div className="flex justify-end">
-              <Btn label="Save Permissions" color="primary" onClick={save} />
+              <Btn label={saving ? "Saving…" : "Save Permissions"} color="primary" onClick={save} disabled={saving} />
             </div>
           )}
         </>
@@ -219,7 +230,7 @@ export default function PermissionMatrix() {
 
           {!!roleName && (
             <div className="flex justify-end">
-              <Btn label="Save Role Permissions" color="primary" onClick={saveRole} />
+              <Btn label={saving ? "Saving…" : "Save Role Permissions"} color="primary" onClick={saveRole} disabled={saving} />
             </div>
           )}
         </>

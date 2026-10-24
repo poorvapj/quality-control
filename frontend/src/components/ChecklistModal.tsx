@@ -13,6 +13,7 @@ export default function ChecklistModal() {
   const { submitChecklist, submitStageItemChecklist } = useActions();
   const [rows, setRows] = useState<RowState[]>([]);
   const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const pendingPhotoRow = useRef<number | null>(null);
 
@@ -61,23 +62,29 @@ export default function ChecklistModal() {
       toast(`"${param?.name || "This item"}" needs a photo before you can submit`);
       return;
     }
-    if (checklistModal!.itemId) {
-      // checklistModal.stageId is the parent item-based stage (RCC/Brick/
-      // AC/Electric/Plastering) — its own checklist holds the item list.
-      const parentChk = coll(data, "checklists").find((c) => c.stageId === checklistModal!.stageId);
-      const items = rccChecklistItems(data, parentChk?.id);
-      await submitStageItemChecklist(checklistModal!.id, checklistModal!.stageId, checklistModal!.itemId, items, checklistModal!.checklistId, rows);
-    } else {
-      await submitChecklist(checklistModal!.kind, checklistModal!.id, checklistModal!.stageId, checklistModal!.checklistId, rows);
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      if (checklistModal!.itemId) {
+        // checklistModal.stageId is the parent item-based stage (RCC/Brick/
+        // AC/Electric/Plastering) — its own checklist holds the item list.
+        const parentChk = coll(data, "checklists").find((c) => c.stageId === checklistModal!.stageId);
+        const items = rccChecklistItems(data, parentChk?.id);
+        await submitStageItemChecklist(checklistModal!.id, checklistModal!.stageId, checklistModal!.itemId, items, checklistModal!.checklistId, rows);
+      } else {
+        await submitChecklist(checklistModal!.kind, checklistModal!.id, checklistModal!.stageId, checklistModal!.checklistId, rows);
+      }
+      closeChecklistModal();
+    } finally {
+      setSubmitting(false);
     }
-    closeChecklistModal();
   }
 
   return (
     <Modal open wide sub={"QUALITY CHECKLIST · " + targetLabel} title={chk.name} onClose={closeChecklistModal} footer={
       <>
-        <button className="btn btn-secondary" onClick={closeChecklistModal}>Cancel</button>
-        <button className="btn btn-primary" onClick={submit}>Submit checklist</button>
+        <button className="btn btn-secondary" onClick={closeChecklistModal} disabled={submitting}>Cancel</button>
+        <button className="btn btn-primary" onClick={submit} disabled={submitting}>{submitting ? "Submitting…" : "Submit checklist"}</button>
       </>
     }>
       <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14, lineHeight: 1.6 }}>

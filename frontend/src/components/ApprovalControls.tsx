@@ -58,7 +58,7 @@ export function ApprovalActions({ collName, record }: { collName: ApprovalColl; 
       <div className="flex flex-col gap-1.5 mt-1.5 min-w-[200px]">
         <textarea className="textarea" rows={2} placeholder="What should be redone?" value={remark} onChange={(e) => setRemark(e.target.value)} />
         <div className="flex gap-1.5">
-          <Btn label="Send back" color="primary" size="sm" onClick={() => decide("rejected")} disabled={busy} />
+          <Btn label={busy ? "Sending…" : "Send back"} color="primary" size="sm" onClick={() => decide("rejected")} disabled={busy} />
           <Btn label="Cancel" color="secondary" size="sm" onClick={() => { setRejecting(false); setRemark(""); }} />
         </div>
       </div>
@@ -66,7 +66,7 @@ export function ApprovalActions({ collName, record }: { collName: ApprovalColl; 
   }
   return (
     <div className="flex gap-1.5 mt-1.5">
-      <Btn label="Approve" color="primary" size="sm" onClick={() => decide("approved")} disabled={busy} />
+      <Btn label={busy ? "Approving…" : "Approve"} color="primary" size="sm" onClick={() => decide("approved")} disabled={busy} />
       <Btn label="Reject" color="secondary" size="sm" onClick={() => setRejecting(true)} disabled={busy} />
     </div>
   );
