@@ -2221,31 +2221,34 @@ connectMongo()
     }
 
     // Weekly Work Quality Inspection report -> Slack, Saturday 1pm IST.
-    // Testing phase: goes to WEEKLY_QC_REPORT_RECIPIENT_EMAIL (defaults to
-    // Poorva) instead of Rakesh Bhargava until that's confirmed working —
-    // flip the env var to rakesh@neotericgrp.in when ready, no code change
-    // needed. A "meta" marker (keyed by the week's end date) stops a second
-    // send if this check fires more than once inside the match window.
+    // WEEKLY_QC_REPORT_RECIPIENT_EMAILS is comma-separated (defaults to
+    // just Poorva, for testing) — add rakesh@neotericgrp.in to the list on
+    // Render once ready, no code change needed; everyone listed gets their
+    // own DM with the PDF. A "meta" marker (keyed by the week's end date)
+    // stops a second send if this check fires more than once inside the
+    // match window.
     {
       const { buildWeeklyQcReportData, currentWeekBounds } = require("./weeklyQcReport.js");
       const { renderQcInspectionPdfBuffer } = require("./qcInspectionPdfDocument.js");
       const { sendPdfToEmail } = require("./weeklyReportSlack.js");
-      const RECIPIENT_EMAIL = process.env.WEEKLY_QC_REPORT_RECIPIENT_EMAIL || "poorva@neotericgrp.in";
+      const RECIPIENT_EMAILS = (process.env.WEEKLY_QC_REPORT_RECIPIENT_EMAILS || process.env.WEEKLY_QC_REPORT_RECIPIENT_EMAIL || "poorva@neotericgrp.in")
+        .split(",").map((e) => e.trim()).filter(Boolean);
 
       async function sendWeeklyQcReport() {
         const data = await buildWeeklyQcReportData(mongoDb);
         const buffer = await renderQcInspectionPdfBuffer(data);
         const slug = data.periodLabel.replace(/[^\w]+/g, "-");
-        const ok = await sendPdfToEmail(
-          RECIPIENT_EMAIL, buffer, `Quality-Inspection-Report-${slug}.pdf`,
-          `Work Quality Inspection Report — ${data.periodLabel}`,
-          `📋 Weekly Work Quality Inspection Report — ${data.periodLabel}\n${data.kpis.total} inspections · ${data.kpis.pass} pass · ${data.kpis.fail} fail · ${data.kpis.rework} rework · ${data.kpis.passRate}% pass rate · ${data.kpis.overdue} overdue`
-        );
+        const comment = `📋 Weekly Work Quality Inspection Report — ${data.periodLabel}\n${data.kpis.total} inspections · ${data.kpis.pass} pass · ${data.kpis.fail} fail · ${data.kpis.rework} rework · ${data.kpis.passRate}% pass rate · ${data.kpis.overdue} overdue`;
+        const results = await Promise.all(RECIPIENT_EMAILS.map((email) =>
+          sendPdfToEmail(email, buffer, `Quality-Inspection-Report-${slug}.pdf`, `Work Quality Inspection Report — ${data.periodLabel}`, comment)
+            .then((ok) => ({ email, ok }))
+        ));
+        const summary = results.map((r) => `${r.email}: ${r.ok ? "sent" : "FAILED"}`).join(", ");
         await mongoDb.collection("events").insertOne({
           ts: Date.now(), userId: "", action: "WEEKLY_QC_REPORT_SENT", targetId: "", stageId: "",
-          detail: `Weekly Quality Inspection report (${data.periodLabel}) ${ok ? "sent to " + RECIPIENT_EMAIL : "FAILED to send to " + RECIPIENT_EMAIL}`
+          detail: `Weekly Quality Inspection report (${data.periodLabel}) — ${summary}`
         });
-        return ok;
+        return results.every((r) => r.ok);
       }
 
       let weeklyQcCheckInFlight = false;
