@@ -423,12 +423,13 @@ This cannot be undone.`)) return;
       const fail = filtered.filter((i) => i.result === "Fail").length;
       const rework = filtered.filter((i) => i.result === "Rework Required").length;
       const overdue = filtered.filter((i) => { const s = linkedSnag(i); return s && s.status !== "Closed" && s.dueAt && s.dueAt < Date.now(); }).length;
+      const resolved = filtered.filter((i) => { const s = linkedSnag(i); return s && s.status === "Closed"; }).length;
       await downloadQcInspectionPdf({
         scopeLabel: filterLabels.length ? filterLabels.join(" · ") : "All projects",
         periodLabel: rangeLabel,
         generatedAt: Date.now(),
         generatedBy: me()?.name || "—",
-        kpis: { total, pass, fail, rework, passRate: total ? Math.round((pass / total) * 100) : 0, overdue },
+        kpis: { total, pass, fail, rework, passRate: total ? Math.round((pass / total) * 100) : 0, overdue, resolved },
         rows: filtered.map((i) => {
           const snag = linkedSnag(i);
           const overdueRow = !!snag && snag.status !== "Closed" && !!snag.dueAt && snag.dueAt < Date.now();

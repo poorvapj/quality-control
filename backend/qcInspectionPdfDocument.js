@@ -74,7 +74,8 @@ function QcDocument({ data: s }) {
         { label: "Pass", value: String(s.kpis.pass), color: GREEN },
         { label: "Fail", value: String(s.kpis.fail), color: RED },
         { label: "Pass Rate", value: `${s.kpis.passRate}%` },
-        { label: "Overdue Corrective Actions", value: String(s.kpis.overdue), color: s.kpis.overdue > 0 ? RED : undefined }
+        { label: "Overdue Corrective Actions", value: String(s.kpis.overdue), color: s.kpis.overdue > 0 ? RED : undefined },
+        { label: "Resolved", value: String(s.kpis.resolved), color: GREEN }
       ] }),
 
       h(View, { style: S.table },

@@ -57,7 +57,7 @@ export interface QcInspectionPdfData {
   periodLabel: string;
   generatedAt: number;
   generatedBy: string;
-  kpis: { total: number; pass: number; fail: number; rework: number; passRate: number; overdue: number };
+  kpis: { total: number; pass: number; fail: number; rework: number; passRate: number; overdue: number; resolved: number };
   rows: QcInspectionPdfRow[];
 }
 
@@ -83,7 +83,8 @@ function QcDocument({ data: s }: { data: QcInspectionPdfData }) {
           { label: "Pass", value: String(s.kpis.pass), color: GREEN },
           { label: "Fail", value: String(s.kpis.fail), color: RED },
           { label: "Pass Rate", value: `${s.kpis.passRate}%` },
-          { label: "Overdue Corrective Actions", value: String(s.kpis.overdue), color: s.kpis.overdue > 0 ? RED : undefined }
+          { label: "Overdue Corrective Actions", value: String(s.kpis.overdue), color: s.kpis.overdue > 0 ? RED : undefined },
+          { label: "Resolved", value: String(s.kpis.resolved), color: GREEN }
         ]} />
 
         <View style={S.table}>

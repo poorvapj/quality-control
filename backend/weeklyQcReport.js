@@ -56,6 +56,10 @@ async function buildWeeklyQcReportData(mongoDb) {
     const s = linkedSnag(i);
     return !!s && s.status !== "Closed" && s.dueAt && s.dueAt < Date.now();
   }).length;
+  const resolved = inRange.filter((i) => {
+    const s = linkedSnag(i);
+    return !!s && s.status === "Closed";
+  }).length;
 
   const rows = inRange.map((i) => {
     const snag = linkedSnag(i);
@@ -76,7 +80,7 @@ async function buildWeeklyQcReportData(mongoDb) {
     periodLabel,
     generatedAt: Date.now(),
     generatedBy: "Scheduled (Saturday 1pm IST)",
-    kpis: { total, pass, fail, rework, passRate: total ? Math.round((pass / total) * 100) : 0, overdue },
+    kpis: { total, pass, fail, rework, passRate: total ? Math.round((pass / total) * 100) : 0, overdue, resolved },
     rows
   };
 }
