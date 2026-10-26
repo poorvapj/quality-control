@@ -314,8 +314,8 @@ This cannot be undone.`)) return;
       ...(snag ? [{ op: "delete" as const, coll: "snags" as const, id: snag.id }] : []),
       buildEventOp(currentUserId, "QUALITY_INSPECTION_DELETE", insp.id, "", `Deleted inspection · ${what}`)
     ];
-    await apply(ops);
-    toast("Inspection deleted");
+    const synced = await apply(ops);
+    if (synced) toast("Inspection deleted");
   }
 
   // Pieces shared by the desktop table row and the mobile card, so the two
@@ -753,7 +753,7 @@ function InspectionForm({
   users: { id: string; name: string }[];
   allInspections: QI[];
   currentUserId: string | null; inspectorName: string;
-  apply: (ops: any[]) => Promise<void>;
+  apply: (ops: any[]) => Promise<boolean>;
   toast: (msg: string) => void;
 }) {
   const [projectId, setProjectId] = useState("");
@@ -1099,12 +1099,19 @@ function InspectionForm({
       }
     }
 
-    await apply(ops);
+    const synced = await apply(ops);
     setSaving(false);
+    // apply() already showed its own "Offline — will save automatically"
+    // toast when it only got queued — showing a plain "recorded" message
+    // on top of that here would just overwrite it (toast() only ever
+    // shows the last call), making an unsaved-to-server submission look
+    // identical to a real one. Only claim success when it actually synced.
     toast(
-      floorIds.length > 1
-        ? `Inspection recorded for ${floorIds.length} floors`
-        : needsSnag ? `Inspection recorded · Snag ${lastSnagId} raised` : "Inspection recorded"
+      !synced
+        ? "Saved on this device — will finish submitting once you're back online"
+        : floorIds.length > 1
+          ? `Inspection recorded for ${floorIds.length} floors`
+          : needsSnag ? `Inspection recorded · Snag ${lastSnagId} raised` : "Inspection recorded"
     );
     onClose();
   }

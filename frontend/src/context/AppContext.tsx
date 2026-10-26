@@ -119,7 +119,9 @@ interface AppContextValue {
   login: (email: string, password: string) => Promise<string | null>;
   logout: () => void;
   toast: (msg: string) => void;
-  apply: (ops: Op[]) => Promise<void>;
+  // Resolves true once the change actually reached the server, false if it
+  // was only queued (offline) or rejected — see apply()'s own comment.
+  apply: (ops: Op[]) => Promise<boolean>;
 
   me: () => User | null;
   myRole: () => Role;
@@ -271,9 +273,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [savePendingOps]);
 
-  const apply = useCallback(async (ops: Op[]) => {
+  // Returns whether the change actually reached the server just now (true)
+  // or was only queued/rejected (false) — callers that show their own
+  // "Saved!"/"Submitted" toast right after awaiting apply() need this,
+  // because that toast fires in the same tick as apply()'s own "Offline —
+  // will save automatically" toast and simply overwrites it (toast() only
+  // ever shows the LAST call) — without checking this, the user sees a
+  // plain success message even when the save only got queued, not synced.
+  // This is what made an offline-queued submission still say "Submitted".
+  const apply = useCallback(async (ops: Op[]): Promise<boolean> => {
     const d = dataRef.current;
-    if (!d) return;
+    if (!d) return false;
     const next = structuredClone(d);
     applyOpsLocal(next, ops);
     setData(next);
@@ -285,7 +295,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // local blob, which the next reconnect would otherwise overwrite.
       queueOps(ops);
       persistLocal(next);
-      return;
+      return false;
     }
     try {
       const r = await fetch(API_BASE + "/api/ops", {
@@ -302,9 +312,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const fresh = await fetch(API_BASE + "/api/state", { cache: "no-store" }).then((x) => x.json());
         setData(fresh.data); dataRef.current = fresh.data; setRev(fresh.rev);
         toast(j.error || "That action isn't allowed");
-        return;
+        return false;
       }
       if (j.data) { setData(j.data); dataRef.current = j.data; setRev(j.rev); }
+      return true;
     } catch {
       // A network failure, NOT a rejection — e.g. the signal dropped, or a
       // free-tier server was asleep and the request timed out. Queue it so
@@ -315,6 +326,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       modeRef.current = "offline";
       setMode("offline");
       toast("Offline — will save automatically once back online");
+      return false;
     }
   }, [persistLocal, queueOps, toast]);
 

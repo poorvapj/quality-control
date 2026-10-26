@@ -204,7 +204,7 @@ function CaseStudyForm({
   open: boolean; onClose: () => void; data: any;
   allProjects: { id: string; code: string; name: string }[];
   currentUserId: string | null; authorName: string;
-  apply: (ops: Op[]) => Promise<void>;
+  apply: (ops: Op[]) => Promise<boolean>;
   toast: (msg: string) => void;
   draft?: { projectId?: string; floorId?: string; category?: string; linkedInspectionId: string } | null;
 }) {

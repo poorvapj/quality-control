@@ -227,7 +227,7 @@ function MeasurementForm({
   workItems: WorkItemsResponse | null;
   allProjects: { id: string; code: string; name: string }[];
   currentUserId: string | null; recordedByName: string;
-  apply: (ops: any[]) => Promise<void>;
+  apply: (ops: any[]) => Promise<boolean>;
   toast: (msg: string) => void;
 }) {
   const { data } = useApp();
