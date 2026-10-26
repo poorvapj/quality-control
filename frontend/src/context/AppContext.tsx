@@ -208,37 +208,67 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (e?.name === "QuotaExceededError") toast("Couldn't save your change for retry — storage is full (likely a large photo). Please check your connection and try again now.");
     }
   }, [toast]);
+  // Another tab (same browser/profile) could have queued or flushed its
+  // own ops in between — re-reading the latest localStorage value right
+  // before appending, instead of trusting this tab's possibly-stale
+  // in-memory snapshot, is what stops one tab's queued save from silently
+  // clobbering (overwriting, not merging) the other's when both write.
+  const reloadPendingOpsFromStorage = useCallback(() => {
+    try {
+      const raw = localStorage.getItem(PENDING_OPS_KEY);
+      pendingOpsRef.current = raw ? JSON.parse(raw) : [];
+    } catch {}
+  }, []);
+  useEffect(() => {
+    function onStorage(e: StorageEvent) {
+      if (e.key === PENDING_OPS_KEY) reloadPendingOpsFromStorage();
+    }
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [reloadPendingOpsFromStorage]);
   const queueOps = useCallback((ops: Op[]) => {
+    reloadPendingOpsFromStorage();
     pendingOpsRef.current = [...pendingOpsRef.current, ops];
     savePendingOps();
-  }, [savePendingOps]);
+  }, [reloadPendingOpsFromStorage, savePendingOps]);
   // Replays queued batches in order, oldest first. Stops (returns false) on
   // the first one that still can't reach the server — anything after it
   // stays queued for the next retry, so nothing is sent out of order.
+  // Guarded against running twice at once (the initial-load effect and the
+  // 5s poll interval can both try to flush around the same moment while
+  // mode is still settling) — without this, both calls could read and send
+  // the same queued batch before either removed it, double-posting it.
+  const isFlushingRef = useRef(false);
   const flushPendingOps = useCallback(async (): Promise<boolean> => {
-    while (pendingOpsRef.current.length > 0) {
-      const batch = pendingOpsRef.current[0];
-      try {
-        const r = await fetch(API_BASE + "/api/ops", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...authHeaders() },
-          body: JSON.stringify({ ops: batch })
-        });
-        if (!r.ok) {
-          // Rejected by the server (not a network failure) — retrying it
-          // forever would never succeed, so drop it rather than blocking
-          // every batch queued after it.
+    if (isFlushingRef.current) return false;
+    isFlushingRef.current = true;
+    try {
+      while (pendingOpsRef.current.length > 0) {
+        const batch = pendingOpsRef.current[0];
+        try {
+          const r = await fetch(API_BASE + "/api/ops", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...authHeaders() },
+            body: JSON.stringify({ ops: batch })
+          });
+          if (!r.ok) {
+            // Rejected by the server (not a network failure) — retrying it
+            // forever would never succeed, so drop it rather than blocking
+            // every batch queued after it.
+            pendingOpsRef.current = pendingOpsRef.current.slice(1);
+            savePendingOps();
+            continue;
+          }
           pendingOpsRef.current = pendingOpsRef.current.slice(1);
           savePendingOps();
-          continue;
+        } catch {
+          return false;
         }
-        pendingOpsRef.current = pendingOpsRef.current.slice(1);
-        savePendingOps();
-      } catch {
-        return false;
       }
+      return true;
+    } finally {
+      isFlushingRef.current = false;
     }
-    return true;
   }, [savePendingOps]);
 
   const apply = useCallback(async (ops: Op[]) => {
