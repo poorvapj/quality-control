@@ -6,6 +6,7 @@ import { byId, coll } from "../shared/rules";
 const LS_KEY = "neoteric_board_v5";
 const SESSION_KEY = "neoteric_session";
 const TOKEN_KEY = "neoteric_token";
+const PENDING_OPS_KEY = "neoteric_pending_ops";
 
 export function authHeaders(): Record<string, string> {
   try {
@@ -170,6 +171,58 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try { localStorage.setItem(LS_KEY, JSON.stringify(d)); } catch {}
   }, []);
 
+  // A save made while offline (dropped signal, or the server asleep on a
+  // free-tier dyno and the request timing out) used to just sit in this
+  // one browser's localStorage blob — and the very next successful
+  // /api/state refresh (once back online) would overwrite that blob with
+  // the server's real data, silently discarding the change with no error
+  // and no record of it anywhere. Queueing the failed ops batch here (and
+  // replaying it before trusting any fresh server state) is what actually
+  // gets it saved once the connection comes back, instead of just losing
+  // it — this is what happened to a Quality Inspection that looked saved
+  // on screen but was never in the database.
+  const pendingOpsRef = useRef<Op[][]>((() => {
+    try {
+      const raw = localStorage.getItem(PENDING_OPS_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  })());
+  const savePendingOps = useCallback(() => {
+    try { localStorage.setItem(PENDING_OPS_KEY, JSON.stringify(pendingOpsRef.current)); } catch {}
+  }, []);
+  const queueOps = useCallback((ops: Op[]) => {
+    pendingOpsRef.current = [...pendingOpsRef.current, ops];
+    savePendingOps();
+  }, [savePendingOps]);
+  // Replays queued batches in order, oldest first. Stops (returns false) on
+  // the first one that still can't reach the server — anything after it
+  // stays queued for the next retry, so nothing is sent out of order.
+  const flushPendingOps = useCallback(async (): Promise<boolean> => {
+    while (pendingOpsRef.current.length > 0) {
+      const batch = pendingOpsRef.current[0];
+      try {
+        const r = await fetch(API_BASE + "/api/ops", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({ ops: batch })
+        });
+        if (!r.ok) {
+          // Rejected by the server (not a network failure) — retrying it
+          // forever would never succeed, so drop it rather than blocking
+          // every batch queued after it.
+          pendingOpsRef.current = pendingOpsRef.current.slice(1);
+          savePendingOps();
+          continue;
+        }
+        pendingOpsRef.current = pendingOpsRef.current.slice(1);
+        savePendingOps();
+      } catch {
+        return false;
+      }
+    }
+    return true;
+  }, [savePendingOps]);
+
   const apply = useCallback(async (ops: Op[]) => {
     const d = dataRef.current;
     if (!d) return;
@@ -179,6 +232,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     dataRef.current = next;
 
     if (modeRef.current === "local" || modeRef.current === "offline") {
+      // Already offline — queue it (after anything already queued, so
+      // order is preserved) instead of only writing to this browser's
+      // local blob, which the next reconnect would otherwise overwrite.
+      queueOps(ops);
       persistLocal(next);
       return;
     }
@@ -201,11 +258,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       if (j.data) { setData(j.data); dataRef.current = j.data; setRev(j.rev); }
     } catch {
+      // A network failure, NOT a rejection — e.g. the signal dropped, or a
+      // free-tier server was asleep and the request timed out. Queue it so
+      // it actually reaches the server once the connection's back, instead
+      // of silently vanishing the next time a fresh /api/state overwrites
+      // this device's local copy.
+      queueOps(ops);
       modeRef.current = "offline";
       setMode("offline");
-      toast("Offline — change kept on this device only");
+      toast("Offline — will save automatically once back online");
     }
-  }, [persistLocal, toast]);
+  }, [persistLocal, queueOps, toast]);
 
   /* Initial load + poll */
   useEffect(() => {
@@ -219,6 +282,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setData(j.data); dataRef.current = j.data;
         setRev(j.rev); revRef.current = j.rev;
         setMode("live"); modeRef.current = "live";
+        // Anything queued from a previous offline session (app was closed
+        // before the connection came back) gets its chance to actually
+        // reach the server now, before anyone starts making new changes.
+        if (pendingOpsRef.current.length > 0 && await flushPendingOps()) {
+          const s = await (await fetch(API_BASE + "/api/state", { cache: "no-store" })).json();
+          if (!stopped) { setData(s.data); dataRef.current = s.data; setRev(s.rev); revRef.current = s.rev; }
+          toast("Synced changes saved while you were offline");
+        }
       } catch {
         const raw = localStorage.getItem(LS_KEY);
         let local: BoardData | null = null;
@@ -230,19 +301,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     })();
 
     const iv = window.setInterval(async () => {
-      if (modeRef.current !== "live") return;
-      try {
-        const r = await fetch(API_BASE + "/api/rev", { cache: "no-store" });
-        const j = await r.json();
-        if (j.rev !== revRef.current) {
-          const s = await (await fetch(API_BASE + "/api/state", { cache: "no-store" })).json();
-          const merged = mergeStableCollections(dataRef.current, s.data);
-          setData(merged); dataRef.current = merged;
-          setRev(s.rev); revRef.current = s.rev;
+      if (modeRef.current === "live") {
+        try {
+          const r = await fetch(API_BASE + "/api/rev", { cache: "no-store" });
+          const j = await r.json();
+          if (j.rev !== revRef.current) {
+            const s = await (await fetch(API_BASE + "/api/state", { cache: "no-store" })).json();
+            const merged = mergeStableCollections(dataRef.current, s.data);
+            setData(merged); dataRef.current = merged;
+            setRev(s.rev); revRef.current = s.rev;
+          }
+        } catch {
+          modeRef.current = "offline";
+          setMode("offline");
         }
+        return;
+      }
+
+      // Offline/local — used to just sit there forever until a full page
+      // reload, with no way back even once the connection returned. Retry
+      // every tick instead: flush anything queued, then pull real server
+      // state (which now includes what was just flushed) rather than
+      // trusting the local copy made while disconnected.
+      try {
+        const ok = await flushPendingOps();
+        if (!ok) return;
+        const s = await (await fetch(API_BASE + "/api/state", { cache: "no-store" })).json();
+        setData(s.data); dataRef.current = s.data;
+        setRev(s.rev); revRef.current = s.rev;
+        modeRef.current = "live"; setMode("live");
+        toast("Back online — your changes were saved");
       } catch {
-        modeRef.current = "offline";
-        setMode("offline");
+        // still offline, try again next tick
       }
     }, 5000);
 
