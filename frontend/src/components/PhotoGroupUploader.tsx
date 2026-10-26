@@ -1,8 +1,10 @@
 import React, { useRef, useState } from "react";
 import { uploadPhoto } from "../shared/uploadPhoto";
+import { useApp } from "../context/AppContext";
 import type { Photo } from "../types";
 
 function PhotoGroupUploader({ label, photos, onChange, optional }: { label: string; photos: Photo[]; onChange: (photos: Photo[]) => void; optional?: boolean }) {
+  const { toast } = useApp();
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -16,6 +18,12 @@ function PhotoGroupUploader({ label, photos, onChange, optional }: { label: stri
     const uploaded = await Promise.all(Array.from(files).map((f) => uploadPhoto(f, "dpr", label)));
     onChange([...photos, ...uploaded]);
     setBusy(false);
+    // The upload itself failed (network/Cloudinary) — the photo still
+    // shows (kept as raw local data), but silently leaving it at that was
+    // exactly how a photo-heavy submission went missing with no warning.
+    if (uploaded.some((p) => p.localOnly)) {
+      toast("A photo upload failed — it's kept locally for now, but try re-uploading before you submit");
+    }
   }
 
   return (

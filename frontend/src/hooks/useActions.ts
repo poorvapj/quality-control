@@ -227,7 +227,7 @@ export function useActions() {
     const label = kind === "snag" ? refLabel(data, "snags", id) : refLabel(data, kind === "unit" ? "units" : "floors", id);
     const dataUrl = await watermarkPhoto(file, label, data ? byId(coll(data, "users"), currentUserId)?.name : undefined);
     const photoType = kind === "snag" ? "snags" : "progress";
-    let photo: { url: string; publicId: string | null } = { url: dataUrl, publicId: null };
+    let photo: { url: string; publicId: string | null; localOnly?: boolean } = { url: dataUrl, publicId: null };
     try {
       const r = await fetch(API_BASE + "/api/photo", {
         method: "POST",
@@ -236,7 +236,10 @@ export function useActions() {
       });
       const j = await r.json();
       if (j.url) photo = { url: j.url, publicId: j.publicId || null };
-    } catch {}
+      else photo.localOnly = true;
+    } catch {
+      photo.localOnly = true;
+    }
     if (kind === "snag") {
       const s = byId(coll(data, "snags"), id);
       if (s) await apply([{ op: "upsert", coll: "snags", rec: Object.assign({}, s, { photos: (s.photos || []).concat([photo]) }) }]);
@@ -247,7 +250,10 @@ export function useActions() {
       ]);
     }
     reopenDrawer();
-    toast("Photo attached");
+    // Upload itself failing silently (kept only as raw local data) was
+    // exactly how a photo-heavy submission went missing with no warning —
+    // see uploadPhoto.ts for the same fix on the other photo-capture path.
+    toast(photo.localOnly ? "Photo upload failed — kept locally for now, try re-uploading" : "Photo attached");
   }
 
   /* ---------------------------------------------------------- item-based
@@ -376,7 +382,7 @@ export function useActions() {
     toast("Processing photo…");
     const label = refLabel(data, "units", unitId);
     const dataUrl = await watermarkPhoto(file, label, data ? byId(coll(data, "users"), currentUserId)?.name : undefined);
-    let photo: { url: string; publicId: string | null } = { url: dataUrl, publicId: null };
+    let photo: { url: string; publicId: string | null; localOnly?: boolean } = { url: dataUrl, publicId: null };
     try {
       const r = await fetch(API_BASE + "/api/photo", {
         method: "POST",
@@ -385,14 +391,17 @@ export function useActions() {
       });
       const j = await r.json();
       if (j.url) photo = { url: j.url, publicId: j.publicId || null };
-    } catch {}
+      else photo.localOnly = true;
+    } catch {
+      photo.localOnly = true;
+    }
     const cells = upsertCell(stageCells(unitId, stageId), itemId, { meas: Date.now(), measBy: currentUserId || "", photo });
     await apply([
       { op: "progress", key: pkey(unitId, stageId), patch: { checklist: cells } },
       logEvent("MEASURE", unitId, stageId, "Hidden work measured and photographed")
     ]);
     reopenDrawer();
-    toast("Photo attached");
+    toast(photo.localOnly ? "Photo upload failed — kept locally for now, try re-uploading" : "Photo attached");
   }
 
   return {

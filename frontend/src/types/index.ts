@@ -182,6 +182,10 @@ export interface Vendor extends BaseRecord {
 export interface Photo {
   url: string;
   publicId?: string | null;
+  // Set when the Cloudinary upload failed and `url` is the raw base64 data
+  // URL kept locally instead, purely so the uploader UI can warn the user
+  // the photo didn't actually upload (see uploadPhoto.ts).
+  localOnly?: boolean;
 }
 
 export interface Snag extends BaseRecord {

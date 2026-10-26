@@ -41,5 +41,11 @@ export async function uploadPhoto(
     const j = await r.json();
     if (j.url) return { url: j.url, publicId: j.publicId || null };
   } catch {}
-  return { url: dataUrl, publicId: null };
+  // Upload failed — the raw base64 data URL is kept so the photo still
+  // shows in this session, but it's flagged `localOnly` so the caller can
+  // warn the user instead of silently saving a huge inline string: that
+  // string riding inside a record can push a later offline-save's
+  // localStorage write (see AppContext.tsx's queueOps) over quota, which
+  // is exactly how a submission went missing with no error shown before.
+  return { url: dataUrl, publicId: null, localOnly: true };
 }

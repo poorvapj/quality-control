@@ -168,8 +168,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const persistLocal = useCallback((d: BoardData) => {
-    try { localStorage.setItem(LS_KEY, JSON.stringify(d)); } catch {}
-  }, []);
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify(d));
+    } catch (e: any) {
+      // QuotaExceededError specifically means the local copy is too big to
+      // save at all (e.g. a failed photo upload embedded its full base64
+      // data instead of a Cloudinary URL — see uploadPhoto.ts) — silently
+      // swallowing this used to mean an offline change just vanished with
+      // no trace, the same failure mode as the queueOps fix below.
+      if (e?.name === "QuotaExceededError") toast("Couldn't save locally — storage is full (likely a large photo). Check your connection and try again.");
+    }
+  }, [toast]);
 
   // A save made while offline (dropped signal, or the server asleep on a
   // free-tier dyno and the request timing out) used to just sit in this
@@ -188,8 +197,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch { return []; }
   })());
   const savePendingOps = useCallback(() => {
-    try { localStorage.setItem(PENDING_OPS_KEY, JSON.stringify(pendingOpsRef.current)); } catch {}
-  }, []);
+    try {
+      localStorage.setItem(PENDING_OPS_KEY, JSON.stringify(pendingOpsRef.current));
+    } catch (e: any) {
+      // This is the actual failure mode behind the original incident: a
+      // large embedded photo (see uploadPhoto.ts's localOnly fallback)
+      // pushes the queued batch over localStorage's quota, this throws,
+      // and the queue entry is lost right as we tried to save it for
+      // later — now surfaced instead of silently swallowed.
+      if (e?.name === "QuotaExceededError") toast("Couldn't save your change for retry — storage is full (likely a large photo). Please check your connection and try again now.");
+    }
+  }, [toast]);
   const queueOps = useCallback((ops: Op[]) => {
     pendingOpsRef.current = [...pendingOpsRef.current, ops];
     savePendingOps();
