@@ -219,6 +219,14 @@ function scopeOf(wt: string): "floor" | "unit" | "unit-area" {
 const isFlatWise = (wt: string) => !!wt && scopeOf(wt) !== "floor";
 const requiresAreas = (wt: string) => !!wt && scopeOf(wt) === "unit-area";
 
+// Outer/exterior Brickwork & Plaster work is done from scaffolding and
+// genuinely covers several floors in one go, not one flat at a time —
+// picking more than one floor restricts the checklist to just these 4
+// phases, and the inspection is recorded floor-wise (no flat) for each
+// floor picked, instead of the usual single-flat scope.
+const BRICKWORK_PLASTER_GROUP = PHASE_GROUPS.find((g) => g.name === "Brickwork & Plaster")!;
+const MULTI_FLOOR_WORK_TYPES = BRICKWORK_PLASTER_GROUP.phases.map((p) => phaseWorkType(BRICKWORK_PLASTER_GROUP.name, p.label));
+
 // The unit-wise/unit-area-wise stages whose LAST phase (or, for a
 // standalone checklist, itself) must have a Pass on record before
 // Finishing & Handover — the final gate — can be filled for that flat.
@@ -737,7 +745,7 @@ function InspectionForm({
   toast: (msg: string) => void;
 }) {
   const [projectId, setProjectId] = useState("");
-  const [floorId, setFloorId] = useState("");
+  const [floorIds, setFloorIds] = useState<string[]>([]);
   const [unitId, setUnitId] = useState("");
   const [workOrderNo, setWorkOrderNo] = useState("");
   const [itemId, setItemId] = useState("");
@@ -805,7 +813,7 @@ function InspectionForm({
     if (!open) return;
     if (reInspectOf) {
       setProjectId(reInspectOf.projectId);
-      setFloorId(reInspectOf.floorId);
+      setFloorIds([reInspectOf.floorId]);
       setUnitId(reInspectOf.unitId || "");
       setWorkOrderNo(reInspectOf.workOrderNo || "");
       setItemId(reInspectOf.itemId || "");
@@ -815,7 +823,7 @@ function InspectionForm({
       setSelectedAreas(reInspectOf.areas || []);
       setChecklist((reInspectOf.workType && QC_CHECKLISTS[reInspectOf.workType] || []).map((text) => ({ text, status: "", remarks: "" })));
     } else {
-      setProjectId(""); setFloorId(""); setUnitId(""); setWorkOrderNo(""); setItemId("");
+      setProjectId(""); setFloorIds([]); setUnitId(""); setWorkOrderNo(""); setItemId("");
       setWorkType(""); setSelectedColumns([]); setSelectedSlabs([]); setSelectedAreas([]); setChecklist([]);
     }
     setInspectionDate(todayStr());
@@ -837,6 +845,15 @@ function InspectionForm({
     if (group !== "Waterproofing Inspection") { setSelectedAreas([]); setAddingCustomArea(false); setCustomAreaText(""); }
     setChecklist((QC_CHECKLISTS[wt] || []).map((text) => ({ text, status: "", remarks: "" })));
   }
+  // Picking a 2nd+ floor narrows the checklist to the floor-wise exterior
+  // Brickwork & Plaster phases only — if the previously chosen checklist
+  // doesn't belong to that list anymore, clear it so the form isn't left
+  // holding a checklist that's no longer a valid option.
+  useEffect(() => {
+    if (floorIds.length > 1 && workType && !MULTI_FLOOR_WORK_TYPES.includes(workType)) {
+      setWorkType(""); setChecklist([]); setUnitId("");
+    }
+  }, [floorIds.length]); // eslint-disable-line react-hooks/exhaustive-deps
   function setItemStatus(idx: number, status: ChecklistStatus) {
     setChecklist((prev) => prev.map((row, i) => (i === idx ? { ...row, status } : row)));
   }
@@ -853,9 +870,24 @@ function InspectionForm({
 
   const project = allProjects.find((p) => p.id === projectId) || null;
   const floors = projectFloors(data, projectId || null);
+  const multiFloor = floorIds.length > 1;
+  // Most of the form's gating/lookup logic only makes sense against a
+  // single floor — with more than one picked there's no one flat to scope
+  // to anyway, so this just becomes "".
+  const floorId = floorIds.length === 1 ? floorIds[0] : "";
   const floor = byId(floors, floorId);
   const flatWise = isFlatWise(workType);
-  const units = flatWise && projectId && floorId ? floorUnits(data, projectId, floorId) : [];
+  // With several floors picked, the flat picker lists the FIRST selected
+  // floor's flats — the same flat NAME is then matched on each of the other
+  // selected floors when the record for that floor is saved (see save()),
+  // since the same flat exists on every floor but under a different unit id
+  // per floor. Outer/exterior work isn't done per numbered flat though — only
+  // the shared common-area "flats" apply across floors, not real units.
+  const MULTI_FLOOR_UNIT_NAMES = ["Inner Common", "Outer Plaster", "Exterior Area"];
+  const unitListFloorId = floorIds[0] || "";
+  const units = flatWise && projectId && unitListFloorId
+    ? floorUnits(data, projectId, unitListFloorId).filter((u) => !multiFloor || MULTI_FLOOR_UNIT_NAMES.includes(u.name))
+    : [];
   const unit = byId(units, unitId);
 
   // Latest-result lookup shared by both gates below: the most recent
@@ -941,7 +973,7 @@ function InspectionForm({
   }, [allInspections, itemId, floorId]);
 
   async function save() {
-    if (!projectId || !floorId) { toast("Project and Floor are required"); return; }
+    if (!projectId || floorIds.length === 0) { toast("Project and at least one Floor are required"); return; }
     if (!workType) { toast("Select a checklist (Work Type) first"); return; }
     if (flatWise && !unitId) { toast("Pick the flat — Brickwork and the work after it is inspected flat by flat"); return; }
     if (blockedByPriorStages) { toast(`Finish and pass ${pendingPriorStages.join(", ")} for this flat first`); return; }
@@ -956,95 +988,112 @@ function InspectionForm({
 
     setSaving(true);
     const assignee = users.find((u) => u.id === assignedToUserId);
-    // BUG FIX: was nextId("QI", []), which always returned "QI-0001" and
-    // silently overwrote every previous inspection on every new submission.
-    // Must scan the FULL collection, not `allInspections` (scoped to the
-    // signed-in user's allowed projects) — a user restricted to a subset of
-    // projects (e.g. Deepti Dixit) would otherwise compute the max id from
-    // only their visible projects and collide with a newer inspection
-    // saved in a project they can't see, silently overwriting it.
-    const id = nextId("QI", coll(data, "qualityInspections"));
     const needsSnag = result !== "Pass";
-    // Snag id/record built up-front so it can be cross-referenced from the
-    // inspection record in the SAME apply() batch — both are brand-new
-    // records created together exactly once, which is what prevents a
-    // duplicate snag ever being raised for the same failed inspection
-    // (there is no edit path for an already-saved inspection, only a
-    // fresh "re-inspect" record).
-    // BUG FIX: was nextId("SNG", []), which always returned "SNG-0001" and
-    // would silently overwrite every previous Quality-Inspection-raised snag
-    // the next time an inspection failed — same bug class as the QI id above.
-    const snagId = needsSnag ? nextId("SNG", coll(data, "snags")) : null;
 
-    const rec: QI = {
-      id,
-      projectId, projectCode: project?.code || "", projectName: project?.name || "",
-      floorId, floorName: floor?.name || "",
-      // flat-wise work types also record the flat (this is what turns the flat green on the Tower Board)
-      ...(flatWise && unit ? { unitId: unit.id, unitCode: unit.code, unitName: unit.name } : {}),
-      workOrderNo: itemEntry ? workOrderNo : undefined,
-      itemId: itemEntry ? itemEntry.itemId : undefined,
-      itemType: itemEntry?.itemType,
-      itemDescription: itemEntry?.description,
-      unit: itemEntry?.unit,
-      workType,
-      columns: workType === "Column Inspection" ? selectedColumns : undefined,
-      slabs: phaseInfo?.group.name === "R.C.C. Slab Inspection" ? selectedSlabs : undefined,
-      areas: requiresAreas(workType) ? selectedAreas : undefined,
-      contractor: contractor.trim() || undefined,
-      checklistItems: checklist.map((row) => ({ text: row.text, status: row.status as "OK" | "Not OK" | "N/A", remarks: row.remarks.trim() || undefined })),
-      inspectionDate, result,
-      remarks: remarks.trim() || undefined,
-      photos,
-      inspectorUserId: currentUserId || "",
-      inspectorName,
-      correctiveAction: needsSnag
-        ? { assignedToUserId, assignedToName: assignee?.name || assignedToUserId, targetDate }
-        : null,
-      linkedSnagId: snagId,
-      reInspectionOf: reInspectOf?.id || null,
-      // a team member's inspection waits for their team leader (server re-derives this)
-      approval: approvalFor(data, currentUserId),
-      createdAt: Date.now()
-    };
+    // BUG FIX: was nextId("QI"/"SNG", []), which always returned id "0001"
+    // and silently overwrote the previous record on every submission. Must
+    // scan the FULL collection, not `allInspections` (scoped to the
+    // signed-in user's allowed projects) — a user restricted to a subset of
+    // projects would otherwise collide with a newer record in a project
+    // they can't see. One nextId() call per prefix up front, then bump a
+    // local counter per floor in the loop below — calling nextId() again
+    // inside the loop against the same stale array would hand every floor
+    // the same id (same pattern as RecordModal's multi-floor Unit save).
+    let nextQiId = nextId("QI", coll(data, "qualityInspections"));
+    let nextSnagId = needsSnag ? nextId("SNG", coll(data, "snags")) : null;
+    const bumpId = (idv: string) => { const [prefix, n] = idv.split("-"); return `${prefix}-${String(parseInt(n, 10) + 1).padStart(4, "0")}`; };
 
-    const ops: any[] = [
-      { op: "upsert", coll: "qualityInspections", rec },
-      buildEventOp(currentUserId, "QUALITY_INSPECTION", id, "", `Quality Inspection · ${result} · ${rec.floorName}${rec.unitName ? " / " + rec.unitName : ""}`)
-    ];
-    if (needsSnag && snagId) {
-      // Location always in the title — never just the VMS item description
-      // — so the snag/quality observation is unambiguous on the DRI
-      // dashboard and in their failure history, even if a VMS item was
-      // also picked.
-      const location = rec.unitName ? `${rec.floorName} / ${rec.unitName}` : rec.floorName;
-      const label = itemEntry?.description ? `${location} · ${itemEntry.description}` : location;
-      ops.push({
-        op: "upsert", coll: "snags",
-        rec: {
-          id: snagId,
-          projectId,
-          floorId,
-          ...(rec.unitId ? { unitId: rec.unitId } : {}),
-          stageId: QC_INSPECTION_STAGE_ID,
-          qualityInspectionId: id,
-          title: `Quality ${result} — ${label}`,
-          description: remarks.trim(),
-          severity,
-          status: "Open",
-          raisedBy: currentUserId || "",
-          raisedAt: Date.now(),
-          assignedTo: assignedToUserId,
-          dueAt: new Date(targetDate).getTime() || null,
-          photos,
-          comments: []
-        }
-      });
+    const ops: any[] = [];
+    let lastId = "", lastSnagId: string | null = null;
+    for (const fId of floorIds) {
+      const f = byId(floors, fId);
+      const id = nextQiId;
+      nextQiId = bumpId(nextQiId);
+      const snagId = needsSnag ? nextSnagId : null;
+      if (needsSnag) nextSnagId = bumpId(nextSnagId!);
+      lastId = id; lastSnagId = snagId;
+
+      // With several floors picked, the flat chosen above belongs to the
+      // FIRST selected floor's unit list — match it on THIS floor by name
+      // (the same flat number exists under a different unit id per floor).
+      const unitOnThisFloor = flatWise && unit
+        ? (fId === unitListFloorId ? unit : floorUnits(data, projectId, fId).find((u) => u.name === unit.name) || null)
+        : null;
+
+      const rec: QI = {
+        id,
+        projectId, projectCode: project?.code || "", projectName: project?.name || "",
+        floorId: fId, floorName: f?.name || "",
+        // flat-wise work types also record the flat (this is what turns the flat green on the Tower Board)
+        ...(unitOnThisFloor ? { unitId: unitOnThisFloor.id, unitCode: unitOnThisFloor.code, unitName: unitOnThisFloor.name } : {}),
+        workOrderNo: itemEntry ? workOrderNo : undefined,
+        itemId: itemEntry ? itemEntry.itemId : undefined,
+        itemType: itemEntry?.itemType,
+        itemDescription: itemEntry?.description,
+        unit: itemEntry?.unit,
+        workType,
+        columns: workType === "Column Inspection" ? selectedColumns : undefined,
+        slabs: phaseInfo?.group.name === "R.C.C. Slab Inspection" ? selectedSlabs : undefined,
+        areas: requiresAreas(workType) ? selectedAreas : undefined,
+        contractor: contractor.trim() || undefined,
+        checklistItems: checklist.map((row) => ({ text: row.text, status: row.status as "OK" | "Not OK" | "N/A", remarks: row.remarks.trim() || undefined })),
+        inspectionDate, result,
+        remarks: remarks.trim() || undefined,
+        photos,
+        inspectorUserId: currentUserId || "",
+        inspectorName,
+        correctiveAction: needsSnag
+          ? { assignedToUserId, assignedToName: assignee?.name || assignedToUserId, targetDate }
+          : null,
+        linkedSnagId: snagId,
+        reInspectionOf: reInspectOf?.id || null,
+        // a team member's inspection waits for their team leader (server re-derives this)
+        approval: approvalFor(data, currentUserId),
+        createdAt: Date.now()
+      };
+
+      ops.push(
+        { op: "upsert", coll: "qualityInspections", rec },
+        buildEventOp(currentUserId, "QUALITY_INSPECTION", id, "", `Quality Inspection · ${result} · ${rec.floorName}${rec.unitName ? " / " + rec.unitName : ""}`)
+      );
+      if (needsSnag && snagId) {
+        // Location always in the title — never just the VMS item description
+        // — so the snag/quality observation is unambiguous on the DRI
+        // dashboard and in their failure history, even if a VMS item was
+        // also picked.
+        const location = rec.unitName ? `${rec.floorName} / ${rec.unitName}` : rec.floorName;
+        const label = itemEntry?.description ? `${location} · ${itemEntry.description}` : location;
+        ops.push({
+          op: "upsert", coll: "snags",
+          rec: {
+            id: snagId,
+            projectId,
+            floorId: fId,
+            ...(rec.unitId ? { unitId: rec.unitId } : {}),
+            stageId: QC_INSPECTION_STAGE_ID,
+            qualityInspectionId: id,
+            title: `Quality ${result} — ${label}`,
+            description: remarks.trim(),
+            severity,
+            status: "Open",
+            raisedBy: currentUserId || "",
+            raisedAt: Date.now(),
+            assignedTo: assignedToUserId,
+            dueAt: new Date(targetDate).getTime() || null,
+            photos,
+            comments: []
+          }
+        });
+      }
     }
 
     await apply(ops);
     setSaving(false);
-    toast(needsSnag ? `Inspection recorded · Snag ${snagId} raised` : "Inspection recorded");
+    toast(
+      floorIds.length > 1
+        ? `Inspection recorded for ${floorIds.length} floors`
+        : needsSnag ? `Inspection recorded · Snag ${lastSnagId} raised` : "Inspection recorded"
+    );
     onClose();
   }
 
@@ -1070,7 +1119,7 @@ function InspectionForm({
             value={projectId}
             disabled={!!reInspectOf}
             onChange={(v) => {
-              setProjectId(v); setFloorId(""); setUnitId("");
+              setProjectId(v); setFloorIds([]); setUnitId("");
               // Column/Slab Master is per-project — a selection made under
               // the old project would otherwise survive the switch and get
               // submitted against the new one, where it may not even exist.
@@ -1083,11 +1132,13 @@ function InspectionForm({
         <div className="field">
           <label>Floor *</label>
           <SearchDropdown
-            value={floorId}
+            multi
+            multiValue={floorIds}
+            onChangeMulti={setFloorIds}
             disabled={!!reInspectOf || !projectId}
-            onChange={(v) => { setFloorId(v); setUnitId(""); }}
-            options={[{ value: "", label: "Select floor…" }, ...floors.map((f) => ({ value: f.id, label: f.name }))]}
+            options={[...floors.map((f) => ({ value: f.id, label: f.name }))]}
           />
+          <div className="text-[11px] text-[var(--text-muted)] mt-1">Pick more than one only for exterior Brickwork &amp; Plaster work done across floors together (scaffolding).</div>
         </div>
 
         {itemId && similarIssues.length > 0 && (
@@ -1109,10 +1160,11 @@ function InspectionForm({
           <label>Checklist (Work Type) *</label>
           <SearchDropdown
             value={workType}
-            disabled={!!reInspectOf}
+            disabled={!!reInspectOf || floorIds.length === 0}
             onChange={onWorkTypeChange}
-            options={[{ value: "", label: "Select checklist…" }, ...WORK_TYPES.map((wt) => ({ value: wt, label: wt }))]}
+            options={[{ value: "", label: floorIds.length === 0 ? "Select a floor first…" : "Select checklist…" }, ...(multiFloor ? MULTI_FLOOR_WORK_TYPES : WORK_TYPES).map((wt) => ({ value: wt, label: wt }))]}
           />
+          {multiFloor && <div className="text-[11px] text-[var(--text-muted)] mt-1">Multiple floors picked — only the exterior Brickwork &amp; Plaster checks apply across floors.</div>}
         </div>
 
         {flatWise && (
@@ -1120,11 +1172,15 @@ function InspectionForm({
             <label>Flat / Unit *</label>
             <SearchDropdown
               value={unitId}
-              disabled={!!reInspectOf || !floorId}
+              disabled={!!reInspectOf || !unitListFloorId}
               onChange={setUnitId}
-              options={[{ value: "", label: floorId ? "Select flat…" : "Select a floor first…" }, ...units.map((u) => ({ value: u.id, label: u.name }))]}
+              options={[{ value: "", label: unitListFloorId ? "Select flat…" : "Select a floor first…" }, ...units.map((u) => ({ value: u.id, label: u.name }))]}
             />
-            <div className="text-[11px] text-[var(--text-muted)] mt-1">{workType} is checked flat by flat — pick the flat this inspection is for.</div>
+            <div className="text-[11px] text-[var(--text-muted)] mt-1">
+              {multiFloor
+                ? `Same flat name (e.g. "${unit?.name || "101"}") is matched on every selected floor — one record per floor.`
+                : `${workType} is checked flat by flat — pick the flat this inspection is for.`}
+            </div>
           </div>
         )}
 
