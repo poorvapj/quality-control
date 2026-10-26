@@ -408,6 +408,8 @@ This cannot be undone.`)) return;
   // not the page's full unfiltered `inspections` — so the tiles track
   // whatever's currently selected above instead of always showing the
   // global total regardless of filters.
+  const filtersActive = !!(fProjectId || fFloorId || fResult || fDri || fSnagStatus || fRange !== "all");
+
   const openIssues = filtered.filter((i) => { const s = linkedSnag(i); return s && s.status !== "Closed"; }).length;
   const failedCount = filtered.filter((i) => i.result === "Fail").length;
   const overdueCount = filtered.filter((i) => { const s = linkedSnag(i); return s && s.status !== "Closed" && s.dueAt && s.dueAt < Date.now(); }).length;
@@ -528,9 +530,19 @@ This cannot be undone.`)) return;
         </div>
         <Btn label={generating ? "Generating…" : "Generate Report"} color="secondary" icon="download" onClick={generateReport} disabled={generating} />
         <Btn label="Fail Register" color="secondary" icon="bug" onClick={() => setActiveTab("qualityFails" as TabKey)} />
+        {filtersActive && (
+          <Btn
+            label="Clear filters"
+            color="secondary"
+            onClick={() => {
+              setFProjectId(""); setFFloorId(""); setFResult(""); setFDri(""); setFSnagStatus("");
+              setFRange("all"); setCustomFrom(""); setCustomTo(""); setCalendarOpen(false);
+            }}
+          />
+        )}
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
         <StatTile
           label="Total Inspections" value={filtered.length} icon="eye"
           onClick={() => { setFResult(""); setFSnagStatus(""); }}
@@ -620,7 +632,7 @@ This cannot be undone.`)) return;
                     </div>
                   )}
                 </TableCell>
-                <TableCell muted className="truncate max-w-0">{insp.itemDescription ? `${insp.workOrderNo} · ${insp.itemDescription}` : "—"}</TableCell>
+                <TableCell muted className="truncate max-w-0" title={insp.itemDescription ? `${insp.workOrderNo} · ${insp.itemDescription}` : undefined}>{insp.itemDescription ? `${insp.workOrderNo} · ${insp.itemDescription}` : "—"}</TableCell>
                 <TableCell>
                   <Badge color={insp.result === "Pass" ? "green" : insp.result === "Fail" ? "red" : "amber"}>
                     <span className="whitespace-nowrap">{insp.result}</span>
@@ -628,7 +640,7 @@ This cannot be undone.`)) return;
                   <div className="mt-1"><ApprovalBadge approval={effectiveApproval(data, insp)} /></div>
                   <div onClick={(e) => e.stopPropagation()}><ApprovalActions collName="qualityInspections" record={insp} /></div>
                 </TableCell>
-                <TableCell muted className="truncate max-w-0">{insp.inspectorName}</TableCell>
+                <TableCell muted className="truncate max-w-0" title={insp.inspectorName}>{insp.inspectorName}</TableCell>
                 <TableCell>{snagSummary(insp, snag, overdue)}</TableCell>
                 <TableCell>{rowActions(insp, snag, true)}</TableCell>
               </TableRow>
