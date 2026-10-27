@@ -3,7 +3,7 @@ import type { BoardData, Op, Role, StoreMode, TabKey, MasterKey, User } from "..
 import { API_BASE } from "../services/config";
 import { byId, coll } from "../shared/rules";
 import { classifyStatus, flushQueue, newBatchId, normalizeQueue, tokenUserId, type QueuedBatch } from "../shared/opQueue";
-import { judgeStateResponse } from "../shared/stateSync";
+import { judgeStateResponse, needsFullBoardAfterLogin } from "../shared/stateSync";
 import { applyOpsLocal, scrubLocalBoard } from "../shared/applyOpsLocal";
 
 const LS_KEY = "neoteric_board_v5";
@@ -169,7 +169,10 @@ export function AppProvider({ children, publicRoute = false }: { children: React
   // Public pages (/dpr/new, /forms/…) are served the allow-listed public snapshot; everywhere else a public
   // snapshot means the session expired (see shared/stateSync.ts). Returns whether to use the response.
   const publicRouteRef = useRef(publicRoute);
+  // Was the latest state response the reduced public snapshot? (null = none seen yet) Decides whether sign-in must re-fetch the board.
+  const lastStatePublicRef = useRef<boolean | null>(null);
   const acceptState = useCallback((s: any): boolean => {
+    if (s) lastStatePublicRef.current = !!s.public;
     let hasToken = false;
     try { hasToken = !!localStorage.getItem(TOKEN_KEY); } catch {}
     const v = judgeStateResponse(s, { publicRoute: publicRouteRef.current, hasToken, haveBoard: !!dataRef.current });
@@ -545,15 +548,19 @@ export function AppProvider({ children, publicRoute = false }: { children: React
       } catch {}
       // The board loaded before sign-in may be the reduced public snapshot (see backend/publicState.js) —
       // fetch the real one now that there is a token, BEFORE selecting the user (which reads the user's
-      // project restrictions from it). With the snapshot feature off this simply re-reads the same board.
-      try {
-        const s = await fetchBoard();
-        if (s && s.data && !s.public) {
-          const merged = mergeStableCollections(dataRef.current, s.data);
-          setData(merged); dataRef.current = merged;
-          setRev(s.rev); revRef.current = s.rev;
-        }
-      } catch {}
+      // project restrictions from it). Skipped when the board already in memory is the full one (the normal case
+      // while the snapshot feature is off) — then sign-in makes no extra request and waits for nothing.
+      if (needsFullBoardAfterLogin(lastStatePublicRef.current)) {
+        try {
+          const s = await fetchBoard();
+          if (s && s.data && !s.public) {
+            lastStatePublicRef.current = false;
+            const merged = mergeStableCollections(dataRef.current, s.data);
+            setData(merged); dataRef.current = merged;
+            setRev(s.rev); revRef.current = s.rev;
+          }
+        } catch {}
+      }
       setCurrentUserId(user.id);
       try {
         // A fresh real login is never mid-impersonation — clears any stale

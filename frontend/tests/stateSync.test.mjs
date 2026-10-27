@@ -2,7 +2,7 @@
 //   cd frontend && node --test tests/stateSync.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { judgeStateResponse } from "../src/shared/stateSync.ts";
+import { judgeStateResponse, needsFullBoardAfterLogin } from "../src/shared/stateSync.ts";
 
 const ctx = (o = {}) => ({ publicRoute: false, hasToken: false, haveBoard: false, ...o });
 
@@ -31,4 +31,13 @@ test("expired token on first load: the snapshot is used for the sign-in screen, 
 
 test("no response: nothing is used", () => {
   assert.deepEqual(judgeStateResponse(null, ctx()), { use: false, sessionExpired: false });
+});
+
+test("after sign-in: no extra board fetch when the last state response was the full board (flags OFF = the normal case)", () => {
+  assert.equal(needsFullBoardAfterLogin(false), false);
+});
+
+test("after sign-in: fetch the full board when the last response was a public snapshot, or when none has been seen yet", () => {
+  assert.equal(needsFullBoardAfterLogin(true), true);
+  assert.equal(needsFullBoardAfterLogin(null), true);
 });

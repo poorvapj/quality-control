@@ -18,6 +18,14 @@ export interface StateVerdict {
   sessionExpired: boolean;
 }
 
+/* After a successful sign-in: must the full board be fetched again before selecting the user?
+   Only when the board held so far may be the reduced public snapshot. `lastWasPublic` = whether the most recent
+   state response was a public snapshot: true -> fetch; false -> the full board is already in memory (no extra
+   request, nothing to wait for); null = no state response seen yet -> fetch (the conservative choice). */
+export function needsFullBoardAfterLogin(lastWasPublic: boolean | null): boolean {
+  return lastWasPublic !== false;
+}
+
 export function judgeStateResponse(
   s: { public?: boolean } | null | undefined,
   ctx: { publicRoute: boolean; hasToken: boolean; haveBoard: boolean }
