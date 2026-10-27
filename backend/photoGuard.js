@@ -79,4 +79,12 @@ function createPhotoGuard(opts = {}, now = () => Date.now()) {
   return { check, config: c, _size: () => ({ ips: perIp.size, global: global.length }) };
 }
 
-module.exports = { createPhotoGuard, clientIp, decodedBytes, DEFAULTS };
+/* The one server-log line written when the guard would refuse (or does refuse) an upload. It deliberately carries NO
+   client address (an IP is personal data and the decision does not need it to be diagnosed): only the mode, the status,
+   the upload type and the guard's own fixed message. `type` is printed only if it is one of the known upload types. */
+function guardLogLine({ enforce, verdict, type, knownTypes }) {
+  const t = Array.isArray(knownTypes) && knownTypes.includes(type) ? type : "<other>";
+  return `[photo] ${enforce ? "REFUSED" : "monitor-only, would refuse"} (${verdict.status}) type=${t}: ${verdict.error}`;
+}
+
+module.exports = { createPhotoGuard, clientIp, decodedBytes, guardLogLine, DEFAULTS };

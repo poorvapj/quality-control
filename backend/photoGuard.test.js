@@ -1,6 +1,6 @@
 /* Plain-Node tests for photoGuard.js. Run with: node photoGuard.test.js */
 const assert = require("assert");
-const { createPhotoGuard, clientIp, decodedBytes } = require("./photoGuard.js");
+const { createPhotoGuard, clientIp, decodedBytes, guardLogLine } = require("./photoGuard.js");
 
 let passed = 0;
 function test(name, fn) {
@@ -64,6 +64,18 @@ async function main() {
     assert.strictEqual(clientIp(req, 1), "10.2.2.2");
     assert.strictEqual(clientIp(req, 3), "203.0.113.5");
     assert.strictEqual(clientIp({ headers: {}, socket: { remoteAddress: "10.9.9.9" } }, 0), "10.9.9.9");
+  });
+  await test("monitor-only log line has no client address, keeps mode/status/type/message, and the decision is unchanged", () => {
+    const g = createPhotoGuard({ maxAnonBytes: 1024 });
+    const ip = "203.0.113.77", v = g.check(anon({ ip, dataUrl: small }));
+    assert.strictEqual(v.ok, false); assert.strictEqual(v.status, 413);
+    const types = ["dpr", "qc"];
+    const mon = guardLogLine({ enforce: false, verdict: v, type: "dpr", knownTypes: types }), enf = guardLogLine({ enforce: true, verdict: v, type: "dpr", knownTypes: types });
+    assert.ok(!mon.includes(ip) && !/ip=/.test(mon) && !/[0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}/.test(mon), mon);
+    assert.ok(mon.startsWith("[photo] monitor-only, would refuse (413) type=dpr: ") && mon.includes(v.error));
+    assert.ok(enf.startsWith("[photo] REFUSED (413) type=dpr: "));
+    assert.ok(guardLogLine({ enforce: false, verdict: v, type: "x@y.com", knownTypes: types }).includes("type=<other>"));
+    assert.strictEqual(g.check(anon({ ip, dataUrl: small })).status, 413, "decision logic untouched");
   });
   console.log(`\n${passed} passed`);
   if (process.exitCode) { console.error("SOME TESTS FAILED"); process.exit(1); }

@@ -17,7 +17,13 @@
    Privacy / bounds (enforced by tests): never logs passwords, tokens, ids, emails, record values or board contents -
    only collection names (checked against the known list), op kinds, counts, and field NAMES from a fixed allow-list of
    fields the server is known to write (anything else is counted as "other"). Examples per outcome+reason are capped,
-   MISMATCH-unsafe lines are rate-limited, each line is length-capped, and a summary is printed every N batches.
+   MISMATCH-unsafe lines are rate-limited, every line is a COMPLETE JSON object no longer than MAX_LINE (lines are
+   shrunk by dropping detail, never cut mid-JSON), and a summary is printed every N batches and once at shutdown.
+
+   Counters: `batchOutcomes` counts each applied batch exactly ONCE (its four values add up to `batches`), so the
+   clean-save share is batchOutcomes["agree-clean"] / batches. `perCollection` ("outcome|collection") counts a batch
+   once under EACH collection it touches, so it is NOT a batch total. A summary is split into numbered parts (each
+   its own valid JSON line, sharing boot id + seq); a summary is complete only when all its parts are present.
    Every entry point swallows its own errors so it can never throw into the save path. Disabled unless
    SAVE_DIAGNOSTICS=1 (decided once at startup by the caller via isEnabled()). */
 
@@ -33,6 +39,7 @@ const KNOWN_SERVER_FIELDS = new Set([
 const ALWAYS_TRANSFORMING = new Set(["users", "qualityInspections", "materialMeasurements", "workMeasurements", "teamDailyReports", "formSubmissions"]);
 const ANON_TRANSFORMING = new Set(["drawingRequests", "dpr"]);
 const MAX_OPS_LISTED = 20, MAX_FIELDS_PER_OP = 8, MAX_LINE = 700;
+const OUTCOMES = ["agree-clean", "agree-not-clean", "MISMATCH-unsafe", "mismatch-conservative"];
 
 function isEnabled(env = process.env) { return env.SAVE_DIAGNOSTICS === "1"; }
 
@@ -56,19 +63,51 @@ function predictClean(ops, { anonymous }) {
   return { clean: reasons.length === 0, reasons };
 }
 
-function createSaveDiagnostics({ collections, log = console, examplesPerKey = 3, summaryEvery = 200, unsafePerWindow = 20, windowMs = 10 * 60 * 1000, now = () => Date.now() }) {
+function createSaveDiagnostics({ collections, log = console, examplesPerKey = 3, summaryEvery = 25, unsafePerWindow = 20, windowMs = 10 * 60 * 1000, now = () => Date.now() }) {
   const known = new Set(collections || []);
-  const counts = new Map();      // `${outcome}|${coll}` -> n
+  const counts = new Map();      // `${outcome}|${coll}` -> n (a batch is counted under EACH collection it touches)
+  const batchOutcomes = new Map(OUTCOMES.map((o) => [o, 0])); // outcome -> n, exactly one per batch
+  const bootId = crypto.randomBytes(4).toString("hex");
+  let seq = 0, lastSummarised = "0/0/0"; // nothing yet = nothing to report at shutdown
   const reasonCounts = new Map(); // reason -> n
   const seenExamples = new Map(); // `${outcome}|${reason}` -> n
   let batches = 0, aborted = 0, unsafeWindowStart = now(), unsafeInWindow = 0, suppressedUnsafe = 0;
   const bump = (m, k) => m.set(k, (m.get(k) || 0) + 1);
   const safeColl = (c) => (c === undefined || c === null ? "<n/a>" : known.has(c) ? c : "<unknown>"); // events/progress ops have no collection
   const safeField = (k) => (KNOWN_SERVER_FIELDS.has(k) ? k : "<other>");
-  const line = (obj) => { let s = "[save-diag] " + JSON.stringify(obj); if (s.length > MAX_LINE) s = s.slice(0, MAX_LINE - 3) + "..."; return s; };
+  const json = (obj) => "[save-diag] " + JSON.stringify(obj);
+  // Always valid JSON within MAX_LINE: when an example is too long, drop detail step by step (never slice the text).
+  const line = (obj) => {
+    for (const cap of [MAX_OPS_LISTED, 10, 5, 2]) {
+      const o = { ...obj }; if (o.ops) o.ops = o.ops.slice(0, cap); if (o.changed) o.changed = o.changed.slice(0, cap);
+      if (cap < MAX_OPS_LISTED) o.truncated = true;
+      const s = json(o); if (s.length <= MAX_LINE) return s;
+    }
+    const { ops, changed, cascadeCounts, ...rest } = obj; return json({ ...rest, truncated: true });
+  };
 
-  function summary() {
-    log.log(line({ summary: true, batches, aborted, suppressedUnsafe, outcomes: Object.fromEntries(counts), reasons: Object.fromEntries(reasonCounts) }));
+  /* Cumulative counters since this process started, as numbered parts (each a complete JSON line <= MAX_LINE).
+     Called every summaryEvery batches and once at shutdown (final=true); a final summary with nothing new since the
+     previous one is skipped, so the same totals are never reported twice. */
+  function summary({ final = false } = {}) {
+    try {
+      const sig = batches + "/" + aborted + "/" + suppressedUnsafe;
+      if (final && sig === lastSummarised) return;
+      lastSummarised = sig; seq++;
+      const head = { summary: true, boot: bootId, seq, final: final || undefined, batches, aborted, suppressedUnsafe, batchOutcomes: Object.fromEntries(batchOutcomes) };
+      const groups = [["reasons", [...reasonCounts]], ["perCollection", [...counts]]];
+      const bodies = [];
+      for (const [name, entries] of groups) {
+        let cur = {};
+        for (const [k, v] of entries) {
+          if (Object.keys(cur).length && json({ summary: true, boot: bootId, seq, part: 99, parts: 99, [name]: { ...cur, [k]: v } }).length > MAX_LINE) { bodies.push({ [name]: cur }); cur = {}; }
+          cur[k] = v;
+        }
+        if (Object.keys(cur).length) bodies.push({ [name]: cur });
+      }
+      const parts = [head, ...bodies];
+      parts.forEach((p, i) => log.log(json({ ...(i === 0 ? {} : { summary: true, boot: bootId, seq }), ...p, part: i + 1, parts: parts.length })));
+    } catch { /* diagnostics must never affect saving */ }
   }
 
   function begin(ops, { anonymous = false } = {}) {
@@ -100,6 +139,7 @@ function createSaveDiagnostics({ collections, log = console, examplesPerKey = 3,
           const observedClean = reasons.length === 0;
           const outcome = predicted.clean && observedClean ? "agree-clean" : !predicted.clean && !observedClean ? "agree-not-clean" : predicted.clean ? "MISMATCH-unsafe" : "mismatch-conservative";
           const colls = [...new Set(list.map((o) => safeColl(o.coll)))];
+          bump(batchOutcomes, outcome);
           for (const c of colls.length ? colls : ["<none>"]) bump(counts, outcome + "|" + c);
           const uniqueReasons = [...new Set(reasons)];
           for (const r of uniqueReasons) bump(reasonCounts, r);
@@ -126,7 +166,7 @@ function createSaveDiagnostics({ collections, log = console, examplesPerKey = 3,
       return { trace, finish, abort };
     } catch { return null; }
   }
-  return { begin, summary, _stats: () => ({ batches, aborted, counts: Object.fromEntries(counts), reasons: Object.fromEntries(reasonCounts), suppressedUnsafe }) };
+  return { begin, summary, bootId, _stats: () => ({ batches, aborted, batchOutcomes: Object.fromEntries(batchOutcomes), counts: Object.fromEntries(counts), reasons: Object.fromEntries(reasonCounts), suppressedUnsafe }) };
 }
 
-module.exports = { createSaveDiagnostics, isEnabled, predictClean, KNOWN_SERVER_FIELDS };
+module.exports = { createSaveDiagnostics, isEnabled, predictClean, KNOWN_SERVER_FIELDS, MAX_LINE };

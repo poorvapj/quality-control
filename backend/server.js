@@ -79,12 +79,12 @@ const { createSaveDiagnostics, isEnabled: saveDiagnosticsEnabled } = require("./
 const saveDiag = saveDiagnosticsEnabled()
   ? createSaveDiagnostics({
       collections: COLLECTIONS,
-      summaryEvery: parseInt(process.env.SAVE_DIAGNOSTICS_SUMMARY_EVERY, 10) || 200,
+      summaryEvery: parseInt(process.env.SAVE_DIAGNOSTICS_SUMMARY_EVERY, 10) || 25,
       examplesPerKey: parseInt(process.env.SAVE_DIAGNOSTICS_EXAMPLES, 10) || 3
     })
   : null;
 if (saveDiag) console.log("  save diagnostics: ON (log-only, bounded; see docs/save-diagnostics.md)");
-const { createPhotoGuard, clientIp } = require("./photoGuard.js");
+const { createPhotoGuard, clientIp, guardLogLine } = require("./photoGuard.js");
 const { buildPublicState } = require("./publicState.js");
 // OFF by default. Turning it on makes GET /api/state and the /api/ops reply return only the allow-listed public
 // snapshot (publicState.js) to callers without a valid session. Older frontends fetch /api/state WITHOUT a token,
@@ -736,6 +736,7 @@ async function connectMongo() {
 
   for (const sig of ["SIGINT", "SIGTERM"]) {
     process.on(sig, async () => {
+      if (saveDiag) saveDiag.summary({ final: true }); // never throws; skipped when nothing is new since the last summary
       try {
         await client.close();
       } catch {}
@@ -2001,7 +2002,7 @@ async function handleApi(req, res, urlPath) {
     }
     const verdict = photoGuard.check({ session: photoSession, type: body.type, dataUrl: body.dataUrl, ip: clientIp(req, CLIENT_IP_HOPS_FROM_RIGHT) });
     if (!verdict.ok) {
-      console.warn(`[photo] ${PHOTO_GUARD_ENFORCE ? "REFUSED" : "monitor-only, would refuse"} (${verdict.status}) type=${body.type} ip=${clientIp(req, CLIENT_IP_HOPS_FROM_RIGHT)}: ${verdict.error}`);
+      console.warn(guardLogLine({ enforce: PHOTO_GUARD_ENFORCE, verdict, type: body.type, knownTypes: PHOTO_TYPES })); // no client IP in the log
       if (PHOTO_GUARD_ENFORCE) {
         if (verdict.retryAfterSec) res.setHeader("Retry-After", String(verdict.retryAfterSec));
         return sendJson(res, verdict.status, { error: verdict.error });

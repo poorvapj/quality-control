@@ -111,3 +111,15 @@ Observation only; **no response body, write, frontend or default changes**. Comp
 **Verified:** unit 22/22 plus three mutation checks; real-server end-to-end (14 scenarios: plain, member inspection with a Not OK item, work measurement, leader approval, admin inspection, user with password, three anonymous public creates, team-report sign-off, project cascade, passing re-inspection, a refused save, event batch) — every transformation observed correctly, **0 MISMATCH-unsafe**, ON and OFF produced identical statuses and final database state, no private value in the log, 15 log lines for 14 scenarios; fault injection (diagnostics throwing inside the live server: saves still 200, same writes, server up); backend suite and earlier integration suites unchanged. Overhead (local): ≈ 12 µs per small save, ≈ 0.14 ms per 16 KB inspection.
 **Not enabled, not deployed.** Enabling is setting `SAVE_DIAGNOSTICS=1` on Render (your decision).
 **Rollback:** revert the commit (or leave the variable unset — the code is inert).
+
+---
+# Round 7 — save-diagnostics blockers fixed; no client IP in the photo-guard log
+Still **log-only and default OFF**; no response, write, frontend, default-flag or enforcement change.
+| File | Change |
+|---|---|
+| `backend/saveDiagnostics.js` | **B2:** every line is a complete JSON object ≤ 700 chars (examples shrink by dropping detail, flagged `truncated`; summaries are split into numbered parts sharing `boot`+`seq`). **B3:** new `batchOutcomes` counts each batch once (sums to `batches`); the old per-collection counters are renamed `perCollection` and documented as not a batch total. Shutdown summary (`final:true`, skipped when nothing is new). Default summary interval 200 → 25 |
+| `backend/server.js` | the existing SIGINT/SIGTERM handler first calls `saveDiag.summary({final:true})` (only when diagnostics are on; swallows its own errors); default interval 25; the photo-guard log line is built by `guardLogLine()` |
+| `backend/photoGuard.js` | `guardLogLine()`: the monitor-only/REFUSED log line **no longer contains the client IP** (decision and enforcement logic untouched); `type` is printed only if it is a known upload type |
+| `backend/saveDiagnostics.test.js` (22 → 28), `backend/photoGuard.test.js` (9 → 10) | worst-case summary size/validity, batch totals, shutdown summary, summary privacy; photo log line has no address and the verdict is unchanged |
+| `docs/save-diagnostics.md` | new log format, batch-total formula, and the five gates for the observation window |
+**Rollback:** revert the commit.

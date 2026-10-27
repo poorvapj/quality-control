@@ -144,10 +144,11 @@ async function main() {
     for (let i = 0; i < 120; i++) run(d, [{ op: "upsert", coll: "snags", rec: { id: "S" + i } }]);
     const exampleLines = lines.filter(([, m]) => !/"summary"/.test(m));
     assert.strictEqual(exampleLines.length, 2, "only 2 example lines for 120 identical batches, got " + exampleLines.length);
-    assert.strictEqual(lines.filter(([, m]) => /"summary"/.test(m)).length, 2, "summary at 50 and 100");
+    assert.deepStrictEqual([...new Set(lines.filter(([, m]) => /"summary"/.test(m)).map(([, m]) => JSON.parse(m.slice(12)).seq))], [1, 2], "summary at 50 and 100");
     const big = Array.from({ length: 500 }, (_, i) => ({ op: "upsert", coll: "snags", rec: { id: "S" + i } }));
     const before = lines.length; run(d, big, (o) => { o[0].rec.status = "x"; });
     assert.ok(lines.slice(before).every(([, m]) => m.length <= 700), "line cap");
+    assert.ok(lines.slice(before).every(([, m]) => { JSON.parse(m.slice(12)); return true; }), "every line is complete JSON");
   });
 
   await test("BOUNDED: MISMATCH-unsafe lines are rate-limited per window and the rest only counted", () => {
@@ -192,6 +193,78 @@ async function main() {
     assert.strictEqual(predictClean([{ op: "upsert", coll: "dpr" }], { anonymous: true }).clean, false);
     assert.strictEqual(predictClean([{ op: "delete", coll: "projects", id: "p" }], { anonymous: false }).clean, false);
     assert.strictEqual(predictClean([{ op: "delete", coll: "snags", id: "s" }], { anonymous: false }).clean, true);
+  });
+
+  const parse = (m) => JSON.parse(m.replace(/^\[save-diag\] /, ""));
+  const { KNOWN_SERVER_FIELDS } = require("./saveDiagnostics.js");
+  const ALLCOLLS = ["projects", "floors", "units", "stages", "qparams", "checklists", "stagemap", "users", "snags", "assignments", "dpr", "drawingRequests", "permissions", "workTargets", "moduleGrants", "teams", "vendors", "roles", "forms", "formSubmissions", "qualityInspections", "materialMeasurements", "purchaseOrders", "workMeasurements", "teamDailyReports", "customSlabNames", "customAreaNames", "columnMaster", "slabMaster", "caseStudies"];
+
+  await test("B2: worst-case summary (every collection x outcome, many reasons) is split into parts that are ALL valid JSON <= 700 chars", () => {
+    const lines = []; const d = createSaveDiagnostics({ collections: ALLCOLLS, log: { log: (m) => lines.push(m), warn: (m) => lines.push(m) }, summaryEvery: 1e9, examplesPerKey: 0 });
+    for (const c of ALLCOLLS) for (const change of [false, true]) for (const anon of [false, true]) {
+      const ops = [{ op: "upsert", coll: c, rec: { id: "1", password: c === "users" ? "pw" : undefined } }];
+      const p = d.begin(ops, { anonymous: anon }); if (change) ops[0].rec.status = "x"; p.finish();
+    }
+    d.summary();
+    const parts = lines.map(parse).filter((p) => p.summary); assert.ok(parts.length > 1, "multi-part, got " + parts.length);
+    for (const l of lines) { assert.ok(l.length <= 700, "len " + l.length); parse(l); }
+    assert.strictEqual(new Set(parts.map((p) => p.seq)).size, 1);
+    assert.deepStrictEqual(parts.map((p) => p.part), parts.map((_, i) => i + 1));
+    assert.ok(parts.every((p) => p.parts === parts.length && p.summary === true && p.boot === d.bootId));
+    const st = d._stats();
+    assert.deepStrictEqual(Object.assign({}, ...parts.map((p) => p.perCollection || {})), st.counts, "no per-collection entry lost across parts");
+    assert.deepStrictEqual(Object.assign({}, ...parts.map((p) => p.reasons || {})), st.reasons);
+  });
+
+  await test("B2: an oversized EXAMPLE line is shrunk (still valid JSON, flagged truncated), not cut", () => {
+    const { d, lines } = mk();
+    const ops = Array.from({ length: 60 }, (_, i) => ({ op: "upsert", coll: "qualityInspections", rec: { id: "Q" + i } }));
+    run(d, ops, (o) => { for (const x of o) for (const f of KNOWN_SERVER_FIELDS) x.rec[f] = 2; });
+    const l = lines.filter(([, m]) => !/"summary"/.test(m)); assert.ok(l.length >= 1);
+    for (const [, m] of l) { assert.ok(m.length <= 700, "len " + m.length); parse(m); }
+    assert.strictEqual(parse(l[0][1]).truncated, true);
+  });
+
+  await test("B3: batchOutcomes counts each batch ONCE (sums to batches) even when a batch touches several collections", () => {
+    const lines = []; const d = createSaveDiagnostics({ collections: COLLS, log: { log: (m) => lines.push(m), warn: (m) => lines.push(m) }, summaryEvery: 1e9, examplesPerKey: 0 });
+    run(d, [{ op: "upsert", coll: "snags", rec: { id: "a" } }, { op: "upsert", coll: "assignments", rec: { id: "b" } }, { op: "upsert", coll: "projects", rec: { id: "c" } }]);   // clean, 3 collections
+    run(d, [{ op: "upsert", coll: "snags", rec: { id: "a" } }, { op: "upsert", coll: "qualityInspections", rec: { id: "q" } }], (o) => { o[1].rec.result = "Fail"; }); // not clean
+    run(d, [{ op: "upsert", coll: "snags", rec: { id: "a" } }], (o) => { o[0].rec.status = "x"; });                                                                  // UNSAFE
+    run(d, [{ op: "upsert", coll: "qualityInspections", rec: { id: "q" } }]);                                                                                          // conservative
+    run(d, [{ op: "event", ev: {} }]);                                                                                                                                 // no collection
+    const st = d._stats();
+    assert.strictEqual(st.batches, 5);
+    assert.deepStrictEqual(st.batchOutcomes, { "agree-clean": 2, "agree-not-clean": 1, "MISMATCH-unsafe": 1, "mismatch-conservative": 1 });
+    assert.strictEqual(Object.values(st.batchOutcomes).reduce((a, b) => a + b, 0), st.batches);
+    assert.ok(Object.values(st.counts).reduce((a, b) => a + b, 0) > st.batches, "perCollection is deliberately NOT a batch total");
+    d.summary(); const head = lines.map(parse).filter((p) => p.summary && p.part === 1)[0];
+    assert.strictEqual(head.batches, 5); assert.deepStrictEqual(head.batchOutcomes, st.batchOutcomes);
+  });
+
+  await test("shutdown summary: final=true, only when something is new, never a duplicate of the last summary", () => {
+    const lines = []; const d = createSaveDiagnostics({ collections: COLLS, log: { log: (m) => lines.push(parse(m)), warn: (m) => lines.push(parse(m)) }, summaryEvery: 2, examplesPerKey: 0 });
+    d.summary({ final: true }); assert.strictEqual(lines.length, 0, "nothing to report -> nothing logged");
+    run(d, [{ op: "upsert", coll: "snags", rec: { id: "1" } }]); run(d, [{ op: "upsert", coll: "snags", rec: { id: "2" } }]);   // periodic summary at 2
+    const n = lines.length; assert.ok(n >= 1);
+    d.summary({ final: true }); assert.strictEqual(lines.length, n, "nothing new since the periodic summary -> no duplicate");
+    run(d, [{ op: "upsert", coll: "snags", rec: { id: "3" } }]);
+    d.summary({ final: true });
+    const fin = lines.filter((p) => p.final && p.part === 1); assert.strictEqual(fin.length, 1);
+    assert.ok(fin[0].batches === 3 && fin[0].seq === 2, "final carries cumulative totals");
+    d.summary({ final: true }); assert.strictEqual(lines.filter((p) => p.final && p.part === 1).length, 1, "a second shutdown call adds nothing");
+  });
+
+  await test("shutdown/periodic summary never throws, even with a throwing logger", () => {
+    const d = createSaveDiagnostics({ collections: COLLS, log: { log() { throw new Error("boom"); }, warn() { throw new Error("boom"); } }, summaryEvery: 1e9 });
+    d.begin([{ op: "upsert", coll: "snags", rec: {} }]).finish(); d.summary({ final: true }); d.summary();
+  });
+
+  await test("PRIVACY: summary lines contain only vocabulary tokens and the boot id (no ids, names, values)", () => {
+    const lines = []; const d = createSaveDiagnostics({ collections: COLLS, log: { log: (m) => lines.push(m), warn: (m) => lines.push(m) }, summaryEvery: 1 });
+    run(d, [{ op: "upsert", coll: "users", rec: { id: "USR-SECRET-1", password: "hunter2-SECRET", name: "Alice SECRET" } }, { op: "upsert", coll: "alice@SECRET.example", rec: { id: "x" } }]);
+    d.summary({ final: true });
+    assert.ok(lines.length > 0 && lines.every((l) => !/SECRET|hunter2|alice/i.test(l)));
+    for (const l of lines) for (const m of l.slice(12).matchAll(/"([^"]*)"/g)) assert.ok(/^[A-Za-z|<>:_\-]+$/.test(m[1]) || m[1] === d.bootId, "unexpected token " + m[1]);
   });
 
   console.log(`\n${passed} passed`);
