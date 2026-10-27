@@ -6,7 +6,7 @@
    project-mapping rejection, and that an existing DPR is never overwritten.
    Run with: node vmsDprApi.test.js */
 const assert = require("assert");
-const { handleVmsDprSync } = require("./vmsDprApiHandler.js");
+const { handleVmsDprSync, vmsSyncWroteRecord } = require("./vmsDprApiHandler.js");
 
 let passed = 0;
 function test(name, fn) {
@@ -134,6 +134,17 @@ async function main() {
     const res = await handleVmsDprSync(body, db);
     assert.strictEqual(res.status, 200);
     assert.strictEqual(db._inserted[0].projectName, "Regal Garden Villa - West Gate");
+  });
+
+  await test("vmsSyncWroteRecord is true ONLY for a real insert (drives the board-revision bump)", async () => {
+    const db = fakeMongoDb({ projects: PROJECTS });
+    const created = await handleVmsDprSync(VALID_BODY, db);
+    assert.strictEqual(vmsSyncWroteRecord(created), true);
+    const dup = await handleVmsDprSync(VALID_BODY, db);
+    assert.strictEqual(vmsSyncWroteRecord(dup), false, "duplicate wrote nothing");
+    const rejected = await handleVmsDprSync({ ...VALID_BODY, id: "" }, fakeMongoDb({ projects: PROJECTS }));
+    assert.strictEqual(vmsSyncWroteRecord(rejected), false, "rejection wrote nothing");
+    assert.strictEqual(vmsSyncWroteRecord(null), false);
   });
 
   console.log(`\n${passed} passed`);

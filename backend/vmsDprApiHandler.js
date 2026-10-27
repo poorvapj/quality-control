@@ -53,4 +53,10 @@ async function handleVmsDprSync(body, mongoDb) {
   return { status: 200, body: { ok: true, id: body.id, created: true } };
 }
 
-module.exports = { handleVmsDprSync };
+// True only when handleVmsDprSync actually inserted a new record (the caller
+// bumps the board revision so open clients pick it up).
+function vmsSyncWroteRecord(result) {
+  return !!result && result.status === 200 && !!result.body && result.body.created === true;
+}
+
+module.exports = { handleVmsDprSync, vmsSyncWroteRecord };

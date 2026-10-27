@@ -60,7 +60,7 @@ const crypto = require("crypto");
 const { MongoClient } = require("mongodb");
 const cloudinary = require("cloudinary").v2;
 const { seedData, blankData, COLLECTIONS } = require("./seed.js");
-const { handleVmsDprSync } = require("./vmsDprApiHandler.js");
+const { handleVmsDprSync, vmsSyncWroteRecord } = require("./vmsDprApiHandler.js");
 const { getExecutionReconciliation, requiresAdmin } = require("./executionReconciliation.js");
 const { getVmsWorkItems } = require("./vmsWorkItems.js");
 const { shouldResolveOriginal, enforceResultFromChecklist } = require("./qualityInspectionRules.js");
@@ -70,6 +70,8 @@ const workMeasurements = require("./workMeasurementRules.js");
 const { getVmsDrawingRequests } = require("./vmsDrawingRequests.js");
 const { deriveApprovalOnCreate, resolveApprovalOnUpdate, findPendingApprovals } = require("./approvalRules.js");
 const approvalSlack = require("./approvalSlack.js");
+const { createOpsBatchStore, isValidBatchId } = require("./opsBatch.js");
+const opsBatch = createOpsBatchStore(() => mongoDb); // /api/ops retry idempotency, see opsBatch.js
 const { sanitizePoEvent, matchProjectByName, isStaleUpdate } = require("./imsWebhook.js");
 const { buildTeamDailyReport, slackSummaryFor } = require("./teamDailyReports.js");
 const { verifySlackSignature, parseSlackActionPayload, parseActionId, snagCloseBlocks, teamReportApproveBlocks } = require("./slackActions.js");
@@ -694,6 +696,10 @@ async function connectMongo() {
   await mongoDb.collection("floors").createIndex({ projectId: 1 });
   await mongoDb.collection("units").createIndex({ projectId: 1 });
   await mongoDb.collection("workMeasurements").createIndex({ linkedItemId: 1 });
+  // Expires the /api/ops idempotency markers (see opsBatch.js). Only documents
+  // that have an `expireAt` date are affected — the other `meta` docs (rev,
+  // weekly-report markers) don't, so they are never removed.
+  await mongoDb.collection("meta").createIndex({ expireAt: 1 }, { expireAfterSeconds: 0 });
 
   const projectCount = await mongoDb.collection("projects").countDocuments();
   if (projectCount === 0) {
@@ -711,8 +717,11 @@ async function connectMongo() {
 }
 
 async function bumpRev() {
-  await mongoDb.collection("meta").updateOne({ _id: "rev" }, { $inc: { value: 1 } }, { upsert: true });
-  const doc = await mongoDb.collection("meta").findOne({ _id: "rev" });
+  // One atomic round-trip instead of update-then-read: the old second read
+  // could also return a value another concurrent write had already bumped.
+  const doc = await mongoDb.collection("meta").findOneAndUpdate(
+    { _id: "rev" }, { $inc: { value: 1 } }, { upsert: true, returnDocument: "after" }
+  );
   return doc.value;
 }
 
@@ -1364,6 +1373,11 @@ async function performDrawingRequestDecision(id, action, opts, actorName) {
 }
 
 async function trimEvents() {
+  // Fast path only: the metadata estimate (O(1)) is used to skip the common
+  // "nowhere near the cap" case on every ops batch. It is never used to decide
+  // HOW MANY audit events to delete — that always comes from an exact count, so
+  // retention is identical to before even if the estimate is off.
+  if ((await mongoDb.collection("events").estimatedDocumentCount()) <= MAX_EVENTS) return;
   const count = await mongoDb.collection("events").countDocuments();
   if (count <= MAX_EVENTS) return;
   const excess = count - MAX_EVENTS;
@@ -1656,9 +1670,20 @@ async function handleApi(req, res, urlPath) {
   if (req.method === "POST" && urlPath === "/api/ops") {
     const body = await readBody(req);
     if (!Array.isArray(body.ops)) return sendJson(res, 400, { error: "ops[] required" });
+    // Optional (older clients don't send it): lets a retried batch be recognised, see opsBatch.js.
+    const batchId = body.batchId === undefined ? null : String(body.batchId);
+    if (batchId !== null && !isValidBatchId(batchId)) return sendJson(res, 400, { error: "invalid batchId" });
+    if (batchId !== null) {
+      const claim = await opsBatch.claim(batchId);
+      // 503 (not a 4xx) so the client keeps the batch and retries shortly
+      if (claim === "busy") return sendJson(res, 503, { error: "This change is already being saved — retrying shortly" });
+      if (claim === "done") return sendStateResponse(req, res); // applied earlier; acknowledge, don't repeat
+    }
     try {
       await applyOps(body.ops, getSession(req));
+      if (batchId !== null) await opsBatch.complete(batchId);
     } catch (e) {
+      if (batchId !== null) await opsBatch.release(batchId);
       if (e.status) return sendJson(res, e.status, { error: e.message });
       throw e;
     }
@@ -1697,6 +1722,10 @@ async function handleApi(req, res, urlPath) {
     }
     const body = await readBody(req);
     const result = await handleVmsDprSync(body, mongoDb);
+    // A newly inserted DPR must be visible to every open board — clients only
+    // refetch when /api/rev changes, and this path used to leave it untouched.
+    // Duplicates/rejections wrote nothing, so they don't bump.
+    if (vmsSyncWroteRecord(result)) await bumpRev();
     return sendJson(res, result.status, result.body);
   }
   if (req.method === "POST" && urlPath === "/api/ims/webhook") {
@@ -1746,6 +1775,10 @@ async function handleApi(req, res, urlPath) {
     }
     const rec = { ...(existing || {}), ...parsed.record, projectId, projectCode };
     await mongoDb.collection("purchaseOrders").updateOne({ id: rec.id }, { $set: rec }, { upsert: true });
+    // Same reason as the VMS DPR route above: without a rev bump, open boards
+    // never learn about this write. (A stale/ignored update returned earlier
+    // and wrote nothing, so it correctly doesn't reach this line.)
+    await bumpRev();
     console.log(`[ims-webhook] saved PO ${rec.id} (deleted=${rec.deleted}) — ${projectCode ? "linked to project " + projectCode : "NOT linked to any QC project"}`);
     return sendJson(res, 200, { ok: true, matched: !!projectCode });
   }

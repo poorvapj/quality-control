@@ -2,11 +2,18 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import type { BoardData, Op, Role, StoreMode, TabKey, MasterKey, User } from "../types";
 import { API_BASE } from "../services/config";
 import { byId, coll } from "../shared/rules";
+import { classifyStatus, flushQueue, newBatchId, normalizeQueue, tokenUserId, type QueuedBatch } from "../shared/opQueue";
 
 const LS_KEY = "neoteric_board_v5";
 const SESSION_KEY = "neoteric_session";
 const TOKEN_KEY = "neoteric_token";
 const PENDING_OPS_KEY = "neoteric_pending_ops";
+
+// Whose token is currently stored (null when signed out) — used to stop a
+// queued batch made by one person being replayed under another's session.
+function currentTokenUser(): string | null {
+  try { return tokenUserId(localStorage.getItem(TOKEN_KEY)); } catch { return null; }
+}
 
 export function authHeaders(): Record<string, string> {
   try {
@@ -211,10 +218,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // gets it saved once the connection comes back, instead of just losing
   // it — this is what happened to a Quality Inspection that looked saved
   // on screen but was never in the database.
-  const pendingOpsRef = useRef<Op[][]>((() => {
+  // Stored as QueuedBatch[] ({id, ops, by, at}); entries saved by earlier
+  // versions (a bare Op[]) are upgraded on read by normalizeQueue().
+  const pendingOpsRef = useRef<QueuedBatch[]>((() => {
     try {
       const raw = localStorage.getItem(PENDING_OPS_KEY);
-      return raw ? JSON.parse(raw) : [];
+      return raw ? normalizeQueue(JSON.parse(raw)) : [];
     } catch { return []; }
   })());
   // Surfaced in the UI (see PendingSyncBadge) so an unsynced change is
@@ -242,7 +251,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const reloadPendingOpsFromStorage = useCallback(() => {
     try {
       const raw = localStorage.getItem(PENDING_OPS_KEY);
-      pendingOpsRef.current = raw ? JSON.parse(raw) : [];
+      pendingOpsRef.current = raw ? normalizeQueue(JSON.parse(raw)) : [];
     } catch {}
     setPendingCount(pendingOpsRef.current.length);
   }, []);
@@ -253,9 +262,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, [reloadPendingOpsFromStorage]);
-  const queueOps = useCallback((ops: Op[]) => {
+  // `id` is the same batch id the first (failed) attempt sent to the server, so
+  // a replay of a request the server already applied is recognised as a repeat.
+  const queueOps = useCallback((ops: Op[], id: string) => {
     reloadPendingOpsFromStorage();
-    pendingOpsRef.current = [...pendingOpsRef.current, ops];
+    pendingOpsRef.current = [...pendingOpsRef.current, { id, ops, by: currentTokenUser(), at: Date.now() }];
     savePendingOps();
   }, [reloadPendingOpsFromStorage, savePendingOps]);
   // Replays queued batches in order, oldest first. Stops (returns false) on
@@ -270,33 +281,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (isFlushingRef.current) return false;
     isFlushingRef.current = true;
     try {
-      while (pendingOpsRef.current.length > 0) {
-        const batch = pendingOpsRef.current[0];
-        try {
+      // The rules (what is kept, what is dropped, ordering, who may send
+      // what) live in shared/opQueue.ts. In short: only a definitive refusal
+      // from the server (a 4xx other than 401/408/425/429) drops a batch — an
+      // expired session (401), an overloaded or sleeping server (5xx/429) or a
+      // network failure all KEEP it. Every attempt carries the batch's id, so a
+      // request the server already applied is never applied twice.
+      return await flushQueue({
+        getQueue: () => pendingOpsRef.current,
+        remove: (id) => {
+          pendingOpsRef.current = pendingOpsRef.current.filter((b) => b.id !== id);
+          savePendingOps();
+        },
+        send: async (batch) => {
           const r = await fetch(API_BASE + "/api/ops", {
             method: "POST",
-            headers: { "Content-Type": "application/json", ...authHeaders() },
-            body: JSON.stringify({ ops: batch })
+            // a batch made while signed out (public form) is replayed signed out too
+            headers: { "Content-Type": "application/json", ...(batch.by === null ? {} : authHeaders()) },
+            body: JSON.stringify({ ops: batch.ops, batchId: batch.id })
           });
-          if (!r.ok) {
-            // Rejected by the server (not a network failure) — retrying it
-            // forever would never succeed, so drop it rather than blocking
-            // every batch queued after it.
-            pendingOpsRef.current = pendingOpsRef.current.slice(1);
-            savePendingOps();
-            continue;
-          }
-          pendingOpsRef.current = pendingOpsRef.current.slice(1);
-          savePendingOps();
-        } catch {
-          return false;
-        }
-      }
-      return true;
+          let error: string | undefined;
+          if (!r.ok) { try { error = (await r.json()).error; } catch {} }
+          return { status: r.status, error };
+        },
+        currentTokenUser: currentTokenUser(),
+        onRejected: (_batch, error) => toast("A change saved earlier was refused by the server and could not be applied: " + error)
+      });
     } finally {
       isFlushingRef.current = false;
     }
-  }, [savePendingOps]);
+  }, [savePendingOps, toast]);
 
   // Returns whether the change actually reached the server just now (true)
   // or was only queued/rejected (false) — callers that show their own
@@ -313,12 +327,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     applyOpsLocal(next, ops);
     setData(next);
     dataRef.current = next;
+    // One id per user action, reused by every retry of it (see shared/opQueue.ts).
+    const batchId = newBatchId();
 
     if (modeRef.current === "local" || modeRef.current === "offline") {
       // Already offline — queue it (after anything already queued, so
       // order is preserved) instead of only writing to this browser's
       // local blob, which the next reconnect would otherwise overwrite.
-      queueOps(ops);
+      queueOps(ops, batchId);
       persistLocal(next);
       return false;
     }
@@ -326,10 +342,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const r = await fetch(API_BASE + "/api/ops", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ ops })
+        body: JSON.stringify({ ops, batchId })
       });
       const j = await r.json();
       if (!r.ok) {
+        if (r.status !== 401 && classifyStatus(r.status) === "retry-later") {
+          // 5xx / 429 / 408: the server couldn't take it right now — that is not
+          // a verdict on the change. Keep it queued (same batch id, so a retry
+          // after a commit whose reply was lost can't apply it twice).
+          queueOps(ops, batchId);
+          persistLocal(next);
+          toast("The server is busy — your change is saved and will be retried automatically");
+          return false;
+        }
         if (r.status === 401) {
           // An expired/invalid session (JWTs last 7 days — plausible for a
           // tab left open that long), NOT a real rejection of the action
@@ -338,7 +363,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           // token aged out mid-session. Queue it instead: once the user
           // signs back in, the poll loop's own pending-ops retry (above)
           // sends it with the fresh token.
-          queueOps(ops);
+          queueOps(ops, batchId);
           persistLocal(next);
           toast("Your session expired — please sign in again. This will finish submitting once you do.");
           return false;
@@ -347,8 +372,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // rejected it (e.g. not admin), so re-sync from the real server
         // state instead of leaving the UI showing a change that never
         // actually persisted.
-        const fresh = await fetch(API_BASE + "/api/state", { cache: "no-store" }).then((x) => x.json());
-        setData(fresh.data); dataRef.current = fresh.data; setRev(fresh.rev);
+        // (guarded: if this re-sync itself fails it must not fall through to the
+        // network-failure branch below and queue a change the server just refused)
+        const fresh = await fetch(API_BASE + "/api/state", { cache: "no-store" }).then((x) => x.json()).catch(() => null);
+        if (fresh && fresh.data) { setData(fresh.data); dataRef.current = fresh.data; setRev(fresh.rev); }
         toast(j.error || "That action isn't allowed");
         return false;
       }
@@ -360,7 +387,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // it actually reaches the server once the connection's back, instead
       // of silently vanishing the next time a fresh /api/state overwrites
       // this device's local copy.
-      queueOps(ops);
+      queueOps(ops, batchId);
       modeRef.current = "offline";
       setMode("offline");
       toast("Offline — will save automatically once back online");
