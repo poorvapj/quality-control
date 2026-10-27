@@ -123,3 +123,12 @@ Still **log-only and default OFF**; no response, write, frontend, default-flag o
 | `backend/saveDiagnostics.test.js` (22 → 28), `backend/photoGuard.test.js` (9 → 10) | worst-case summary size/validity, batch totals, shutdown summary, summary privacy; photo log line has no address and the verdict is unchanged |
 | `docs/save-diagnostics.md` | new log format, batch-total formula, and the five gates for the observation window |
 **Rollback:** revert the commit.
+
+---
+# Round 8 — reproducible synthetic diagnostics tests and log reviewer
+Tests, tooling and docs only; no application code change.
+| File | Change |
+|---|---|
+| `backend/diagnosticsSynthetic.e2e.js` (new) | real server + in-memory MongoDB, 15 scripted saves, 32 checks, all ten transformation rules (adds the `materialMeasurements` scenario the scratch script lacked); needs dev-only `mongodb-memory-server`, not a dependency |
+| `backend/reviewSaveDiag.js` (new), `backend/reviewSaveDiag.test.js` (new, 12 tests) | exported-log reviewer with the five gates and PASS / FAIL / INSUFFICIENT EVIDENCE verdicts |
+| `docs/save-diagnostics-synthetic-test.md`, `docs/deployment-checklist-4474f8b.md` (new) | how to run; verified vs assumed vs unmeasured deployment checklist |
