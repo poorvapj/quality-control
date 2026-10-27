@@ -43,6 +43,33 @@ Backend `node --test`: 15 files, 15 pass (+ `opsBatch.test.js` 8/8, `vmsDprApi.t
 Deploy **backend first** (new clients send `batchId`; the server accepts it optionally, so either order won't break, but only a new backend dedupes). No env changes. First start creates one index (`meta.expireAt` TTL). Smoke test on staging: save a snag, submit an inspection, approve a measurement; toggle offline and save; confirm IMS/VMS pushes appear on an open board.
 
 ---
+# Round 3 — security and backup work (COMMITTED as `7495c30` and `d4e21ed`; nothing pushed or deployed)
+
+## Committed already
+`8357555 fix(sync): bump rev on IMS/VMS writes; keep and de-duplicate queued offline edits` — 9 files (the two fixes, their tests, this changelog). Your staged `Measurement.tsx` / `Snags.tsx` stayed staged and untouched.
+
+## Files (security -> `7495c30`, backup -> `d4e21ed`)
+| File | What |
+|---|---|
+| `backend/backups.js`, `backups.test.js` (new) | Backup Phase A: cheap listing, size/duration logging, size refusal, audit events copy |
+| `backend/recover-events-from-backup.js`, `recoverEvents.test.js` (new) | dry-run-by-default audit-event recovery tool |
+| `backend/photoGuard.js`, `photoGuard.test.js` (new) | `/api/photo` abuse protection (monitor-only by default) |
+| `backend/publicState.js` (new) | allow-listed public snapshot (off by default) |
+| `backend/server.js` | wiring for the four items above, `reportBackupFailure`, `PHOTO_GUARD_ENFORCE`, `PUBLIC_STATE_ENFORCE`, `CLIENT_IP_HOPS_FROM_RIGHT` |
+| `frontend/src/context/AppContext.tsx` | token on `/api/state`, `fetchBoard`, expired-session handling, full re-fetch after sign-in, `publicRoute`, no cache overwrite from public pages |
+| `frontend/src/shared/stateSync.ts`, `frontend/tests/stateSync.test.mjs` (new) | pure decision logic + 6 tests |
+| `frontend/src/shared/uploadPhoto.ts`, `frontend/src/hooks/useActions.ts` | token on `/api/photo` |
+| `frontend/src/main.tsx` | `publicRoute` prop |
+| `docs/*` | updated investigation/design documents, measurements |
+| `backend/scripts/inspect-deployment.js`, `probe-write-txn.js` | read-only / non-persisting production probes (directory is gitignored — stays local) |
+
+## Behavior of the live system if deployed with no env changes
+Backups: new fields, failures now HTTP 500 + audit event (+ Slack when configured), cheaper listing. Frontend: token header on state/photo requests (adds a CORS preflight per `/api/state` fetch), one extra full-board fetch at sign-in. **Public snapshot and photo enforcement do nothing until their env flags are set** (photo guard only logs).
+
+## Tests run this round
+Backend `node --test`: all files pass (see final summary for the count). New unit tests: backups 4, recoverEvents 5, photoGuard 9. Frontend: `tsc --noEmit`, `vite build` pass; `opQueue` 13 + `stateSync` 6 pass. Real-server integration (in-memory MongoDB): backups (18 checks), photo (21), public state (17). **Real browser (Edge, built frontend + real server):** flags ON 25 checks, flags OFF 5 checks — all pass. Details and limits are in each document.
+
+---
 # Round 4 — shared state rebuild (`backend/stateBuilder.js`)
 Commits made before this one: `7495c30` (security: 11 files) and `d4e21ed` (backup: 6 files). Nothing pushed or deployed; no environment variable changed; neither enforcement switch is on.
 

@@ -1,6 +1,6 @@
 # Public endpoints: `/api/photo` and `/api/state` — investigation, design and implementation status
 
-## Implementation status (uncommitted, not deployed; both new behaviours are OFF by default)
+## Implementation status (committed as `7495c30`, not deployed; both new behaviours are OFF by default)
 | Piece | Where | Default | Switch |
 |---|---|---|---|
 | Token sent on every `/api/state` fetch and on all three `/api/photo` calls | `AppContext.tsx` (`fetchBoard`), `uploadPhoto.ts`, `useActions.ts` | on (harmless: the server ignores it until a flag is set) | — |

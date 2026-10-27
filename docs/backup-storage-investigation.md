@@ -1,7 +1,7 @@
 # Backups and the 16 MB MongoDB document limit — investigation
 
-## Status update — Phase A implemented (uncommitted; storage format unchanged)
-Implemented in `backend/backups.js` (+ wiring in `server.js`), tested, **not deployed**:
+## Status update — Phase A implemented (committed as `d4e21ed`, not deployed; storage format unchanged)
+Implemented in `backend/backups.js` (+ wiring in `server.js`), tested, committed, **not deployed**:
 1. **Cheap listing:** `GET /api/backups` now computes counts/size inside MongoDB (`$objectToArray`/`$size`/`$bsonSize`) instead of loading every full backup into memory. Same response shape plus optional `sizeBytes` and `eventCount`.
 2. **Size and duration logging:** each backup logs `[backup] BK-… by …: 1.22 MB (7.6% of limit), N audit events, read X ms, total Y ms`; a warning above 8 MB; stored as additive `sizeBytes` / `buildMs` fields.
 3. **Explicit failure reporting:** a backup that would exceed the 16 MB limit is **refused before the insert** with a clear message (`BackupTooLargeError`), nothing partial is stored. Scheduled route returns **HTTP 500** `{ok:false,error}` (an external cron pinger can alert on any non-200); every failure is logged, recorded as an audit event `BACKUP_FAILED` (visible in the Audit Log), and — if `SLACK_BOT_TOKEN` is set — DM'd to `BACKUP_ALERT_EMAILS` (default: the existing QC-report owner address). Manual `POST /api/backups` also returns 500 with the message instead of a generic 400.
