@@ -71,6 +71,7 @@ const { getVmsDrawingRequests } = require("./vmsDrawingRequests.js");
 const { deriveApprovalOnCreate, resolveApprovalOnUpdate, findPendingApprovals } = require("./approvalRules.js");
 const approvalSlack = require("./approvalSlack.js");
 const { createOpsBatchStore, isValidBatchId } = require("./opsBatch.js");
+const backups = require("./backups.js");
 const { createPhotoGuard, clientIp } = require("./photoGuard.js");
 const { buildPublicState } = require("./publicState.js");
 // OFF by default. Turning it on makes GET /api/state and the /api/ops reply return only the allow-listed public
@@ -1467,30 +1468,31 @@ async function resetDb(mode, actorUserId) {
    a browser in that raw form (list/download strip password fields, same as
    getState()). This exists because a demo-reset or bad op has genuinely
    wiped this shared board multiple times this session with no way back. */
-async function createBackup(createdBy) {
-  const collections = {};
-  for (const c of COLLECTIONS) {
-    collections[c] = await mongoDb.collection(c).find({}, { projection: { _id: 0 } }).toArray();
+// Creation, size/duration logging, and the cheap listing live in backups.js.
+const createBackup = (createdBy) => backups.createBackup(mongoDb, COLLECTIONS, createdBy);
+const summarizeBackup = backups.summarizeBackup;
+
+/* A failed backup must never be silent. Always logged and recorded in the audit
+   log; also sent to Slack (BACKUP_ALERT_EMAILS, default: the QC report owner)
+   when Slack is configured. For the scheduled route the HTTP 500 is a second
+   signal — an external cron pinger can alert on any non-200. */
+const BACKUP_ALERT_EMAILS = (process.env.BACKUP_ALERT_EMAILS || QC_REPORT_NOTIFY_EMAIL).split(",").map((e) => e.trim()).filter(Boolean);
+async function reportBackupFailure(source, err) {
+  console.error(`[backup] ${source} backup FAILED:`, err && err.stack ? err.stack : err);
+  try {
+    await mongoDb.collection("events").insertOne({
+      ts: Date.now(), userId: source === "scheduled" ? "" : source, action: "BACKUP_FAILED", targetId: "", stageId: "",
+      detail: `${source} backup failed: ${String(err && err.message || err).slice(0, 300)}`
+    });
+    await bumpRev();
+  } catch (e) { console.error("[backup] could not record the failure event:", e.message); }
+  if (!SLACK_BOT_TOKEN) return;
+  for (const email of BACKUP_ALERT_EMAILS) {
+    try {
+      const uid = await slackUserIdForEmail(email);
+      if (uid) await slackPostMessage(uid, `🚨 *Board backup FAILED* (${source}) — ${String(err && err.message || err).slice(0, 400)}`);
+    } catch (e) { console.error("[backup] Slack alert failed:", e.message); }
   }
-  const progressDocs = await mongoDb.collection("progress").find({}).toArray();
-  const progress = {};
-  for (const p of progressDocs) { const { _id, ...rest } = p; progress[_id] = rest; }
-
-  const doc = {
-    id: "BK-" + Date.now().toString(36).toUpperCase(),
-    createdAt: Date.now(),
-    createdBy: createdBy || null,
-    collections,
-    progress
-  };
-  await mongoDb.collection("backups").insertOne(doc);
-  return doc;
-}
-
-function summarizeBackup(doc) {
-  const counts = {};
-  for (const c of Object.keys(doc.collections || {})) counts[c] = doc.collections[c].length;
-  return { id: doc.id, createdAt: doc.createdAt, createdBy: doc.createdBy, counts };
 }
 
 function stripBackupPasswords(doc) {
@@ -2005,8 +2007,13 @@ async function handleApi(req, res, urlPath) {
     const session = getSession(req);
     if (!session) return sendJson(res, 401, { error: "Sign-in required" });
     if (!session.isAdmin) return sendJson(res, 403, { error: "Admin access required" });
-    const doc = await createBackup(session.userId);
-    return sendJson(res, 200, summarizeBackup(doc));
+    try {
+      const doc = await createBackup(session.userId);
+      return sendJson(res, 200, summarizeBackup(doc));
+    } catch (e) {
+      await reportBackupFailure(session.userId, e);
+      return sendJson(res, 500, { error: "Backup failed: " + e.message });
+    }
   }
   if (req.method === "POST" && urlPath === "/api/reports/weekly-qc/send-now") {
     // Manual test trigger for the Saturday-1pm-IST weekly Quality Inspection
@@ -2092,8 +2099,8 @@ async function handleApi(req, res, urlPath) {
     const session = getSession(req);
     if (!session) return sendJson(res, 401, { error: "Sign-in required" });
     if (!session.isAdmin) return sendJson(res, 403, { error: "Admin access required" });
-    const docs = await mongoDb.collection("backups").find({}).sort({ createdAt: -1 }).toArray();
-    return sendJson(res, 200, { backups: docs.map(summarizeBackup) });
+    // summaries are computed inside MongoDB — the full backup documents are never loaded into memory
+    return sendJson(res, 200, { backups: await backups.listBackupSummaries(mongoDb) });
   }
   const backupIdMatch = /^\/api\/backups\/([^/]+)$/.exec(urlPath);
   if (req.method === "GET" && backupIdMatch) {
@@ -2133,8 +2140,13 @@ async function handleApi(req, res, urlPath) {
     const secret = process.env.BACKUP_CRON_SECRET;
     if (!secret) return sendJson(res, 501, { error: "BACKUP_CRON_SECRET is not configured" });
     if (!timingSafeStringEqual(req.headers["x-cron-secret"], secret)) return sendJson(res, 401, { error: "Invalid cron secret" });
-    const doc = await createBackup("scheduled");
-    return sendJson(res, 200, summarizeBackup(doc));
+    try {
+      const doc = await createBackup("scheduled");
+      return sendJson(res, 200, summarizeBackup(doc));
+    } catch (e) {
+      await reportBackupFailure("scheduled", e);
+      return sendJson(res, 500, { ok: false, error: "Scheduled backup failed: " + e.message });
+    }
   }
   if (req.method === "GET" && urlPath === "/api/team-reports/generate") {
     // Same pattern as /api/backup/scheduled — an external cron pinger hits
