@@ -685,6 +685,15 @@ async function connectMongo() {
   await mongoDb.collection("users").createIndex({ email: 1 }, { unique: true, sparse: true });
   await mongoDb.collection("backups").createIndex({ id: 1 }, { unique: true });
   await mongoDb.collection("backups").createIndex({ createdAt: -1 });
+  // The only real filtered (non-find({})) queries in the app today: a
+  // project delete cascades by scanning floors/units for that projectId
+  // (line ~1237), and the VMS-link report scans workMeasurements for any
+  // linked record. Full collections are tiny right now so these are fast
+  // either way, but indexing them costs nothing and keeps that true as
+  // floors/units/workMeasurements grow over time.
+  await mongoDb.collection("floors").createIndex({ projectId: 1 });
+  await mongoDb.collection("units").createIndex({ projectId: 1 });
+  await mongoDb.collection("workMeasurements").createIndex({ linkedItemId: 1 });
 
   const projectCount = await mongoDb.collection("projects").countDocuments();
   if (projectCount === 0) {

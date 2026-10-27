@@ -931,17 +931,41 @@ function InspectionForm({
     : [];
   const unit = byId(units, unitId);
 
+  // Grouped once per allInspections change — not on every render — into
+  // buckets keyed by "workType::target" (target = unitId, or "floor:<id>"
+  // for a floor-scope stage), each pre-sorted newest-first. latestResult()/
+  // floorPassed() below used to re-scan + re-sort the ENTIRE allInspections
+  // array (across every project) on every single call, and both are called
+  // several times on every re-render of this form — every keystroke in
+  // Remarks, every checklist tap. Invisible at today's data size, but a
+  // real, fairly soon lag source as inspections grow into the thousands.
+  const inspectionsByWorkTypeAndTarget = useMemo(() => {
+    const map = new Map<string, QI[]>();
+    for (const i of allInspections) {
+      const key = `${i.workType}::${i.unitId || `floor:${i.floorId}`}`;
+      const arr = map.get(key);
+      if (arr) arr.push(i); else map.set(key, [i]);
+    }
+    for (const arr of map.values()) arr.sort((a, b) => b.createdAt - a.createdAt);
+    return map;
+  }, [allInspections]);
+
   // Latest-result lookup shared by both gates below: the most recent
   // inspection logged for a given Work Type + flat (+ wet area, for
   // Waterproofing's per-area phases). Only the latest attempt counts, so a
   // phase that failed and was later re-inspected to Pass still clears it.
   function latestResult(stageWorkType: string, forUnitId: string, area?: string): QualityInspectionResult | undefined {
     const legacyWorkType = LEGACY_PHASE_EQUIVALENT[stageWorkType];
-    const matches = allInspections
-      .filter((i) => (i.workType === stageWorkType || (legacyWorkType && i.workType === legacyWorkType)) && (forUnitId ? i.unitId === forUnitId : !i.unitId && i.floorId === floorId))
-      .filter((i) => !area || i.areas?.includes(area))
-      .sort((a, b) => b.createdAt - a.createdAt);
-    return matches[0]?.result;
+    const target = forUnitId || `floor:${floorId}`;
+    const candidates = [
+      ...(inspectionsByWorkTypeAndTarget.get(`${stageWorkType}::${target}`) || []),
+      ...(legacyWorkType ? inspectionsByWorkTypeAndTarget.get(`${legacyWorkType}::${target}`) || [] : [])
+    ].filter((i) => !area || i.areas?.includes(area));
+    if (!candidates.length) return undefined;
+    // Each bucket is already sorted newest-first on its own, but merging two
+    // buckets (current + legacy name) doesn't preserve that — pick the true
+    // max instead of just candidates[0].
+    return candidates.reduce((best, c) => (c.createdAt > best.createdAt ? c : best)).result;
   }
 
   // Finishing & Handover is the final gate for a flat — it shows up in the
@@ -981,10 +1005,8 @@ function InspectionForm({
   const structureGroup = PHASE_GROUPS.find((g) => g.name === "R.C.C. Slab Inspection")!;
   const structureLastPhase = phaseWorkType(structureGroup.name, structureGroup.phases[structureGroup.phases.length - 1].label);
   function floorPassed(fId: string): boolean {
-    const matches = allInspections
-      .filter((i) => i.workType === structureLastPhase && !i.unitId && i.floorId === fId)
-      .sort((a, b) => b.createdAt - a.createdAt);
-    return matches[0]?.result === "Pass";
+    const arr = inspectionsByWorkTypeAndTarget.get(`${structureLastPhase}::floor:${fId}`);
+    return arr?.[0]?.result === "Pass";
   }
   const earlierFloorsNotStructurallyDone = workType && PHASE_LOOKUP.get(workType)?.group === structureGroup && floor
     ? floors.filter((f) => (f.seq || 0) < (floor.seq || 0) && !floorPassed(f.id))

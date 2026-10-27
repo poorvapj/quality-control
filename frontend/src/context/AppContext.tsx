@@ -73,6 +73,9 @@ interface AppContextValue {
   data: BoardData | null;
   rev: number;
   mode: StoreMode;
+  // Count of changes saved locally but not yet confirmed on the server —
+  // see PendingSyncBadge. 0 once everything's synced.
+  pendingCount: number;
   loggedIn: boolean;
   currentUserId: string | null;
   currentProjectId: string | null;
@@ -169,7 +172,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (toast as any)._t = window.setTimeout(() => setToastMsg(null), 2600);
   }, []);
 
+  // This writes the ENTIRE board (every collection) to localStorage — it's
+  // only ever read back as a best-effort "show something" fallback for a
+  // cold app load with zero connectivity (see the initial-load effect
+  // below); it has nothing to do with not losing an offline edit, which is
+  // what pendingOpsRef/queueOps below actually guarantees (a tiny array of
+  // just the changed ops, not the whole board). Re-serializing and writing
+  // the whole thing on every single offline edit got more expensive (and
+  // more likely to hit localStorage's quota) as real data grows — throttled
+  // to at most once every 15s so a long offline editing session doesn't
+  // keep re-writing a multi-MB blob after every tap; the up-to-15s-stale
+  // snapshot this can leave behind only ever affects that one fallback
+  // display, never whether a save is queued/lost.
+  const lastPersistLocalRef = useRef(0);
   const persistLocal = useCallback((d: BoardData) => {
+    const now = Date.now();
+    if (now - lastPersistLocalRef.current < 15000) return;
+    lastPersistLocalRef.current = now;
     try {
       localStorage.setItem(LS_KEY, JSON.stringify(d));
     } catch (e: any) {
@@ -198,6 +217,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return raw ? JSON.parse(raw) : [];
     } catch { return []; }
   })());
+  // Surfaced in the UI (see PendingSyncBadge) so an unsynced change is
+  // never invisible beyond its one 2.6s toast — someone can always glance
+  // at the screen and see "N changes waiting to sync" until it clears.
+  const [pendingCount, setPendingCount] = useState(pendingOpsRef.current.length);
   const savePendingOps = useCallback(() => {
     try {
       localStorage.setItem(PENDING_OPS_KEY, JSON.stringify(pendingOpsRef.current));
@@ -209,6 +232,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // later — now surfaced instead of silently swallowed.
       if (e?.name === "QuotaExceededError") toast("Couldn't save your change for retry — storage is full (likely a large photo). Please check your connection and try again now.");
     }
+    setPendingCount(pendingOpsRef.current.length);
   }, [toast]);
   // Another tab (same browser/profile) could have queued or flushed its
   // own ops in between — re-reading the latest localStorage value right
@@ -220,6 +244,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const raw = localStorage.getItem(PENDING_OPS_KEY);
       pendingOpsRef.current = raw ? JSON.parse(raw) : [];
     } catch {}
+    setPendingCount(pendingOpsRef.current.length);
   }, []);
   useEffect(() => {
     function onStorage(e: StorageEvent) {
@@ -522,7 +547,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const myRole = useCallback((): Role => me()?.role ?? "ADMIN", [me]);
 
   const value: AppContextValue = {
-    data, rev, mode, loggedIn, currentUserId, currentProjectId, activeTab, activeMaster, drawer, toastMsg,
+    data, rev, mode, pendingCount, loggedIn, currentUserId, currentProjectId, activeTab, activeMaster, drawer, toastMsg,
     assignModal, snagModal, checklistModal, recordModal, openDrawingRequestId, reInspectQualityId, caseStudyDraft,
     setCurrentUserId, setCurrentProjectId, setActiveTab, setActiveMaster, openDrawer, closeDrawer,
     openAssignModal, closeAssignModal, openSnagModal, closeSnagModal,

@@ -3,6 +3,7 @@ import { useApp } from "./context/AppContext";
 import MainLayout from "./layouts/MainLayout/MainLayout";
 import LoginScreen from "./components/LoginScreen";
 import Toast from "./components/Toast";
+import PendingSyncBadge from "./components/PendingSyncBadge";
 import Drawer from "./components/Drawer";
 import AssignModal from "./components/AssignModal";
 import SnagModal from "./components/SnagModal";
@@ -37,7 +38,7 @@ import { coll } from "./shared/rules";
 export default function App() {
   const { loggedIn, currentUserId, activeTab, data, myRole } = useApp();
 
-  if (!loggedIn) return <><LoginScreen /><Toast /></>;
+  if (!loggedIn) return <><LoginScreen /><Toast /><PendingSyncBadge /></>;
 
   const isAdmin = currentUserId === "U-ADMIN";
 
@@ -93,6 +94,7 @@ export default function App() {
       <ChecklistModal />
       <RecordModal />
       <Toast />
+      <PendingSyncBadge />
     </MainLayout>
   );
 }
