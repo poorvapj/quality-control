@@ -4,6 +4,7 @@ import { API_BASE } from "../services/config";
 import { byId, coll } from "../shared/rules";
 import { classifyStatus, flushQueue, newBatchId, normalizeQueue, tokenUserId, type QueuedBatch } from "../shared/opQueue";
 import { judgeStateResponse } from "../shared/stateSync";
+import { applyOpsLocal, scrubLocalBoard } from "../shared/applyOpsLocal";
 
 const LS_KEY = "neoteric_board_v5";
 const SESSION_KEY = "neoteric_session";
@@ -53,29 +54,6 @@ function mergeStableCollections(prev: BoardData | null, next: BoardData): BoardD
     }
   }
   return merged;
-}
-
-/* Mirror of the server's op handler so optimistic updates match exactly. */
-function applyOpsLocal(d: BoardData, ops: Op[]) {
-  for (const op of ops) {
-    if (op.op === "upsert") {
-      const list = ((d as any)[op.coll] = (d as any)[op.coll] || []);
-      const i = list.findIndex((r: any) => r.id === op.rec.id);
-      const merged = i === -1 ? op.rec : Object.assign({}, list[i], op.rec);
-      for (const k of Object.keys(merged)) if ((merged as any)[k] === null) delete (merged as any)[k];
-      if (i === -1) list.push(merged);
-      else list[i] = merged;
-    } else if (op.op === "delete") {
-      (d as any)[op.coll] = ((d as any)[op.coll] || []).filter((r: any) => r.id !== op.id);
-    } else if (op.op === "progress") {
-      const next = Object.assign({}, d.progress[op.key] || {}, op.patch);
-      for (const k of Object.keys(next)) if ((next as any)[k] === null) delete (next as any)[k];
-      d.progress[op.key] = next;
-    } else if (op.op === "event") {
-      d.events.unshift(op.ev);
-      if (d.events.length > 5000) d.events.length = 5000;
-    }
-  }
 }
 
 interface DrawerRef { kind: "unit" | "floor" | "snag" | "user"; id: string }
@@ -443,7 +421,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
       } catch {
         const raw = localStorage.getItem(LS_KEY);
         let local: BoardData | null = null;
-        if (raw) { try { local = JSON.parse(raw); } catch {} }
+        if (raw) { try { local = scrubLocalBoard(JSON.parse(raw)); } catch {} }
         if (stopped) return;
         if (local) { setData(local); dataRef.current = local; setMode("local"); modeRef.current = "local"; }
         else { setMode("offline"); modeRef.current = "offline"; }

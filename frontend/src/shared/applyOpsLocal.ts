@@ -1,0 +1,51 @@
+import type { BoardData, Op } from "../types";
+
+/* Mirror of the server's op handler so optimistic updates match exactly.
+   (Moved out of context/AppContext.tsx unchanged, apart from the password rule below,
+   so it can be unit-tested without React — see frontend/tests/applyOpsLocal.test.mjs.)
+
+   PASSWORDS: a `users` upsert from Add User / Masters carries a plaintext `password`
+   (the server hashes it and never stores or returns it). The board kept in the browser
+   — in memory and in the localStorage snapshot — must never hold it, so it is left out
+   of the LOCAL copy. The `ops` array itself is NOT modified: the request (and an
+   offline-queued batch, which has to keep it until it is delivered) still carries it
+   to the server. */
+export function localRecord(coll: string, rec: any): any {
+  if (coll === "users" && rec && Object.prototype.hasOwnProperty.call(rec, "password")) {
+    const { password: _omitted, ...rest } = rec;
+    return rest;
+  }
+  return rec;
+}
+
+/* Removes a plaintext password from every user in a board snapshot (defensive: a snapshot
+   written by an older version of the app may contain one). Mutates and returns the board. */
+export function scrubLocalBoard<T extends { users?: any[] } | null>(board: T): T {
+  if (board && Array.isArray((board as any).users)) {
+    for (const u of (board as any).users) if (u && typeof u === "object" && "password" in u) delete u.password;
+  }
+  return board;
+}
+
+export function applyOpsLocal(d: BoardData, ops: Op[]) {
+  for (const op of ops) {
+    if (op.op === "upsert") {
+      const list = ((d as any)[op.coll] = (d as any)[op.coll] || []);
+      const rec = localRecord(String(op.coll), op.rec);
+      const i = list.findIndex((r: any) => r.id === rec.id);
+      const merged = i === -1 ? rec : Object.assign({}, list[i], rec);
+      for (const k of Object.keys(merged)) if ((merged as any)[k] === null) delete (merged as any)[k];
+      if (i === -1) list.push(merged);
+      else list[i] = merged;
+    } else if (op.op === "delete") {
+      (d as any)[op.coll] = ((d as any)[op.coll] || []).filter((r: any) => r.id !== op.id);
+    } else if (op.op === "progress") {
+      const next = Object.assign({}, d.progress[op.key] || {}, op.patch);
+      for (const k of Object.keys(next)) if ((next as any)[k] === null) delete (next as any)[k];
+      d.progress[op.key] = next;
+    } else if (op.op === "event") {
+      d.events.unshift(op.ev);
+      if (d.events.length > 5000) d.events.length = 5000;
+    }
+  }
+}

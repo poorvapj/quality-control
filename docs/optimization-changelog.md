@@ -84,3 +84,17 @@ Commits made before this one: `7495c30` (security: 11 files) and `d4e21ed` (back
 **Verified:** backend suite (19 files), stateBuilder 14/14, real-server stress (60 concurrent writers + 12 readers: 0 own-write misses, 0 stale-as-current, convergence), fault injection (the first gzip fails: waiting requests get an error, server stays up, next request recovers, `/api/rev` unaffected), ops/rev/backup/photo/public-state integration, real-browser runs with the switches on and off, `tsc`, frontend tests, `vite build`. **Local benchmark only** (real server + in-memory MongoDB, loopback): 40-client catch-up after one write 11.8 s → 0.29 s at 10x data and 19.4 s → 0.93 s (15 clients) at 40x; server working set 2.2 → 0.48 GB and 2.7 → 0.63 GB; at today's size catch-up is ~20 ms *slower* (3/3 runs). Not measured: Atlas, Render, real clients.
 **Not changed:** delta sync, transactions, schema, collections, retention, flag defaults, the save reply (still the full board).
 **Rollback:** revert this commit (restores the previous in-line cache in `server.js`; `stateBuilder.js` and its test are removed with it).
+
+---
+# Round 5 — plaintext password no longer kept in the writer's browser (frontend only)
+**Finding (verified in a real browser):** a user save (Masters ▸ Add New User / Role-User edit) sends a plaintext `password` that the server hashes and discards, but the optimistic local update merged the whole record into the local board, so the password sat in memory and — whenever the board snapshot was cached to `localStorage["neoteric_board_v5"]` (offline/queued saves) — **stayed in localStorage even after the queued request had been delivered**. Online saves were cleaned up by the server's full-board reply; a future minimal reply would not have cleaned them.
+**Fix:** `frontend/src/shared/applyOpsLocal.ts` (new; `applyOpsLocal` moved out of `AppContext.tsx` unchanged) leaves `password` out of the LOCAL copy of a `users` record only. The ops themselves are not modified, so the server request and an offline-queued batch still carry the password until delivered (necessary — it is the message). `scrubLocalBoard` also removes a password an older version may have cached when the snapshot is loaded.
+**Unchanged:** authentication, permissions, hashing, the request body, the queue format, every other collection and field, all other optimistic-update behaviour (proved by a randomized parity test against the original function).
+| File | Change |
+|---|---|
+| `frontend/src/shared/applyOpsLocal.ts` (new) | moved function + password rule + `scrubLocalBoard` |
+| `frontend/src/context/AppContext.tsx` | imports it; scrubs the cached snapshot on load (−22 net lines) |
+| `frontend/tests/applyOpsLocal.test.mjs` (new) | 8 tests incl. 500-batch parity with the original implementation |
+**Tests:** applyOpsLocal 8, opQueue 13, stateSync 6 (27 total), `tsc`, `vite build`; real browser (Edge): Add User online and offline — the server stores a hash only, the new user can sign in, the queue holds the password only until delivery and then nothing does, the cached snapshot never contains it; with the fix disabled that browser test fails (3 checks), so it detects the bug. Existing browser suites (flags on/off) still pass.
+**Not covered:** the password typed into the form is held in that form's own React state until the page unmounts (it unmounts right after saving); an offline queue that can never be delivered keeps the password in `neoteric_pending_ops` (inherent; see the poison-batch risk).
+**Rollback:** revert the commit.
