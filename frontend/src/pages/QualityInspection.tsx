@@ -123,10 +123,15 @@ const PHASE_GROUPS: PhaseGroup[] = [
         ]
       },
       {
-        label: "During Plastering",
+        label: "Before Plastering",
         items: [
           "Pre-plaster services: check plumbing pipes, electrical conduits/boxes, and A.C. pipe/fittings before plastering.",
-          "Surface preparation: ensure background is clean, sound, and prepared to the approved method; provide bonding treatment where specified.",
+          "Surface preparation: ensure background is clean, sound, and prepared to the approved method; provide bonding treatment where specified."
+        ]
+      },
+      {
+        label: "During Plastering",
+        items: [
           "Finish, level, and plumb: check thickness (12mm internal, verified with pin at 3 points per wall), flatness, corners, edges, line, level, and verticality."
         ]
       },
@@ -245,6 +250,12 @@ const UNIT_FINAL_STAGES = [
 // names again, this only makes pre-existing history count.
 const LEGACY_PHASE_EQUIVALENT: Record<string, string> = {
   "Brickwork & Plaster — During Brickwork": "Brickwork Inspection",
+  // "Before Plastering" was split out of the old "During Plastering" phase
+  // (its first 2 points) — a flat already Pass'd under either the old
+  // pre-split "Plastering Inspection" name, or the old single "During
+  // Plastering" phase (before this split), should count as having cleared
+  // this too, not get newly gated on it.
+  "Brickwork & Plaster — Before Plastering": "Plastering Inspection",
   "Brickwork & Plaster — During Plastering": "Plastering Inspection",
   "R.C.C. Slab Inspection — After Pour": "R.C.C. Slab Inspection",
   "Waterproofing Inspection — After 24 Hours": "Waterproofing Inspection",
