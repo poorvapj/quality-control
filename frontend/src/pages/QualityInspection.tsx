@@ -824,6 +824,24 @@ function InspectionForm({
   const [targetDate, setTargetDate] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Real work entered so far (a photo taken, a checklist point answered, or
+  // remarks written) that a stray back-button tap, accidental overlay
+  // click, or tab close would otherwise throw away with zero warning — the
+  // most data-heavy form in the app had no protection at all against this
+  // (unlike DrawingRequestDetailModal's own upload guard).
+  const isDirty = photos.length > 0 || checklist.some((c) => c.status !== "") || remarks.trim().length > 0;
+  useEffect(() => {
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      if (isDirty) { e.preventDefault(); e.returnValue = ""; }
+    }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [isDirty]);
+  function guardedClose() {
+    if (isDirty && !window.confirm("Discard this inspection? Photos and checklist answers entered so far will be lost.")) return;
+    onClose();
+  }
+
   // The responsible DRI for a Fail/Rework is this inspector's own Team
   // leader (e.g. Quality's leader is fixed as Rishabh Rajput) — never a
   // free pick, since the team already has exactly one fixed head.
@@ -1134,10 +1152,10 @@ function InspectionForm({
       icon={<NavIcon name="eye" size={18} />}
       title={reInspectOf ? "Re-inspect" : "New Inspection"}
       desc={reInspectOf ? `Re-checking: ${reInspectOf.floorName}${reInspectOf.unitName ? " / " + reInspectOf.unitName : ""}` : "Record a Pass/Fail/Rework Required result against a real Floor."}
-      onClose={onClose}
+      onClose={guardedClose}
       footer={
         <>
-          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn btn-secondary" onClick={guardedClose}>Cancel</button>
           <button className="btn btn-primary" onClick={save} disabled={saving || blockedByPriorStages}>{saving ? "Saving…" : "Save Inspection"}</button>
         </>
       }

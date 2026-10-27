@@ -305,10 +305,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
       const j = await r.json();
       if (!r.ok) {
+        if (r.status === 401) {
+          // An expired/invalid session (JWTs last 7 days — plausible for a
+          // tab left open that long), NOT a real rejection of the action
+          // itself — discarding the change here (like a genuine permission
+          // rejection below) would silently lose real work just because the
+          // token aged out mid-session. Queue it instead: once the user
+          // signs back in, the poll loop's own pending-ops retry (above)
+          // sends it with the fresh token.
+          queueOps(ops);
+          persistLocal(next);
+          toast("Your session expired — please sign in again. This will finish submitting once you do.");
+          return false;
+        }
         // The optimistic local update above already applied — the server
-        // rejected it (e.g. not signed in / not admin), so re-sync from the
-        // real server state instead of leaving the UI showing a change that
-        // never actually persisted.
+        // rejected it (e.g. not admin), so re-sync from the real server
+        // state instead of leaving the UI showing a change that never
+        // actually persisted.
         const fresh = await fetch(API_BASE + "/api/state", { cache: "no-store" }).then((x) => x.json());
         setData(fresh.data); dataRef.current = fresh.data; setRev(fresh.rev);
         toast(j.error || "That action isn't allowed");
@@ -361,6 +374,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     })();
 
     const iv = window.setInterval(async () => {
+      // A save that only got queued because the session had expired mid-use
+      // (a 401, not a network failure — see apply()'s !r.ok branch) never
+      // flips mode to "offline", so it would otherwise sit queued forever:
+      // retry it here too, independent of the live/offline branch below,
+      // once the user's re-signed in and authHeaders() has a fresh token.
+      if (modeRef.current === "live" && pendingOpsRef.current.length > 0) {
+        await flushPendingOps();
+      }
       if (modeRef.current === "live") {
         try {
           const r = await fetch(API_BASE + "/api/rev", { cache: "no-store" });
