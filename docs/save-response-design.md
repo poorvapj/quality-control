@@ -1,4 +1,6 @@
-# Smaller save response — evaluation and design (DESIGN ONLY — nothing implemented)
+# Smaller save response — evaluation and design (DESIGN ONLY — minimal replies are NOT implemented)
+
+> **Update:** the log-only diagnostics for the `clean` rule (§4.2) are implemented and OFF by default — see `save-diagnostics.md`. They change no response and no behaviour. The minimal reply itself is still not implemented and still awaits your approval after the logs have been evaluated.
 
 Status: **awaiting your approval.** No code, schema, collection or endpoint behaviour has been changed for this. Default behaviour in every proposal below stays exactly what it is today.
 

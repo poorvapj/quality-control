@@ -73,6 +73,17 @@ const approvalSlack = require("./approvalSlack.js");
 const { createOpsBatchStore, isValidBatchId } = require("./opsBatch.js");
 const backups = require("./backups.js");
 const { createStateBuilder } = require("./stateBuilder.js");
+const { createSaveDiagnostics, isEnabled: saveDiagnosticsEnabled } = require("./saveDiagnostics.js");
+// OFF unless SAVE_DIAGNOSTICS=1. Log-only comparison of the proposed "clean save" rule against what the server really
+// does to a saved batch (see saveDiagnostics.js and docs/save-diagnostics.md). Never changes a response or a write.
+const saveDiag = saveDiagnosticsEnabled()
+  ? createSaveDiagnostics({
+      collections: COLLECTIONS,
+      summaryEvery: parseInt(process.env.SAVE_DIAGNOSTICS_SUMMARY_EVERY, 10) || 200,
+      examplesPerKey: parseInt(process.env.SAVE_DIAGNOSTICS_EXAMPLES, 10) || 3
+    })
+  : null;
+if (saveDiag) console.log("  save diagnostics: ON (log-only, bounded; see docs/save-diagnostics.md)");
 const { createPhotoGuard, clientIp } = require("./photoGuard.js");
 const { buildPublicState } = require("./publicState.js");
 // OFF by default. Turning it on makes GET /api/state and the /api/ops reply return only the allow-listed public
@@ -1162,7 +1173,9 @@ async function assertOpAllowed(op, session) {
   }
 }
 
-async function applyOps(ops, session) {
+// `trace` is optional and used ONLY by the log-only save diagnostics (saveDiagnostics.js): when present, the two
+// side effects below record counts into it. It is undefined in normal operation and never influences a write.
+async function applyOps(ops, session, trace) {
   // Validate the ENTIRE batch before writing anything — otherwise an
   // allowed op earlier in the array would already be persisted to Mongo by
   // the time a later, disallowed op in the same batch throws and aborts.
@@ -1253,10 +1266,11 @@ async function applyOps(ops, session) {
             { projection: { linkedSnagId: 1 } }
           );
           if (original?.linkedSnagId) {
-            await mongoDb.collection("snags").updateOne(
+            const closedRes = await mongoDb.collection("snags").updateOne(
               { id: original.linkedSnagId },
               { $set: { status: "Closed", closedAt: Date.now(), closedBy: session ? session.userId : null } }
             );
+            if (trace) trace.snagClosed = closedRes?.modifiedCount || 0; // (diagnostics only)
           }
         }
       } else {
@@ -1277,8 +1291,10 @@ async function applyOps(ops, session) {
           // assignments/dpr/drawingRequests/stagemap rows behind with a
           // projectId that no longer resolves to anything — every page that
           // joins on projectId assumes it always does.
+          if (trace) trace.cascade = {}; // (diagnostics only; reset because the transaction callback can be retried)
           for (const c of PROJECT_SCOPED_COLLECTIONS) {
-            await mongoDb.collection(c).deleteMany({ projectId: op.id }, { session });
+            const deleted = await mongoDb.collection(c).deleteMany({ projectId: op.id }, { session });
+            if (trace) trace.cascade[c] = deleted?.deletedCount;
           }
           // progress documents are keyed `${targetId}::${stageId}` (see
           // frontend shared/rules.ts's pkey) — projectId isn't one of their
@@ -1287,7 +1303,8 @@ async function applyOps(ops, session) {
           const targetIds = [...floorIds, ...unitIds];
           if (targetIds.length) {
             const pattern = "^(" + targetIds.map(escapeRegExp).join("|") + ")::";
-            await mongoDb.collection("progress").deleteMany({ _id: { $regex: pattern } }, { session });
+            const deletedProgress = await mongoDb.collection("progress").deleteMany({ _id: { $regex: pattern } }, { session });
+            if (trace) trace.cascade.progress = deletedProgress?.deletedCount;
           }
         });
       } else {
@@ -1704,10 +1721,16 @@ async function handleApi(req, res, urlPath) {
       if (claim === "busy") return sendJson(res, 503, { error: "This change is already being saved — retrying shortly" });
       if (claim === "done") return sendStateResponse(req, res); // applied earlier; acknowledge, don't repeat
     }
+    const opsSession = getSession(req);
+    // LOG-ONLY diagnostics (null unless SAVE_DIAGNOSTICS=1): observes this batch, never alters it — no body,
+    // write or ordering depends on it, and every call into it swallows its own errors.
+    const probe = saveDiag ? saveDiag.begin(body.ops, { anonymous: !opsSession }) : null;
     try {
-      await applyOps(body.ops, getSession(req));
+      await applyOps(body.ops, opsSession, probe ? probe.trace : undefined);
+      if (probe) probe.finish();
       if (batchId !== null) await opsBatch.complete(batchId);
     } catch (e) {
+      if (probe) probe.abort();
       if (batchId !== null) await opsBatch.release(batchId);
       if (e.status) return sendJson(res, e.status, { error: e.message });
       throw e;

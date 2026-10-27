@@ -98,3 +98,16 @@ Commits made before this one: `7495c30` (security: 11 files) and `d4e21ed` (back
 **Tests:** applyOpsLocal 8, opQueue 13, stateSync 6 (27 total), `tsc`, `vite build`; real browser (Edge): Add User online and offline — the server stores a hash only, the new user can sign in, the queue holds the password only until delivery and then nothing does, the cached snapshot never contains it; with the fix disabled that browser test fails (3 checks), so it detects the bug. Existing browser suites (flags on/off) still pass.
 **Not covered:** the password typed into the form is held in that form's own React state until the page unmounts (it unmounts right after saving); an offline queue that can never be delivered keeps the password in `neoteric_pending_ops` (inherent; see the poison-batch risk).
 **Rollback:** revert the commit.
+
+---
+# Round 6 — log-only save diagnostics (`SAVE_DIAGNOSTICS`, default OFF)
+Observation only; **no response body, write, frontend or default changes**. Compares the proposed "clean save" rule against what the server actually does to each applied `/api/ops` batch. Full guide: `docs/save-diagnostics.md`.
+| File | Change |
+|---|---|
+| `backend/saveDiagnostics.js` (new) | predictor + generic before/after fingerprint comparison + bounded, privacy-safe logging; every entry point swallows its own errors |
+| `backend/saveDiagnostics.test.js` (new) | 22 tests (every transformation, privacy, bounds, rate limit, isolation, no mutation) |
+| `backend/server.js` | `SAVE_DIAGNOSTICS` switch read once at startup; `/api/ops` calls `begin/finish/abort` only when on; `applyOps(ops, session, trace)` — the optional `trace` records the project-delete cascade counts and the re-inspection snag-closure count from results the code already received (null-safe, undefined in normal operation) |
+| `docs/save-diagnostics.md` (new), `docs/save-response-design.md` | how to enable, read and evaluate the logs; go/no-go gates |
+**Verified:** unit 22/22 plus three mutation checks; real-server end-to-end (14 scenarios: plain, member inspection with a Not OK item, work measurement, leader approval, admin inspection, user with password, three anonymous public creates, team-report sign-off, project cascade, passing re-inspection, a refused save, event batch) — every transformation observed correctly, **0 MISMATCH-unsafe**, ON and OFF produced identical statuses and final database state, no private value in the log, 15 log lines for 14 scenarios; fault injection (diagnostics throwing inside the live server: saves still 200, same writes, server up); backend suite and earlier integration suites unchanged. Overhead (local): ≈ 12 µs per small save, ≈ 0.14 ms per 16 KB inspection.
+**Not enabled, not deployed.** Enabling is setting `SAVE_DIAGNOSTICS=1` on Render (your decision).
+**Rollback:** revert the commit (or leave the variable unset — the code is inert).
