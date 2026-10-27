@@ -1,4 +1,4 @@
-import { useApp } from "../context/AppContext";
+import { useApp, authHeaders } from "../context/AppContext";
 import { API_BASE, HOUR } from "../services/config";
 import type { Op, Track, ProgressPatch } from "../types";
 import { pkey, prog, trackStages, byId, coll, refLabel } from "../shared/rules";
@@ -231,7 +231,7 @@ export function useActions() {
     try {
       const r = await fetch(API_BASE + "/api/photo", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ dataUrl, type: photoType })
       });
       const j = await r.json();
@@ -386,7 +386,7 @@ export function useActions() {
     try {
       const r = await fetch(API_BASE + "/api/photo", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ dataUrl, type: "progress" })
       });
       const j = await r.json();

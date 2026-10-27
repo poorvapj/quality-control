@@ -10,7 +10,7 @@ const PublicPage = matchPublicRoute(window.location.pathname);
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <AppProvider>
+    <AppProvider publicRoute={!!PublicPage}>
       {PublicPage ? <PublicPage /> : <App />}
     </AppProvider>
   </React.StrictMode>

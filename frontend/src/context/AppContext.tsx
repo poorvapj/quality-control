@@ -3,6 +3,7 @@ import type { BoardData, Op, Role, StoreMode, TabKey, MasterKey, User } from "..
 import { API_BASE } from "../services/config";
 import { byId, coll } from "../shared/rules";
 import { classifyStatus, flushQueue, newBatchId, normalizeQueue, tokenUserId, type QueuedBatch } from "../shared/opQueue";
+import { judgeStateResponse } from "../shared/stateSync";
 
 const LS_KEY = "neoteric_board_v5";
 const SESSION_KEY = "neoteric_session";
@@ -13,6 +14,14 @@ const PENDING_OPS_KEY = "neoteric_pending_ops";
 // queued batch made by one person being replayed under another's session.
 function currentTokenUser(): string | null {
   try { return tokenUserId(localStorage.getItem(TOKEN_KEY)); } catch { return null; }
+}
+
+// Every board fetch carries the session token when there is one, so the server can tell a signed-in user
+// from an anonymous caller (public forms / sign-in screen), who may be given a reduced public snapshot.
+async function fetchBoard(): Promise<any> {
+  const r = await fetch(API_BASE + "/api/state", { cache: "no-store", headers: authHeaders() });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return r.json();
 }
 
 export function authHeaders(): Record<string, string> {
@@ -147,7 +156,7 @@ export function useApp(): AppContextValue {
 
 const LOGIN_GATE_ENABLED = true;
 
-export function AppProvider({ children }: { children: React.ReactNode }) {
+export function AppProvider({ children, publicRoute = false }: { children: React.ReactNode; publicRoute?: boolean }) {
   const [data, setData] = useState<BoardData | null>(null);
   const [rev, setRev] = useState(0);
   const [mode, setMode] = useState<StoreMode>("connecting");
@@ -179,6 +188,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (toast as any)._t = window.setTimeout(() => setToastMsg(null), 2600);
   }, []);
 
+  // Public pages (/dpr/new, /forms/…) are served the allow-listed public snapshot; everywhere else a public
+  // snapshot means the session expired (see shared/stateSync.ts). Returns whether to use the response.
+  const publicRouteRef = useRef(publicRoute);
+  const acceptState = useCallback((s: any): boolean => {
+    let hasToken = false;
+    try { hasToken = !!localStorage.getItem(TOKEN_KEY); } catch {}
+    const v = judgeStateResponse(s, { publicRoute: publicRouteRef.current, hasToken, haveBoard: !!dataRef.current });
+    if (v.sessionExpired) {
+      try { localStorage.removeItem(SESSION_KEY); localStorage.removeItem(TOKEN_KEY); } catch {}
+      setLoggedIn(false);
+      toast("Your session expired — please sign in again");
+    }
+    return v.use;
+  }, [toast]);
+
   // This writes the ENTIRE board (every collection) to localStorage — it's
   // only ever read back as a best-effort "show something" fallback for a
   // cold app load with zero connectivity (see the initial-load effect
@@ -193,6 +217,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // display, never whether a save is queued/lost.
   const lastPersistLocalRef = useRef(0);
   const persistLocal = useCallback((d: BoardData) => {
+    // never let a public page's reduced snapshot overwrite the full board cached for the signed-in app
+    if (publicRouteRef.current) return;
     const now = Date.now();
     if (now - lastPersistLocalRef.current < 15000) return;
     lastPersistLocalRef.current = now;
@@ -374,12 +400,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // actually persisted.
         // (guarded: if this re-sync itself fails it must not fall through to the
         // network-failure branch below and queue a change the server just refused)
-        const fresh = await fetch(API_BASE + "/api/state", { cache: "no-store" }).then((x) => x.json()).catch(() => null);
-        if (fresh && fresh.data) { setData(fresh.data); dataRef.current = fresh.data; setRev(fresh.rev); }
+        const fresh = await fetchBoard().catch(() => null);
+        if (fresh && fresh.data && acceptState(fresh)) { setData(fresh.data); dataRef.current = fresh.data; setRev(fresh.rev); }
         toast(j.error || "That action isn't allowed");
         return false;
       }
-      if (j.data) { setData(j.data); dataRef.current = j.data; setRev(j.rev); }
+      if (j.data && acceptState(j)) { setData(j.data); dataRef.current = j.data; setRev(j.rev); }
       return true;
     } catch {
       // A network failure, NOT a rejection — e.g. the signal dropped, or a
@@ -393,17 +419,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toast("Offline — will save automatically once back online");
       return false;
     }
-  }, [persistLocal, queueOps, toast]);
+  }, [persistLocal, queueOps, toast, acceptState]);
 
   /* Initial load + poll */
   useEffect(() => {
     let stopped = false;
     (async () => {
       try {
-        const r = await fetch(API_BASE + "/api/state", { cache: "no-store" });
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        const j = await r.json();
+        const j = await fetchBoard();
         if (stopped) return;
+        acceptState(j); // first load: always shown (sign-in screen needs data) but a stale token is dropped
         setData(j.data); dataRef.current = j.data;
         setRev(j.rev); revRef.current = j.rev;
         setMode("live"); modeRef.current = "live";
@@ -411,8 +436,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // before the connection came back) gets its chance to actually
         // reach the server now, before anyone starts making new changes.
         if (pendingOpsRef.current.length > 0 && await flushPendingOps()) {
-          const s = await (await fetch(API_BASE + "/api/state", { cache: "no-store" })).json();
-          if (!stopped) { setData(s.data); dataRef.current = s.data; setRev(s.rev); revRef.current = s.rev; }
+          const s = await fetchBoard();
+          if (!stopped && acceptState(s)) { setData(s.data); dataRef.current = s.data; setRev(s.rev); revRef.current = s.rev; }
           toast("Synced changes saved while you were offline");
         }
       } catch {
@@ -439,10 +464,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const r = await fetch(API_BASE + "/api/rev", { cache: "no-store" });
           const j = await r.json();
           if (j.rev !== revRef.current) {
-            const s = await (await fetch(API_BASE + "/api/state", { cache: "no-store" })).json();
-            const merged = mergeStableCollections(dataRef.current, s.data);
-            setData(merged); dataRef.current = merged;
-            setRev(s.rev); revRef.current = s.rev;
+            const s = await fetchBoard();
+            if (acceptState(s)) {
+              const merged = mergeStableCollections(dataRef.current, s.data);
+              setData(merged); dataRef.current = merged;
+              setRev(s.rev); revRef.current = s.rev;
+            }
           }
         } catch {
           modeRef.current = "offline";
@@ -459,8 +486,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       try {
         const ok = await flushPendingOps();
         if (!ok) return;
-        const s = await (await fetch(API_BASE + "/api/state", { cache: "no-store" })).json();
-        setData(s.data); dataRef.current = s.data;
+        const s = await fetchBoard();
+        if (acceptState(s)) { setData(s.data); dataRef.current = s.data; }
         setRev(s.rev); revRef.current = s.rev;
         modeRef.current = "live"; setMode("live");
         toast("Back online — your changes were saved");
@@ -534,10 +561,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return body.error || "Invalid email or password";
       }
       const { user, token } = await res.json();
-      setCurrentUserId(user.id);
       try {
         localStorage.setItem(SESSION_KEY, "1");
         if (token) localStorage.setItem(TOKEN_KEY, token);
+      } catch {}
+      // The board loaded before sign-in may be the reduced public snapshot (see backend/publicState.js) —
+      // fetch the real one now that there is a token, BEFORE selecting the user (which reads the user's
+      // project restrictions from it). With the snapshot feature off this simply re-reads the same board.
+      try {
+        const s = await fetchBoard();
+        if (s && s.data && !s.public) {
+          const merged = mergeStableCollections(dataRef.current, s.data);
+          setData(merged); dataRef.current = merged;
+          setRev(s.rev); revRef.current = s.rev;
+        }
+      } catch {}
+      setCurrentUserId(user.id);
+      try {
         // A fresh real login is never mid-impersonation — clears any stale
         // flag from a previous admin session on a shared browser, so
         // Header.tsx's "Back to Admin" never shows to someone who didn't

@@ -1,4 +1,5 @@
 import { API_BASE } from "../services/config";
+import { authHeaders } from "../context/AppContext";
 import type { Photo } from "../types";
 import { watermarkPhoto } from "./watermark";
 
@@ -35,7 +36,9 @@ export async function uploadPhoto(
   try {
     const r = await fetch(API_BASE + "/api/photo", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      // the token (when there is one) lets the server tell a signed-in user from an anonymous
+      // public-form upload; with none (or an expired one) the upload is treated as anonymous
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({ dataUrl, type })
     });
     const j = await r.json();

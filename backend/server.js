@@ -71,6 +71,21 @@ const { getVmsDrawingRequests } = require("./vmsDrawingRequests.js");
 const { deriveApprovalOnCreate, resolveApprovalOnUpdate, findPendingApprovals } = require("./approvalRules.js");
 const approvalSlack = require("./approvalSlack.js");
 const { createOpsBatchStore, isValidBatchId } = require("./opsBatch.js");
+const { createPhotoGuard, clientIp } = require("./photoGuard.js");
+const { buildPublicState } = require("./publicState.js");
+// OFF by default. Turning it on makes GET /api/state and the /api/ops reply return only the allow-listed public
+// snapshot (publicState.js) to callers without a valid session. Older frontends fetch /api/state WITHOUT a token,
+// so enabling this before the new frontend is live (and old tabs have reloaded) would blank their board.
+// Order: deploy backend -> deploy frontend -> wait for old tabs to reload -> set PUBLIC_STATE_ENFORCE=1.
+const PUBLIC_STATE_ENFORCE = process.env.PUBLIC_STATE_ENFORCE === "1";
+const photoGuard = createPhotoGuard();
+// Which X-Forwarded-For entry is the real client (1 = last, added by the nearest trusted proxy). Unset = leftmost.
+// Check what Render sends for this service before setting it; the global upload cap protects either way.
+// Monitor-only until PHOTO_GUARD_ENFORCE=1: older frontends send no token on /api/photo, so a signed-in
+// user looks anonymous to the server. Deploy the frontend that sends the token first, check the logs
+// for "monitor-only, would refuse" lines, then set the flag.
+const PHOTO_GUARD_ENFORCE = process.env.PHOTO_GUARD_ENFORCE === "1";
+const CLIENT_IP_HOPS_FROM_RIGHT = parseInt(process.env.CLIENT_IP_HOPS_FROM_RIGHT, 10) || 0;
 const opsBatch = createOpsBatchStore(() => mongoDb); // /api/ops retry idempotency, see opsBatch.js
 const { sanitizePoEvent, matchProjectByName, isStaleUpdate } = require("./imsWebhook.js");
 const { buildTeamDailyReport, slackSummaryFor } = require("./teamDailyReports.js");
@@ -1551,6 +1566,12 @@ function sendJson(res, code, obj) {
 // response — on a slow/mobile connection this is the difference between a
 // few hundred KB and a few dozen.
 async function sendStateResponse(req, res) {
+  // Callers without a VALID session (anonymous, or an expired/invalid token — e.g. someone on a public form
+  // page who once signed in) get the allow-listed public snapshot instead of the whole board. Never a 401:
+  // the same function answers a public form's own successful write. Off until PUBLIC_STATE_ENFORCE=1 (see below).
+  if (PUBLIC_STATE_ENFORCE && !getSession(req)) {
+    return sendJson(res, 200, await buildPublicState(mongoDb, COLLECTIONS, await getRev()));
+  }
   if (String(req.headers["accept-encoding"] || "").includes("gzip")) {
     const { body: compressed } = await getStateGzip();
     res.writeHead(200, {
@@ -1930,6 +1951,15 @@ async function handleApi(req, res, urlPath) {
     return sendJson(res, 200, {});
   }
   if (req.method === "POST" && urlPath === "/api/photo") {
+    // A valid session = unchanged behaviour. A request with no (or an invalid/expired) token is
+    // treated as anonymous — never a 401 by itself, since the public DPR form uploads photos
+    // without signing in — and is limited by photoGuard.js (type, size, per-IP and global rate).
+    const photoSession = getSession(req);
+    if (PHOTO_GUARD_ENFORCE && !photoSession && Number(req.headers["content-length"]) > photoGuard.config.maxAnonBytes * 1.4) {
+      // refuse before buffering a huge body (base64 is ~1.37x the decoded size)
+      res.setHeader("Connection", "close");
+      return sendJson(res, 413, { error: `Photo is too large (limit ${Math.round(photoGuard.config.maxAnonBytes / 1048576)} MB)` });
+    }
     const body = await readBody(req);
     // PDF support exists only for Case Studies' general Attachments (a
     // writeup may reasonably want to attach a report/document, not just
@@ -1942,10 +1972,21 @@ async function handleApi(req, res, urlPath) {
     if (!PHOTO_TYPES.includes(body.type)) {
       return sendJson(res, 400, { error: "type must be one of: " + PHOTO_TYPES.join(", ") });
     }
+    const verdict = photoGuard.check({ session: photoSession, type: body.type, dataUrl: body.dataUrl, ip: clientIp(req, CLIENT_IP_HOPS_FROM_RIGHT) });
+    if (!verdict.ok) {
+      console.warn(`[photo] ${PHOTO_GUARD_ENFORCE ? "REFUSED" : "monitor-only, would refuse"} (${verdict.status}) type=${body.type} ip=${clientIp(req, CLIENT_IP_HOPS_FROM_RIGHT)}: ${verdict.error}`);
+      if (PHOTO_GUARD_ENFORCE) {
+        if (verdict.retryAfterSec) res.setHeader("Retry-After", String(verdict.retryAfterSec));
+        return sendJson(res, verdict.status, { error: verdict.error });
+      }
+    }
     try {
       const result = await cloudinary.uploader.upload(body.dataUrl, {
         folder: CLOUDINARY_ROOT + "/" + body.type,
-        resource_type: pdfMatch ? "raw" : "image"
+        resource_type: pdfMatch ? "raw" : "image",
+        // images may only be real image formats; anonymous uploads are tagged so they can be found and purged
+        ...(pdfMatch ? {} : { allowed_formats: ["png", "jpg", "jpeg", "webp"] }),
+        ...(verdict.anonymous ? { tags: ["anonymous-upload"] } : {})
       });
       return sendJson(res, 200, { url: result.secure_url, publicId: result.public_id });
     } catch (e) {
