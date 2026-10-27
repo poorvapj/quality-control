@@ -41,3 +41,19 @@ Backend `node --test`: 15 files, 15 pass (+ `opsBatch.test.js` 8/8, `vmsDprApi.t
 
 ## Deployment notes
 Deploy **backend first** (new clients send `batchId`; the server accepts it optionally, so either order won't break, but only a new backend dedupes). No env changes. First start creates one index (`meta.expireAt` TTL). Smoke test on staging: save a snag, submit an inspection, approve a measurement; toggle offline and save; confirm IMS/VMS pushes appear on an open board.
+
+---
+# Round 4 — shared state rebuild (`backend/stateBuilder.js`)
+Commits made before this one: `7495c30` (security: 11 files) and `d4e21ed` (backup: 6 files). Nothing pushed or deployed; no environment variable changed; neither enforcement switch is on.
+
+| File | Change |
+|---|---|
+| `backend/stateBuilder.js` (new) | cache + shared in-flight rebuild; the correctness rules are documented at the top of the file |
+| `backend/stateBuilder.test.js` (new) | 14 tests: concurrency, revision change, read-your-writes, stamp ordering, failure handling (revision read / build / serialize), TTL safety net, late-older-build, hung build, repeated bursts; the harness fails if any test never finishes |
+| `backend/server.js` | `getStateGzip` delegates to the builder; `getState(knownRev)` reads the revision **before** the data (it used to read it in parallel — a latent race where a snapshot could be stamped newer than its data) |
+
+**Rules (each covered by a test, and by a mutation check that makes the suite fail if the rule is broken):** the revision is read from the database on every call before anything is served from cache or an in-flight build; a request joins only a build started for the *same* revision and younger than 30 s; a snapshot is stamped with the revision read before its data; a failed build is never cached and its in-flight slot is always cleared; an older build can never replace newer cache data (including the same revision); the 3 s TTL safety net for out-of-band writes is unchanged.
+**Behavior change:** none to any API shape or business logic. Internally one rebuild per revision instead of one per request, and one extra sequential revision read on cache-miss paths (≈ +20 ms catch-up at today's data size, measured locally; see `docs/performance-baseline.md`). A failed rebuild still returns the existing generic API error (HTTP 400 with the message) to the requests that were waiting on it.
+**Verified:** backend suite (19 files), stateBuilder 14/14, real-server stress (60 concurrent writers + 12 readers: 0 own-write misses, 0 stale-as-current, convergence), fault injection (the first gzip fails: waiting requests get an error, server stays up, next request recovers, `/api/rev` unaffected), ops/rev/backup/photo/public-state integration, real-browser runs with the switches on and off, `tsc`, frontend tests, `vite build`. **Local benchmark only** (real server + in-memory MongoDB, loopback): 40-client catch-up after one write 11.8 s → 0.29 s at 10x data and 19.4 s → 0.93 s (15 clients) at 40x; server working set 2.2 → 0.48 GB and 2.7 → 0.63 GB; at today's size catch-up is ~20 ms *slower* (3/3 runs). Not measured: Atlas, Render, real clients.
+**Not changed:** delta sync, transactions, schema, collections, retention, flag defaults, the save reply (still the full board).
+**Rollback:** revert this commit (restores the previous in-line cache in `server.js`; `stateBuilder.js` and its test are removed with it).

@@ -72,6 +72,7 @@ const { deriveApprovalOnCreate, resolveApprovalOnUpdate, findPendingApprovals } 
 const approvalSlack = require("./approvalSlack.js");
 const { createOpsBatchStore, isValidBatchId } = require("./opsBatch.js");
 const backups = require("./backups.js");
+const { createStateBuilder } = require("./stateBuilder.js");
 const { createPhotoGuard, clientIp } = require("./photoGuard.js");
 const { buildPublicState } = require("./publicState.js");
 // OFF by default. Turning it on makes GET /api/state and the /api/ops reply return only the allow-listed public
@@ -756,32 +757,33 @@ async function getRev() {
 // out-of-band write that bypasses bumpRev entirely (e.g. an ad-hoc cleanup
 // script run directly against Mongo) — such a change still surfaces within
 // 3s, no worse than today's 5s client poll interval already allows.
-let stateCache = null; // { rev, body (Buffer, gzip), builtAt }
+// The cache AND the rebuild are now owned by stateBuilder.js: concurrent requests for the same revision
+// share ONE rebuild (previously each client's request rebuilt the whole board on its own — measured at
+// ~11 s / ~2 GB for 40 clients at 10x data), and the revision is always read first. Rules + tests there.
 const STATE_CACHE_TTL_MS = 3000;
-
-async function getStateGzip() {
-  const rev = await getRev();
-  const fresh = stateCache && stateCache.rev === rev && Date.now() - stateCache.builtAt < STATE_CACHE_TTL_MS;
-  if (fresh) return { rev, body: stateCache.body };
-  const state = await getState();
-  const body = await new Promise((resolve, reject) =>
+const stateBuilder = createStateBuilder({
+  getRev,
+  readState: (rev) => getState(rev),
+  serialize: (state) => new Promise((resolve, reject) =>
     zlib.gzip(JSON.stringify(state), (err, buf) => (err ? reject(err) : resolve(buf)))
-  );
-  stateCache = { rev: state.rev, body, builtAt: Date.now() };
-  return { rev: state.rev, body };
-}
+  ),
+  ttlMs: STATE_CACHE_TTL_MS
+});
+const getStateGzip = () => stateBuilder.get();
 
-async function getState() {
+// `knownRev`: the revision the caller read BEFORE asking for the data. The snapshot is stamped with it, so it
+// can never claim to be newer than the data it carries (a write landing mid-read only makes the stamp old).
+async function getState(knownRev) {
+  const rev = knownRev !== undefined ? knownRev : await getRev(); // read BEFORE the data, never in parallel with it
   // Every collection fetch here is an independent round-trip to Atlas —
   // awaiting them one at a time in a loop made total load time the SUM of
   // every collection's latency instead of the max, which is most of why
   // sign-in felt slow (this one call blocks the whole app on first load).
   // Promise.all runs them concurrently instead.
-  const [collResults, progressDocs, events, rev] = await Promise.all([
+  const [collResults, progressDocs, events] = await Promise.all([
     Promise.all(COLLECTIONS.map((c) => mongoDb.collection(c).find({}, { projection: { _id: 0 } }).toArray())),
     mongoDb.collection("progress").find({}).toArray(),
-    mongoDb.collection("events").find({}, { projection: { _id: 0 } }).sort({ ts: -1 }).limit(MAX_EVENTS).toArray(),
-    getRev()
+    mongoDb.collection("events").find({}, { projection: { _id: 0 } }).sort({ ts: -1 }).limit(MAX_EVENTS).toArray()
   ]);
 
   const data = {};
