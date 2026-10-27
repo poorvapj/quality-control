@@ -1,7 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, myProjects } from "../shared/rules";
-import { nextId } from "../shared/helpers";
 import { buildEventOp } from "../shared/eventLog";
 import { WORK_CATEGORIES } from "../services/config";
 import type { DailyProgressReport, DprWorkEntry, ShiftType, Photo, WorkTarget, Op } from "../types";
@@ -171,7 +170,17 @@ export default function DprForm({ isPublic, onDone }: { isPublic: boolean; onDon
     if (missingPhoto) { toast(`"${missingPhoto.category}" needs at least 1 photo`); return; }
     setSaving(true);
     const rec: DailyProgressReport = {
-      id: nextId("DPR", coll(data, "dpr")),
+      // nextId("DPR", coll(data,"dpr")) used to pick this — but its regex
+      // only recognizes this app's own "DPR-0001" shape, never the
+      // "DPR-VMS-<id>" ones the VMS sync writes (by far most of this
+      // collection in production), so it always counted from 0 on any
+      // board whose only dpr rows happened to be VMS ones. Two DRIs
+      // submitting around the same time (neither had yet re-synced to see
+      // the other's save) both computed "DPR-0001" — same id, so the
+      // second one's upsert silently overwrote the first one's report
+      // with no error to either DRI. A timestamp+random id can't collide
+      // this way, since it doesn't depend on counting what's already there.
+      id: "DPR-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase(),
       projectId,
       projectName: coll(data, "projects").find((p) => p.id === projectId)?.name || "",
       submittedByUserId: isPublic ? null : currentUserId,

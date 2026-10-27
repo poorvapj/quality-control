@@ -68,10 +68,17 @@ export default function Measurement() {
   const isAdmin = currentUserId === "U-ADMIN";
   const canCreate = isAdmin || hasModuleGrant(data, currentUserId, "measurement", "create");
   const allProjects = myProjects(data, currentUserId);
-  const allowedCodes = new Set(allProjects.map((p) => p.code));
-  const measurements = coll(data, "workMeasurements")
-    .filter((m) => allowedCodes.has(m.projectCode))
-    .sort((a, b) => b.createdAt - a.createdAt);
+  // `useMemo` was imported but never actually used — this filter+sort (and
+  // the shown/linkedCount/needsConfirm/unlinked ones below) re-ran on every
+  // render, including a keystroke in an unrelated field, instead of only
+  // when the measurements themselves (or the filters) change.
+  const measurements = useMemo(() => {
+    const allowedCodes = new Set(allProjects.map((p) => p.code));
+    return coll(data, "workMeasurements")
+      .filter((m) => allowedCodes.has(m.projectCode))
+      .sort((a, b) => b.createdAt - a.createdAt);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, currentUserId]);
 
   const [fProjectId, setFProjectId] = useState("");
   const [fLink, setFLink] = useState("");
@@ -109,15 +116,17 @@ export default function Measurement() {
     return () => { cancelled = true; };
   }, [linkKey]);
 
-  const shown = measurements.filter((m) => {
+  const shown = useMemo(() => measurements.filter((m) => {
     if (fProjectId && m.projectId !== fProjectId) return false;
     if (fLink === "linked" && !(m.linkStatus === "auto" || m.linkStatus === "confirmed")) return false;
     if (fLink && fLink !== "linked" && m.linkStatus !== fLink) return false;
     return true;
-  });
-  const linkedCount = measurements.filter((m) => m.linkStatus === "auto" || m.linkStatus === "confirmed").length;
-  const needsConfirm = measurements.filter((m) => m.linkStatus === "ambiguous").length;
-  const unlinked = measurements.filter((m) => m.linkStatus === "unmatched").length;
+  }), [measurements, fProjectId, fLink]);
+  const { linkedCount, needsConfirm, unlinked } = useMemo(() => ({
+    linkedCount: measurements.filter((m) => m.linkStatus === "auto" || m.linkStatus === "confirmed").length,
+    needsConfirm: measurements.filter((m) => m.linkStatus === "ambiguous").length,
+    unlinked: measurements.filter((m) => m.linkStatus === "unmatched").length
+  }), [measurements]);
 
   return (
     <div>

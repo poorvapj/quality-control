@@ -85,6 +85,14 @@ export const DEFAULT_ROLE_GRANTS: Partial<Record<Role, Record<string, ModuleActi
     team: ["view", "edit"],
     dpr: ["view", "create"],
     drawingRequests: ["view", "create", "edit"]
+  },
+  Quality: {
+    dashboard: ["view"], myWork: ["view"], towerBoard: ["view"],
+    handoverInternal: ["view", "edit"], handoverOwner: ["view"],
+    snags: ["view", "create", "edit", "delete"],
+    team: ["view"],
+    dpr: ["view", "create"],
+    qualityInspection: ["view", "create", "edit"]
   }
 };
 

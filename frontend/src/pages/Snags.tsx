@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
-import { coll, refLabel, snagTarget, myProjects } from "../shared/rules";
+import { coll, myProjects } from "../shared/rules";
+import type { Snag } from "../types";
 import { dueLabel, ago } from "../shared/helpers";
 import { ESCALATION_DAYS, HOUR } from "../services/config";
 import NavIcon from "../components/NavIcon";
@@ -36,6 +37,35 @@ export default function Snags() {
     toast("Deleted " + s.id);
   }
 
+  // Every row below used to call refLabel()/snagTarget() several times,
+  // each doing its own O(n) .find() over the full projects/units/floors/
+  // stages/qparams/users collections (units alone is ~2640 rows, the
+  // biggest collection in the app) — so rendering the list was effectively
+  // O(snags × collection sizes), redone on every render including just
+  // typing in the search box. Building one id -> record Map per collection
+  // here (only rebuilt when `data` itself changes, not on local filter/
+  // search state) turns each lookup below into an O(1) Map.get() instead.
+  const idMaps = useMemo(() => {
+    const mapOf = (rows: { id: string }[]) => new Map(rows.map((r) => [r.id, r]));
+    return {
+      projects: mapOf(coll(data, "projects")),
+      units: mapOf(coll(data, "units")),
+      floors: mapOf(coll(data, "floors")),
+      stages: mapOf(coll(data, "stages")),
+      qparams: mapOf(coll(data, "qparams")),
+      users: mapOf(coll(data, "users"))
+    };
+  }, [data]);
+  function fastLabel(mapName: keyof typeof idMaps, id?: string | null): string {
+    if (!id) return "—";
+    const r: any = idMaps[mapName].get(id);
+    if (!r) return id || "—";
+    return r.name || r.code || r.id;
+  }
+  function fastSnagTarget(s: Snag): string {
+    return s.unitId ? fastLabel("units", s.unitId) : s.floorId ? fastLabel("floors", s.floorId) : "—";
+  }
+
   const myPids = new Set(allProjects.map((p) => p.id));
   let list = coll(data, "snags").filter((s) => myPids.has(s.projectId));
   if (fp !== ALL_PROJECTS) list = list.filter((s) => s.projectId === fp);
@@ -45,7 +75,7 @@ export default function Snags() {
   if (fm === "raised") list = list.filter((s) => s.raisedBy === currentUserId);
   if (q) {
     const ql = q.toLowerCase();
-    list = list.filter((s) => (s.title + " " + (s.description || "") + " " + snagTarget(data, s)).toLowerCase().includes(ql));
+    list = list.filter((s) => (s.title + " " + (s.description || "") + " " + fastSnagTarget(s)).toLowerCase().includes(ql));
   }
   list = list.slice().sort(
     (a, b) => (b.status === "Closed" ? -1 : 1) - (a.status === "Closed" ? -1 : 1) || (b.raisedAt || 0) - (a.raisedAt || 0)
@@ -91,7 +121,7 @@ export default function Snags() {
             >
               <div className="min-w-0 flex-1">
                 <div className="text-[13px] font-bold">{s.id} · {s.title}</div>
-                <div className="text-[11px] text-[var(--text-muted)] mt-0.5 leading-normal">{snagTarget(data, s)} · assigned to {refLabel(data, "users", s.assignedTo)} · {dueLabel(s.dueAt).text}</div>
+                <div className="text-[11px] text-[var(--text-muted)] mt-0.5 leading-normal">{fastSnagTarget(s)} · assigned to {fastLabel("users", s.assignedTo)} · {dueLabel(s.dueAt).text}</div>
               </div>
               <Badge color={SEVERITY_BADGE_COLOR[s.severity] || "gray"}>{s.severity}</Badge>
             </div>
@@ -170,10 +200,10 @@ export default function Snags() {
                 <div className="min-w-0 flex-1">
                   <div className="text-[13px] font-bold">{s.id} · {s.title}</div>
                   <div className="text-[11px] text-[var(--text-muted)] mt-0.5 leading-normal">
-                    {fp === ALL_PROJECTS ? refLabel(data, "projects", s.projectId) + " · " : ""}
-                    {snagTarget(data, s)} · {refLabel(data, "stages", s.stageId)} ·{" "}
-                    {s.paramId ? refLabel(data, "qparams", s.paramId) + " · " : ""}
-                    raised by {refLabel(data, "users", s.raisedBy)} {ago(s.raisedAt)} · on {refLabel(data, "users", s.assignedTo)}
+                    {fp === ALL_PROJECTS ? fastLabel("projects", s.projectId) + " · " : ""}
+                    {fastSnagTarget(s)} · {fastLabel("stages", s.stageId)} ·{" "}
+                    {s.paramId ? fastLabel("qparams", s.paramId) + " · " : ""}
+                    raised by {fastLabel("users", s.raisedBy)} {ago(s.raisedAt)} · on {fastLabel("users", s.assignedTo)}
                   </div>
                 </div>
                 <div className="flex gap-1.5 items-center flex-wrap shrink-0">
