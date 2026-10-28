@@ -871,6 +871,7 @@ function InspectionForm({
     setContractor(""); setCustomContractor(false);
     setResult("Pass"); setSeverity("Major"); setRemarks(""); setPhotos([]);
     setAssignedToUserId(myTeamLeader?.id || ""); setTargetDate("");
+    forcedFailRef.current = false;
   }, [open, reInspectOf]);
 
   // Picking a Work Type (re)seeds the checklist from the master list —
@@ -900,10 +901,19 @@ function InspectionForm({
   }
   // Any Not OK item forces the overall Result to Fail — locked, not a
   // default the inspector can override. Un-locks automatically if every
-  // Not OK item is corrected back to OK/N/A before saving.
+  // Not OK item is corrected back to OK/N/A before saving. Previously only
+  // the lock itself was wired up — nothing ever reverted it, so an
+  // inspector who fixed every item back to OK still saw "Fail" sitting
+  // there (now editable again, but not auto-corrected) and had to notice
+  // and change it themselves. `forcedFailRef` tracks whether THIS lock is
+  // what set Fail, so unlocking only resets it when that's true — a Fail
+  // the inspector picked manually (allowed whenever nothing is Not OK) is
+  // never touched.
   const anyNotOk = checklist.some((c) => c.status === "Not OK");
+  const forcedFailRef = useRef(false);
   useEffect(() => {
-    if (anyNotOk) setResult("Fail");
+    if (anyNotOk) { setResult("Fail"); forcedFailRef.current = true; }
+    else if (forcedFailRef.current) { setResult("Pass"); forcedFailRef.current = false; }
   }, [anyNotOk]);
   function setItemRemarks(idx: number, text: string) {
     setChecklist((prev) => prev.map((row, i) => (i === idx ? { ...row, remarks: text } : row)));

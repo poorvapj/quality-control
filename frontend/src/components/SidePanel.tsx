@@ -22,6 +22,15 @@ export default function SidePanel({
     if (!open) return;
     previouslyFocused.current = document.activeElement as HTMLElement;
     closeBtnRef.current?.focus();
+    // intentionally not depending on `onClose` below — every caller passes
+    // a fresh inline arrow function on every one of ITS OWN re-renders
+    // (`onClose={() => setXOpen(false)}`), which used to make React treat
+    // that as a changed dependency and re-run this whole effect — stealing
+    // focus back to the Close button (via closeBtnRef.focus() above) on
+    // every parent re-render, including the 5s board poll while someone
+    // was mid-sentence in any textarea/input inside the panel. The keydown
+    // handler below still always calls the LATEST onClose via closure, so
+    // nothing here actually depended on re-running when onClose changed.
 
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -53,7 +62,7 @@ export default function SidePanel({
       document.body.style.overflow = prevOverflow;
       previouslyFocused.current?.focus();
     };
-  }, [open, onClose]);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!open) return null;
   return (
