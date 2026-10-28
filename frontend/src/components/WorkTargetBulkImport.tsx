@@ -119,9 +119,9 @@ export default function WorkTargetBulkImport({ onClose }: { onClose: () => void 
     }
     ops.push(buildEventOp(currentUserId, "MASTER_SAVE", "", "", `Work Target · bulk import · ${created} created, ${updated} updated`));
 
-    await apply(ops);
+    const synced = await apply(ops);
     setSaving(false);
-    toast(`Imported ${created + updated} Work Target${created + updated === 1 ? "" : "s"} (${created} new, ${updated} updated)`);
+    toast(synced ? `Imported ${created + updated} Work Target${created + updated === 1 ? "" : "s"} (${created} new, ${updated} updated)` : "Saved on this device — will finish submitting once you're back online");
     onClose();
   }
 

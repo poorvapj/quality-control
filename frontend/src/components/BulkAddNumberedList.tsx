@@ -64,8 +64,8 @@ export default function BulkAddNumberedList({
         ops.push({ op: "upsert", coll: master, rec: { id, projectId, name: `${prefix.trim()} ${i}`, seq, active: true } });
       }
       ops.push(buildEventOp(currentUserId, "MASTER_SAVE", projectId, "", `${idPrefix === "COL" ? "Column" : "Slab"} Master · bulk created ${toN - fromN + 1}`));
-      await apply(ops);
-      toast(`Created ${toN - fromN + 1} entries`);
+      const synced = await apply(ops);
+      toast(synced ? `Created ${toN - fromN + 1} entries` : "Saved on this device — will finish submitting once you're back online");
       onClose();
     } finally {
       setSaving(false);

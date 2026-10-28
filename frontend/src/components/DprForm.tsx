@@ -200,9 +200,17 @@ export default function DprForm({ isPublic, onDone }: { isPublic: boolean; onDon
     // session for its own op.
     const ops: Op[] = [{ op: "upsert", coll: "dpr", rec }];
     if (!isPublic) ops.push(buildEventOp(currentUserId, "DPR_SUBMIT", rec.id, "", `${rec.vendorName} · ${workEntries.length} work item(s) · ${rec.projectName}`));
-    await apply(ops);
+    // apply() queues the op on this device instead of losing it when the
+    // network/session fails (see AppContext.tsx), but this form kept
+    // showing the same "submitted" toast either way — someone whose
+    // submission only got as far as the local queue (phone briefly
+    // offline, a flaky connection, an expired 7-day session) saw the exact
+    // same confirmation as a real save, with nothing telling them it
+    // hadn't actually reached the server yet. QualityInspection.tsx's own
+    // save() already checks this; DprForm.tsx never did.
+    const synced = await apply(ops);
     setSaving(false);
-    toast("Daily progress report submitted");
+    toast(synced ? "Daily progress report submitted" : "Saved on this device — will finish submitting once you're back online");
     onDone(rec.id);
   }
 

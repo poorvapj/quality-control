@@ -276,12 +276,12 @@ function CaseStudyForm({
       createdByName: authorName,
       createdAt: Date.now()
     };
-    await apply([
+    const synced = await apply([
       { op: "upsert", coll: "caseStudies", rec },
       buildEventOp(currentUserId || "", "CASE_STUDY_CREATE", rec.id, "", `Case study logged · ${rec.title}`)
     ]);
     setSaving(false);
-    toast("Case study saved");
+    toast(synced ? "Case study saved" : "Saved on this device — will finish submitting once you're back online");
     reset();
     onClose();
   }

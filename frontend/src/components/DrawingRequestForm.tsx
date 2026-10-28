@@ -40,12 +40,12 @@ export default function DrawingRequestForm({
       // Only the basic ticket details are editable here — reviewStatus, reviewHistory,
       // files and stage assignment are never touched, so the workflow stays append-only.
       const projectName = coll(data, "projects").find((p) => p.id === projectId)?.name || "";
-      await apply([{
+      const synced = await apply([{
         op: "upsert", coll: "drawingRequests",
         rec: { id: editRecord.id, projectId, projectName, description: description.trim(), drawingType, source, requesterName: requesterName.trim(), requestedPriority }
       }]);
       setSaving(false);
-      toast("Drawing request updated");
+      toast(synced ? "Drawing request updated" : "Saved on this device — will finish submitting once you're back online");
       onDone(editRecord.ticketNo);
       return;
     }

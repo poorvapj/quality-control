@@ -49,7 +49,7 @@ export default function CustomFormFill({ form, onDone }: { form: CustomFormDef; 
     }
     setSaving(true);
     const id = nextId("SUB", coll(data, "formSubmissions"));
-    await apply([
+    const synced = await apply([
       {
         op: "upsert", coll: "formSubmissions",
         rec: {
@@ -59,6 +59,7 @@ export default function CustomFormFill({ form, onDone }: { form: CustomFormDef; 
       }
     ]);
     setSaving(false);
+    if (!synced) toast("Saved on this device — will finish submitting once you're back online");
     onDone(id);
   }
 

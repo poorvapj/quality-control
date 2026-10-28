@@ -29,23 +29,31 @@ export function useActions() {
     if (drawer) openDrawer(drawer);
   }
 
+  // apply() queues an op on this device instead of losing it when the
+  // network/session fails, rather than discarding it — but every action
+  // below used to show the same success toast regardless, so an action
+  // that only reached the local queue looked identical, to whoever did it,
+  // to one that actually reached the server. Swap in this message whenever
+  // `synced` comes back false.
+  const OFFLINE_TOAST = "Saved on this device — will finish submitting once you're back online";
+
   async function ackStage(kind: Track, id: string, stageId: string) {
-    await apply([
+    const synced = await apply([
       progressOp(id, stageId, { status: "ack", ack: Date.now(), by: currentUserId || "" }),
       logEvent("ACK", id, stageId, "Acknowledged release")
     ]);
     reopenDrawer();
-    toast("Release acknowledged");
+    toast(synced ? "Release acknowledged" : OFFLINE_TOAST);
   }
 
   async function startStage(kind: Track, id: string, stageId: string) {
     const p = prog(data, id, stageId);
-    await apply([
+    const synced = await apply([
       progressOp(id, stageId, { status: "wip", ack: p.ack || Date.now(), start: Date.now(), by: currentUserId || "" }),
       logEvent("START", id, stageId, "Work started")
     ]);
     reopenDrawer();
-    toast("Work started");
+    toast(synced ? "Work started" : OFFLINE_TOAST);
   }
 
   function releaseNextOps(kind: Track, id: string, stageId: string): Op[] {
@@ -63,20 +71,20 @@ export function useActions() {
       logEvent("COMPLETE", id, stageId, "Stage completed"),
       ...releaseNextOps(kind, id, stageId)
     ];
-    await apply(ops);
+    const synced = await apply(ops);
     reopenDrawer();
-    toast("Completed · next stage released");
+    toast(synced ? "Completed · next stage released" : OFFLINE_TOAST);
   }
 
   async function failStage(kind: Track, id: string, stageId: string) {
     const reason = prompt("QC failure reason (mandatory):");
     if (!reason) return;
-    await apply([
+    const synced = await apply([
       progressOp(id, stageId, { status: "fail", at: Date.now(), by: currentUserId || "", note: reason }),
       logEvent("QC_FAIL", id, stageId, reason)
     ]);
     reopenDrawer();
-    toast("Gate failed — raise a snag to track the rework");
+    toast(synced ? "Gate failed — raise a snag to track the rework" : OFFLINE_TOAST);
     if (kind === "unit") openSnagModal({ unitId: id, stageId, preset: reason });
   }
 
@@ -90,9 +98,9 @@ export function useActions() {
         logEvent("QC_PASS", id, stageId, "Checklist passed (" + results.length + " lines)"),
         ...releaseNextOps(kind, id, stageId)
       ];
-      await apply(ops);
+      const synced = await apply(ops);
       reopenDrawer();
-      toast("Gate passed · next stage released");
+      toast(synced ? "Gate passed · next stage released" : OFFLINE_TOAST);
       return;
     }
 
@@ -124,9 +132,9 @@ export function useActions() {
         }
       });
     }
-    await apply(ops);
+    const synced = await apply(ops);
     reopenDrawer();
-    toast(failed.length + " snag(s) raised · gate failed");
+    toast(synced ? failed.length + " snag(s) raised · gate failed" : OFFLINE_TOAST);
   }
 
   async function saveAssignment(input: { targetType: Track; targetId: string; stageId: string; itemId?: string; assignedTo: string; dueAt: number | null; note: string; projectId?: string }) {
@@ -145,11 +153,11 @@ export function useActions() {
       status: "Assigned" as const,
       note: input.note
     };
-    await apply([
+    const synced = await apply([
       { op: "upsert", coll: "assignments", rec },
       logEvent("ASSIGN", rec.targetId, rec.stageId, "Assigned to " + refLabel(data, "users", rec.assignedTo))
     ]);
-    toast("Assigned to " + refLabel(data, "users", rec.assignedTo));
+    toast(synced ? "Assigned to " + refLabel(data, "users", rec.assignedTo) : OFFLINE_TOAST);
   }
 
   async function setAssignStatus(id: string, status: "Assigned" | "Accepted" | "Done") {
@@ -157,12 +165,12 @@ export function useActions() {
     if (!a) return;
     const rec: any = Object.assign({}, a, { status });
     if (status === "Done") { rec.doneAt = Date.now(); rec.doneBy = currentUserId; }
-    await apply([
+    const synced = await apply([
       { op: "upsert", coll: "assignments", rec },
       logEvent("ASSIGN_" + status.toUpperCase(), a.targetId, a.stageId, status + " by " + refLabel(data, "users", currentUserId))
     ]);
     reopenDrawer();
-    toast("Assignment marked " + status.toLowerCase());
+    toast(synced ? "Assignment marked " + status.toLowerCase() : OFFLINE_TOAST);
   }
 
   async function saveSnag(input: { unitId: string; stageId: string; itemId?: string; paramId: string; title: string; description: string; severity: "Critical" | "Major" | "Minor"; assignedTo: string; dueAt: number | null; projectId?: string }) {
@@ -184,11 +192,11 @@ export function useActions() {
       dueAt: input.dueAt,
       photos: [], comments: []
     };
-    await apply([
+    const synced = await apply([
       { op: "upsert", coll: "snags", rec },
       logEvent("SNAG_RAISE", rec.unitId, rec.stageId, rec.title)
     ]);
-    toast("Snag " + rec.id + " raised");
+    toast(synced ? "Snag " + rec.id + " raised" : OFFLINE_TOAST);
   }
 
   async function setSnagStatus(id: string, status: "Open" | "In Progress" | "Closed") {
@@ -203,23 +211,23 @@ export function useActions() {
       patch.reopenedAt = Date.now();
       patch.reopenedBy = currentUserId;
     }
-    await apply([
+    const synced = await apply([
       { op: "upsert", coll: "snags", rec: patch },
       logEvent(reopening ? "SNAG_REOPEN" : "SNAG_" + status.toUpperCase().replace(" ", "_"), s.unitId || "", s.stageId, s.title)
     ]);
     reopenDrawer();
-    toast(reopening ? "Snag reopened" : "Snag " + status.toLowerCase());
+    toast(!synced ? OFFLINE_TOAST : reopening ? "Snag reopened" : "Snag " + status.toLowerCase());
   }
 
   async function saveSnagAssignee(id: string, to: string) {
     const s = byId(coll(data, "snags"), id);
     if (!s) return;
-    await apply([
+    const synced = await apply([
       { op: "upsert", coll: "snags", rec: Object.assign({}, s, { assignedTo: to, lastReassignedBy: currentUserId, lastReassignedAt: Date.now() }) },
       logEvent("SNAG_REASSIGN", s.unitId || "", s.stageId, "to " + refLabel(data, "users", to))
     ]);
     reopenDrawer();
-    toast("Reassigned to " + refLabel(data, "users", to));
+    toast(synced ? "Reassigned to " + refLabel(data, "users", to) : OFFLINE_TOAST);
   }
 
   async function capturePhoto(kind: "snag" | "unit" | "floor", id: string, stageId: string, file: File) {
@@ -240,11 +248,12 @@ export function useActions() {
     } catch {
       photo.localOnly = true;
     }
+    let synced = true;
     if (kind === "snag") {
       const s = byId(coll(data, "snags"), id);
-      if (s) await apply([{ op: "upsert", coll: "snags", rec: Object.assign({}, s, { photos: (s.photos || []).concat([photo]) }) }]);
+      if (s) synced = await apply([{ op: "upsert", coll: "snags", rec: Object.assign({}, s, { photos: (s.photos || []).concat([photo]) }) }]);
     } else {
-      await apply([
+      synced = await apply([
         { op: "progress", key: pkey(id, stageId), patch: { meas: Date.now(), measBy: currentUserId || "", photo } },
         logEvent("MEASURE", id, stageId, "Hidden work measured and photographed")
       ]);
@@ -253,7 +262,9 @@ export function useActions() {
     // Upload itself failing silently (kept only as raw local data) was
     // exactly how a photo-heavy submission went missing with no warning —
     // see uploadPhoto.ts for the same fix on the other photo-capture path.
-    toast(photo.localOnly ? "Photo upload failed — kept locally for now, try re-uploading" : "Photo attached");
+    // The whole record not reaching the server at all is the more serious
+    // of the two possible problems here, so it takes priority in the toast.
+    toast(!synced ? OFFLINE_TOAST : photo.localOnly ? "Photo upload failed — kept locally for now, try re-uploading" : "Photo attached");
   }
 
   /* ---------------------------------------------------------- item-based
@@ -277,22 +288,22 @@ export function useActions() {
     return items.every((it) => cells.find((c) => c.itemId === it.id)?.status === "done") ? "done" : "wip";
   }
   async function writeStageCells(unitId: string, stageId: string, cells: any[], items: { id: string; name?: string }[]) {
-    await apply([{ op: "progress", key: pkey(unitId, stageId), patch: { status: itemStageStatus(cells, items), checklist: cells } }]);
+    return apply([{ op: "progress", key: pkey(unitId, stageId), patch: { status: itemStageStatus(cells, items), checklist: cells } }]);
   }
 
   async function ackStageItem(unitId: string, stageId: string, itemId: string) {
     const cells = upsertCell(stageCells(unitId, stageId), itemId, { status: "ack", ack: Date.now(), by: currentUserId || "" });
-    await apply([{ op: "progress", key: pkey(unitId, stageId), patch: { checklist: cells } }, logEvent("ACK", unitId, stageId, "Acknowledged release")]);
+    const synced = await apply([{ op: "progress", key: pkey(unitId, stageId), patch: { checklist: cells } }, logEvent("ACK", unitId, stageId, "Acknowledged release")]);
     reopenDrawer();
-    toast("Release acknowledged");
+    toast(synced ? "Release acknowledged" : OFFLINE_TOAST);
   }
 
   async function startStageItem(unitId: string, stageId: string, itemId: string) {
     const existing = stageCells(unitId, stageId).find((c) => c.itemId === itemId);
     const cells = upsertCell(stageCells(unitId, stageId), itemId, { status: "wip", ack: existing?.ack || Date.now(), start: Date.now(), by: currentUserId || "" });
-    await apply([{ op: "progress", key: pkey(unitId, stageId), patch: { checklist: cells } }, logEvent("START", unitId, stageId, "Work started")]);
+    const synced = await apply([{ op: "progress", key: pkey(unitId, stageId), patch: { checklist: cells } }, logEvent("START", unitId, stageId, "Work started")]);
     reopenDrawer();
-    toast("Work started");
+    toast(synced ? "Work started" : OFFLINE_TOAST);
   }
 
   function releaseNextStageItem(cells: any[], items: { id: string; name?: string }[], idx: number): any[] {
@@ -311,19 +322,19 @@ export function useActions() {
       logEvent("COMPLETE", unitId, stageId, (items[idx]?.name || itemId) + " completed"),
     ];
     if (itemStageStatus(cells, items) === "done") ops.push(...releaseNextOps("unit", unitId, stageId));
-    await apply(ops);
+    const synced = await apply(ops);
     reopenDrawer();
-    toast("Completed · next item released");
+    toast(synced ? "Completed · next item released" : OFFLINE_TOAST);
   }
 
   async function failStageItem(unitId: string, stageId: string, itemId: string, items: { id: string; name?: string }[]) {
     const reason = prompt("QC failure reason (mandatory):");
     if (!reason) return;
     const cells = upsertCell(stageCells(unitId, stageId), itemId, { status: "fail", at: Date.now(), by: currentUserId || "", note: reason });
-    await writeStageCells(unitId, stageId, cells, items);
-    await apply([logEvent("QC_FAIL", unitId, stageId, reason)]);
+    const synced1 = await writeStageCells(unitId, stageId, cells, items);
+    const synced2 = await apply([logEvent("QC_FAIL", unitId, stageId, reason)]);
     reopenDrawer();
-    toast("Gate failed — raise a snag to track the rework");
+    toast(synced1 && synced2 ? "Gate failed — raise a snag to track the rework" : OFFLINE_TOAST);
     openSnagModal({ unitId, stageId, itemId, preset: reason });
   }
 
@@ -341,9 +352,9 @@ export function useActions() {
         logEvent("QC_PASS", unitId, stageId, (item?.name || itemId) + " checklist passed (" + results.length + " lines)"),
       ];
       if (itemStageStatus(cells, items) === "done") ops.push(...releaseNextOps("unit", unitId, stageId));
-      await apply(ops);
+      const synced = await apply(ops);
       reopenDrawer();
-      toast("Gate passed · next item released");
+      toast(synced ? "Gate passed · next item released" : OFFLINE_TOAST);
       return;
     }
 
@@ -373,9 +384,9 @@ export function useActions() {
         }
       });
     }
-    await apply(ops);
+    const synced = await apply(ops);
     reopenDrawer();
-    toast(failed.length + " snag(s) raised · gate failed");
+    toast(synced ? failed.length + " snag(s) raised · gate failed" : OFFLINE_TOAST);
   }
 
   async function captureStageItemPhoto(unitId: string, stageId: string, itemId: string, file: File) {
@@ -396,12 +407,12 @@ export function useActions() {
       photo.localOnly = true;
     }
     const cells = upsertCell(stageCells(unitId, stageId), itemId, { meas: Date.now(), measBy: currentUserId || "", photo });
-    await apply([
+    const synced = await apply([
       { op: "progress", key: pkey(unitId, stageId), patch: { checklist: cells } },
       logEvent("MEASURE", unitId, stageId, "Hidden work measured and photographed")
     ]);
     reopenDrawer();
-    toast(photo.localOnly ? "Photo upload failed — kept locally for now, try re-uploading" : "Photo attached");
+    toast(!synced ? OFFLINE_TOAST : photo.localOnly ? "Photo upload failed — kept locally for now, try re-uploading" : "Photo attached");
   }
 
   return {

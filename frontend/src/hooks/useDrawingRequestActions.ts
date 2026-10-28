@@ -162,8 +162,12 @@ export function useDrawingRequestActions() {
     };
     const ops: Op[] = [{ op: "upsert", coll: "drawingRequests", rec }];
     if (!input.isPublic) ops.push(buildEventOp(currentUserId, "DR_CREATE", rec.id, "", `${rec.ticketNo} created`));
-    await apply(ops);
-    toast("Ticket " + rec.ticketNo + " created");
+    // Same gap as DprForm.tsx had: apply() queues the op locally instead of
+    // losing it on a network/session failure, but this always showed the
+    // same "created" toast regardless, so a request that only got as far as
+    // the local queue looked identical to a real save to whoever raised it.
+    const synced = await apply(ops);
+    toast(synced ? "Ticket " + rec.ticketNo + " created" : "Saved on this device — will finish submitting once you're back online");
     return rec.ticketNo;
   }
 

@@ -253,9 +253,9 @@ export default function RecordModal() {
           ops.push({ op: "upsert", coll: "units", rec: out });
           ops.push(buildEventOp(currentUserId, "MASTER_SAVE", out.id, "", `${master!.label} · created · ${out.name || out.code}`));
         }
-        await apply(ops);
+        const synced = await apply(ops);
         closeRecordModal();
-        toast(`Created ${multiFloorIds.length} unit${multiFloorIds.length === 1 ? "" : "s"}`);
+        toast(synced ? `Created ${multiFloorIds.length} unit${multiFloorIds.length === 1 ? "" : "s"}` : "Saved on this device — will finish submitting once you're back online");
         return;
       }
 
@@ -283,12 +283,12 @@ export default function RecordModal() {
         if (dup) { toast("A Work Target for this project + category already exists"); return; }
       }
 
-      await apply([
+      const synced = await apply([
         { op: "upsert", coll: recordModal!.master, rec: out },
         buildEventOp(currentUserId, "MASTER_SAVE", out.id, "", `${master!.label} · ${recordModal!.id ? "updated" : "created"} · ${out.name || out.code || out.id}`)
       ]);
       closeRecordModal();
-      toast((recordModal!.id ? "Updated " : "Created ") + (out.name || out.code || out.id));
+      toast(synced ? (recordModal!.id ? "Updated " : "Created ") + (out.name || out.code || out.id) : "Saved on this device — will finish submitting once you're back online");
     } finally {
       setSaving(false);
     }

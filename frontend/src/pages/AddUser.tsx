@@ -77,9 +77,9 @@ export default function AddUser() {
       ops.push({ op: "upsert", coll: "moduleGrants", rec: { id: "MG-" + id, userId: id, grants } });
     }
     ops.push(buildEventOp(currentUserId, "MASTER_SAVE", id, "", `Created user ${name.trim()}`));
-    await apply(ops);
+    const synced = await apply(ops);
     setSaving(false);
-    toast("User created");
+    toast(synced ? "User created" : "Saved on this device — will finish submitting once you're back online");
     backToUsers();
   }
 

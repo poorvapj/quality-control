@@ -324,12 +324,12 @@ function MeasurementForm({
       approval: approvalFor(data, currentUserId),
       createdAt: Date.now()
     };
-    await apply([
+    const synced = await apply([
       { op: "upsert", coll: "materialMeasurements", rec },
       buildEventOp(currentUserId, "MATERIAL_MEASUREMENT", id, "", `Measurement · ${rec.unitName} · ${mQty} ${rec.measuredUnit}`)
     ]);
     setSaving(false);
-    toast("Measurement recorded");
+    toast(synced ? "Measurement recorded" : "Saved on this device — will finish submitting once you're back online");
     onClose();
   }
 

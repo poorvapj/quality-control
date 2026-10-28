@@ -289,11 +289,11 @@ export default function Measurement() {
         onClose={() => setConfirming(null)}
         onConfirm={async (itemId) => {
           if (!confirming) return;
-          await apply([
+          const synced = await apply([
             { op: "upsert", coll: "workMeasurements", rec: { ...confirming, linkedItemId: itemId } },
             buildEventOp(currentUserId, "WORK_MEASUREMENT_LINK", confirming.id, "", `Link confirmed · ${confirming.category}`)
           ]);
-          toast("VMS link confirmed");
+          toast(synced ? "VMS link confirmed" : "Saved on this device — will finish submitting once you're back online");
           setConfirming(null);
         }}
       />
@@ -473,11 +473,11 @@ function MeasurementPanel({ open, onClose, categories, categoriesNote, existing,
       linkedItemId: match?.status === "ambiguous" && choice ? choice : null
     };
     try {
-      await apply([
+      const synced = await apply([
         { op: "upsert", coll: "workMeasurements", rec },
         buildEventOp(userId, "WORK_MEASUREMENT", id, "", `Measurement · ${category} · ${q} ${rec.measuredUnit}`)
       ]);
-      toast("Measurement recorded");
+      toast(synced ? "Measurement recorded" : "Saved on this device — will finish submitting once you're back online");
       onClose();
     } finally {
       setSaving(false);
