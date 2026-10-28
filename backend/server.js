@@ -921,7 +921,9 @@ async function notifyDprSubmitted(rec) {
   if (!SLACK_BOT_TOKEN) return;
   try {
     const project = await mongoDb.collection("projects").findOne({ id: rec.projectId }, { projection: { slackChannelId: 1 } });
-    const channelId = project && project.slackChannelId;
+    // Trimmed defensively — pasting this out of a table/doc easily drags
+    // along a leading tab or space, which Slack's API rejects outright.
+    const channelId = project && project.slackChannelId && String(project.slackChannelId).trim();
     if (!channelId) return;
     const categories = (rec.workEntries || []).map((w) => w.category).join(", ") || "—";
     const text = `📋 Daily Progress Report submitted on QC — *${rec.projectName || rec.projectId}*\n`
