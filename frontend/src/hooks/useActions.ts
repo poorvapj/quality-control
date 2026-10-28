@@ -1,4 +1,4 @@
-import { useApp, authHeaders } from "../context/AppContext";
+import { useApp, authHeaders, notifySessionExpired } from "../context/AppContext";
 import { API_BASE, HOUR } from "../services/config";
 import type { Op, Track, ProgressPatch } from "../types";
 import { pkey, prog, trackStages, byId, coll, refLabel } from "../shared/rules";
@@ -245,6 +245,7 @@ export function useActions() {
         headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ dataUrl, type: photoType })
       });
+      if (r.status === 401) notifySessionExpired();
       const j = await r.json();
       if (j.url) photo = { url: j.url, publicId: j.publicId || null };
       else photo.localOnly = true;
@@ -404,6 +405,7 @@ export function useActions() {
         headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ dataUrl, type: "progress" })
       });
+      if (r.status === 401) notifySessionExpired();
       const j = await r.json();
       if (j.url) photo = { url: j.url, publicId: j.publicId || null };
       else photo.localOnly = true;

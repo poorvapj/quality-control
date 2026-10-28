@@ -1,5 +1,5 @@
 import { API_BASE } from "../services/config";
-import { authHeaders } from "../context/AppContext";
+import { authHeaders, notifySessionExpired } from "../context/AppContext";
 import type { Photo } from "../types";
 import { watermarkPhoto } from "./watermark";
 
@@ -41,6 +41,11 @@ export async function uploadPhoto(
       headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({ dataUrl, type })
     });
+    // A dead session (not a real rejection) — forcing the sign-in screen
+    // here is what actually tells the user WHY this keeps failing, instead
+    // of them retrying the exact same dead token over and over off a
+    // generic "upload failed" toast.
+    if (r.status === 401) notifySessionExpired();
     const j = await r.json();
     if (j.url) return { url: j.url, publicId: j.publicId || null };
   } catch {}

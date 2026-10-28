@@ -50,6 +50,17 @@ export function authHeaders(): Record<string, string> {
   }
 }
 
+// A callback a direct fetch OUTSIDE apply()/the ops queue (uploadPhoto.ts,
+// useActions.ts's capturePhoto) can reach for on a 401, so a dead session
+// found there forces the same real sign-in screen as a dead-session data
+// save does, instead of just falling back to "kept locally, try
+// re-uploading" — which otherwise never actually told the user WHY it kept
+// failing, nor gave them a way to stop it.
+let notifySessionExpiredImpl: (() => void) | null = null;
+export function notifySessionExpired(): void {
+  notifySessionExpiredImpl?.();
+}
+
 /* Every background poll re-downloads the ENTIRE state blob (every
  * collection, full documents) as a fresh JSON.parse, so a plain `setData`
  * hands every collection array a brand-new reference even when nothing in
@@ -206,6 +217,10 @@ export function AppProvider({ children, publicRoute = false }: { children: React
     setLoggedIn(false);
     toast("Your session expired — please sign in again. Your unsaved changes are kept and will finish submitting once you do.", 8000);
   }, [toast]);
+  useEffect(() => {
+    notifySessionExpiredImpl = flagSessionExpired;
+    return () => { if (notifySessionExpiredImpl === flagSessionExpired) notifySessionExpiredImpl = null; };
+  }, [flagSessionExpired]);
   const pageToast = useCallback((msg: string) => {
     if (Date.now() - applyFailedAtRef.current < 2000) return;
     toast(msg);
@@ -291,7 +306,20 @@ export function AppProvider({ children, publicRoute = false }: { children: React
   // Surfaced in the UI (see PendingSyncBadge) so an unsynced change is
   // never invisible beyond its one 2.6s toast — someone can always glance
   // at the screen and see "N changes waiting to sync" until it clears.
-  const [pendingCount, setPendingCount] = useState(pendingOpsRef.current.length);
+  // Counts only batches THIS signed-in person can actually do anything
+  // about (their own, or ownerless legacy/public ones) — a shared device
+  // can be left holding a previous person's still-queued batch (their
+  // session died before it ever reached the server, then someone else
+  // signed in on the same browser); opQueue.ts's canSendNow correctly
+  // refuses to replay it under the new person's token, but counting it in
+  // the total showed the new person a permanently stuck "N waiting to
+  // sync" badge for a change that was never theirs and that their own
+  // re-login could never clear.
+  const countMine = useCallback(() => {
+    const me = currentTokenUser();
+    return pendingOpsRef.current.filter((b) => b.by === undefined || b.by === null || b.by === me).length;
+  }, []);
+  const [pendingCount, setPendingCount] = useState(() => countMine());
   const savePendingOps = useCallback(() => {
     try {
       localStorage.setItem(PENDING_OPS_KEY, JSON.stringify(pendingOpsRef.current));
@@ -303,8 +331,8 @@ export function AppProvider({ children, publicRoute = false }: { children: React
       // later — now surfaced instead of silently swallowed.
       if (e?.name === "QuotaExceededError") toast("Couldn't save your change for retry — storage is full (likely a large photo). Please check your connection and try again now.");
     }
-    setPendingCount(pendingOpsRef.current.length);
-  }, [toast]);
+    setPendingCount(countMine());
+  }, [toast, countMine]);
   // Another tab (same browser/profile) could have queued or flushed its
   // own ops in between — re-reading the latest localStorage value right
   // before appending, instead of trusting this tab's possibly-stale
@@ -315,8 +343,8 @@ export function AppProvider({ children, publicRoute = false }: { children: React
       const raw = localStorage.getItem(PENDING_OPS_KEY);
       pendingOpsRef.current = raw ? normalizeQueue(JSON.parse(raw)) : [];
     } catch {}
-    setPendingCount(pendingOpsRef.current.length);
-  }, []);
+    setPendingCount(countMine());
+  }, [countMine]);
   useEffect(() => {
     function onStorage(e: StorageEvent) {
       if (e.key === PENDING_OPS_KEY) reloadPendingOpsFromStorage();
@@ -648,11 +676,15 @@ export function AppProvider({ children, publicRoute = false }: { children: React
       } catch {}
       sessionExpiredFlaggedRef.current = false;
       setLoggedIn(true);
+      // The freshly-stored token changes whose batches count as "mine" —
+      // recompute right away so someone signing into a device that still
+      // holds a PREVIOUS person's stuck queue doesn't see that badge.
+      setPendingCount(countMine());
       return null;
     } catch {
       return "Can't reach the server. Try again.";
     }
-  }, [setCurrentUserId]);
+  }, [setCurrentUserId, countMine]);
 
   const logout = useCallback(() => {
     try {
@@ -660,7 +692,8 @@ export function AppProvider({ children, publicRoute = false }: { children: React
       localStorage.removeItem(TOKEN_KEY);
     } catch {}
     setLoggedIn(!LOGIN_GATE_ENABLED ? true : false);
-  }, []);
+    setPendingCount(countMine()); // no token now — only ownerless/legacy batches still count
+  }, [countMine]);
 
   const openDrawer = useCallback((ref: DrawerRef) => setDrawer(ref), []);
   const closeDrawer = useCallback(() => setDrawer(null), []);
