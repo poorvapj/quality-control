@@ -1072,6 +1072,13 @@ function InspectionForm({
     setSaving(true);
     const assignee = users.find((u) => u.id === assignedToUserId);
     const needsSnag = result !== "Pass";
+    // A Fail/Rework from an inspector whose team leader must sign off does
+    // NOT raise a snag against a DRI yet — only once that leader approves it
+    // (server.js, on the pending -> approved transition). Raising it here
+    // would make a snag "real" before anyone with authority had reviewed the
+    // inspection that justifies it.
+    const pendingApproval = !!approvalFor(data, currentUserId);
+    const raiseSnagNow = needsSnag && !pendingApproval;
 
     // BUG FIX: was nextId("QI"/"SNG", []), which always returned id "0001"
     // and silently overwrote the previous record on every submission. Must
@@ -1083,7 +1090,7 @@ function InspectionForm({
     // inside the loop against the same stale array would hand every floor
     // the same id (same pattern as RecordModal's multi-floor Unit save).
     let nextQiId = nextId("QI", coll(data, "qualityInspections"));
-    let nextSnagId = needsSnag ? nextId("SNG", coll(data, "snags")) : null;
+    let nextSnagId = raiseSnagNow ? nextId("SNG", coll(data, "snags")) : null;
     const bumpId = (idv: string) => { const [prefix, n] = idv.split("-"); return `${prefix}-${String(parseInt(n, 10) + 1).padStart(4, "0")}`; };
 
     const ops: any[] = [];
@@ -1092,8 +1099,8 @@ function InspectionForm({
       const f = byId(floors, fId);
       const id = nextQiId;
       nextQiId = bumpId(nextQiId);
-      const snagId = needsSnag ? nextSnagId : null;
-      if (needsSnag) nextSnagId = bumpId(nextSnagId!);
+      const snagId = raiseSnagNow ? nextSnagId : null;
+      if (raiseSnagNow) nextSnagId = bumpId(nextSnagId!);
       lastId = id; lastSnagId = snagId;
 
       // With several floors picked, the flat chosen above belongs to the
@@ -1129,6 +1136,7 @@ function InspectionForm({
           ? { assignedToUserId, assignedToName: assignee?.name || assignedToUserId, targetDate }
           : null,
         linkedSnagId: snagId,
+        severity: needsSnag ? severity : undefined,
         reInspectionOf: reInspectOf?.id || null,
         // a team member's inspection waits for their team leader (server re-derives this)
         approval: approvalFor(data, currentUserId),
@@ -1139,7 +1147,7 @@ function InspectionForm({
         { op: "upsert", coll: "qualityInspections", create: true, rec },
         buildEventOp(currentUserId, "QUALITY_INSPECTION", id, "", `Quality Inspection · ${result} · ${rec.floorName}${rec.unitName ? " / " + rec.unitName : ""}`)
       );
-      if (needsSnag && snagId) {
+      if (raiseSnagNow && snagId) {
         // Location always in the title — never just the VMS item description
         // — so the snag/quality observation is unambiguous on the DRI
         // dashboard and in their failure history, even if a VMS item was
@@ -1182,7 +1190,9 @@ function InspectionForm({
         ? "Saved on this device — will finish submitting once you're back online"
         : floorIds.length > 1
           ? `Inspection recorded for ${floorIds.length} floors`
-          : needsSnag ? `Inspection recorded · Snag ${lastSnagId} raised` : "Inspection recorded"
+          : raiseSnagNow ? `Inspection recorded · Snag ${lastSnagId} raised`
+          : needsSnag ? "Inspection recorded · awaiting your team leader's approval before a snag is raised"
+          : "Inspection recorded"
     );
     onClose();
   }

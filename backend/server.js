@@ -1011,6 +1011,9 @@ async function decideApprovalFromSlack({ coll, id, status, remark, actor }) {
 // the browser sent is replaced by what the rules allow, so a member can't
 // skip review or approve their own work.
 const APPROVAL_COLLECTIONS = ["qualityInspections", "materialMeasurements", "workMeasurements"];
+// Mirrors QualityInspection.tsx's own sentinel stage id for snags auto-raised
+// from a Work Quality Inspection Fail/Rework.
+const QC_INSPECTION_STAGE_ID = "STG-QC-INSPECTION";
 async function applyApprovalRules(op, session) {
   if (!session || op.op !== "upsert" || !op.rec || !APPROVAL_COLLECTIONS.includes(op.coll)) return;
   const existing = op.rec.id ? await mongoDb.collection(op.coll).findOne({ id: op.rec.id }, { projection: { _id: 0 } }) : null;
@@ -1036,9 +1039,18 @@ async function applyApprovalRules(op, session) {
   const r = resolveApprovalOnUpdate({ existing, incoming: op.rec, session, creatorId: existing.inspectorUserId || existing.recordedByUserId, users, teams });
   if (!r.ok) { const e = new Error(r.error); e.status = r.status; throw e; }
   if (r.approval) op.rec.approval = r.approval; else delete op.rec.approval;
+  const wasPending = !existing.approval || existing.approval.status === "pending";
   // a pending -> approved/rejected change: tell the author once it has been saved
-  if (r.approval && r.approval.status !== "pending" && (!existing.approval || existing.approval.status === "pending")) {
+  if (r.approval && r.approval.status !== "pending" && wasPending) {
     op._notifyApprovalDecision = { coll: op.coll, status: r.approval.status, remark: r.approval.remark, byUserId: session.userId };
+  }
+  // A Fail/Rework inspection from someone whose team leader must sign off
+  // never got a snag raised against a DRI at submit time (see
+  // QualityInspection.tsx's raiseSnagNow) — it's raised here instead, the
+  // moment that leader actually approves it, never on a bare Fail alone.
+  if (op.coll === "qualityInspections" && r.approval && r.approval.status === "approved" && wasPending
+    && existing.result !== "Pass" && !existing.linkedSnagId) {
+    op._raiseSnagOnApprove = true;
   }
 }
 
@@ -1484,6 +1496,34 @@ async function applyOps(ops, session, trace) {
           // already-saved inspection (only a fresh re-inspect record), so
           // this upsert is always a brand-new one.
           after(() => notifyQualityInspectionSubmitted(rec));
+          if (op._raiseSnagOnApprove) {
+            const full = await db.collection("qualityInspections").findOne({ id: rec.id }, { projection: { _id: 0 } });
+            if (full && !full.linkedSnagId) {
+              const snagId = "SNG-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
+              const location = full.unitName ? `${full.floorName} / ${full.unitName}` : full.floorName;
+              const label = full.itemDescription ? `${location} · ${full.itemDescription}` : location;
+              await db.collection("snags").insertOne({
+                id: snagId,
+                projectId: full.projectId,
+                floorId: full.floorId,
+                ...(full.unitId ? { unitId: full.unitId } : {}),
+                stageId: QC_INSPECTION_STAGE_ID,
+                qualityInspectionId: full.id,
+                title: `Quality ${full.result} — ${label}`,
+                description: full.remarks || "",
+                severity: full.severity || "Major",
+                status: "Open",
+                raisedBy: full.inspectorUserId || "",
+                raisedAt: Date.now(),
+                assignedTo: full.correctiveAction ? full.correctiveAction.assignedToUserId : "",
+                dueAt: full.correctiveAction ? new Date(full.correctiveAction.targetDate).getTime() || null : null,
+                photos: full.photos || [],
+                comments: []
+              });
+              await db.collection("qualityInspections").updateOne({ id: full.id }, { $set: { linkedSnagId: snagId } });
+              rec.linkedSnagId = snagId;
+            }
+          }
           // A passing re-inspection closes the ORIGINAL failed inspection's
           // linked Snag server-side — never trust the client alone to close
           // its own loop, since that Snag's status gates the "open issues"

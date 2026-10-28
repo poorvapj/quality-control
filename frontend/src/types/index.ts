@@ -586,11 +586,16 @@ export interface QualityInspection extends BaseRecord {
   // The real Snag auto-created for a Fail/Rework result — reuses the
   // existing Snag collection, DRI assignment/notification, and My
   // Work/DRI-dashboard surfacing wholesale instead of re-building a
-  // parallel one. Created exactly once per failed inspection, at creation
-  // time only (inspections are never edited after save, only re-inspected
-  // as a brand-new record) — this is what prevents duplicate snags for the
-  // same failed inspection.
+  // parallel one. Created exactly once per failed inspection — immediately
+  // at creation time when the inspector needs no approval, or server-side
+  // (server.js) the moment their team leader approves it when they do, so a
+  // Fail an inspector raised never becomes a snag against a DRI before a
+  // leader has even signed off on it. This is what prevents duplicate snags
+  // for the same failed inspection either way.
   linkedSnagId?: string | null;
+  // Stashed only so a snag that's deferred behind approval (see below) can
+  // still be built with the right severity once it's finally raised.
+  severity?: Severity;
   // Set when this inspection re-checks a prior Fail/Rework record — a
   // passing result here closes that original's linked Snag server-side
   // (server.js), closing the loop instead of leaving it open forever once
