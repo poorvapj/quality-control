@@ -912,6 +912,27 @@ async function slackIdForUserId(userId) {
   return { user: u, uid: await slackUserIdForEmail(u.email, u.slackId) };
 }
 
+/* A real Daily Progress Report filled on QC itself (not one of VMS's own
+   synced-in records) posted to that PROJECT'S OWN Slack channel — each
+   project has its own (e.g. #proj-zen-garden), set per-project via
+   Masters ▸ Project ▸ "Slack channel ID". Silently does nothing if that
+   project has none set, same as every other best-effort Slack notify here. */
+async function notifyDprSubmitted(rec) {
+  if (!SLACK_BOT_TOKEN) return;
+  try {
+    const project = await mongoDb.collection("projects").findOne({ id: rec.projectId }, { projection: { slackChannelId: 1 } });
+    const channelId = project && project.slackChannelId;
+    if (!channelId) return;
+    const categories = (rec.workEntries || []).map((w) => w.category).join(", ") || "—";
+    const text = `📋 Daily Progress Report submitted on QC — *${rec.projectName || rec.projectId}*\n`
+      + `By: *${rec.submittedByName || "—"}* · Contractor: ${rec.vendorName || "—"} · Shift: ${rec.shift || "—"} · Labour: ${rec.labourCount ?? "—"}\n`
+      + `Work: ${categories}`;
+    await slackPostMessage(channelId, text, null, { to: "the project channel" });
+  } catch (e) {
+    console.error("notifyDprSubmitted failed:", e.message);
+  }
+}
+
 const approvalResendAt = new Map(); // userId -> last "send pending to Slack" time
 
 async function notifyApprovalRequest(coll, rec) {
@@ -1127,6 +1148,12 @@ async function assertOpAllowed(op, session) {
       op.rec.submittedByUserId = null;
       op.rec.isPublic = true;
     }
+    // A genuinely new report filled on QC itself (never one VMS just synced
+    // in — those already have their own "DPR-VMS-<id>" shape and VMS's own
+    // notification path) — flagged here, acted on after the write actually
+    // lands (see op._notifyDprSubmit below), to the project's own Slack
+    // channel if one's set (Masters ▸ Project ▸ "Slack channel ID").
+    if (!existing && !String(op.rec.id).includes("VMS")) op._notifyDprSubmit = true;
     return;
   }
 
@@ -1516,6 +1543,7 @@ async function applyOps(ops, session, trace) {
 
       // Slack follow-ups for approvals — after the write, never blocking or failing it
       if (op._notifyApprovalRequest) after(() => notifyApprovalRequest(op._notifyApprovalRequest, op.rec));
+    if (op._notifyDprSubmit) after(() => notifyDprSubmitted(op.rec)); // (main's DPR Slack notice; after the commit under OPS_ATOMIC)
       if (op._notifyApprovalDecision) {
         const d = op._notifyApprovalDecision;
         after(() => {

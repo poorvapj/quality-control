@@ -65,7 +65,11 @@ export const MASTERS: Record<MasterKey, MasterDef> = {
       { k: "unitsPerFloor", label: "Units per floor (planned)", type: "number" },
       { k: "startDate", label: "Start date", type: "date" },
       { k: "targetDate", label: "Target handover", type: "date" },
-      { k: "active", label: "Active", type: "bool" }
+      { k: "active", label: "Active", type: "bool" },
+      {
+        k: "slackChannelId", label: "Slack channel ID (for DPR notifications)", type: "text",
+        hint: "This project's own Slack channel (e.g. #proj-zen-garden) — paste its Channel ID (right-click the channel → View channel details). When a Daily Progress Report is submitted on QC for this project, a notification goes here. Leave blank for no notification."
+      }
     ]
   },
   floors: {
