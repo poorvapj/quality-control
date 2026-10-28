@@ -42,7 +42,7 @@ const tally = (rs) => rs.reduce((m, r) => ((m[r.status] = (m[r.status] || 0) + 1
     { id: "U-B", name: "User B", role: "CIVIL", teamId: "T1", active: true }, { id: "U-C", name: "User C", role: "CIVIL", active: true }]);
   await db.collection("teams").insertOne({ id: "T1", name: "Team", leaderId: "U-A", active: true });
   await db.collection("projects").insertOne({ id: "P1", code: "P1", name: "Tower One", active: true });
-  const env = { PATH: process.env.PATH, NODE_PATH: process.env.NODE_PATH, SystemRoot: process.env.SystemRoot, MONGODB_URI: uri, MONGODB_DB: "t", JWT_SECRET: SECRET, PORT: String(PORT), DISABLE_VMS_DPR_POLL: "1", TEAM_REPORT_CRON_SECRET: "cron-secret-synthetic", EVENTS_ARCHIVE_DAYS: "7", KEEP_DELETED_DAYS: "7" };
+  const env = { PATH: process.env.PATH, NODE_PATH: process.env.NODE_PATH, SystemRoot: process.env.SystemRoot, MONGODB_URI: uri, MONGODB_DB: "t", JWT_SECRET: SECRET, PORT: String(PORT), DISABLE_VMS_DPR_POLL: "1", TEAM_REPORT_CRON_SECRET: "cron-secret-synthetic", EVENTS_ARCHIVE_DAYS: "7" };
   const srv = spawn(process.execPath, [path.join(__dirname, "server.js")], { cwd: __dirname, env, stdio: ["ignore", "pipe", "pipe"] });
   let slog = ""; srv.stdout.on("data", (d) => (slog += d)); srv.stderr.on("data", (d) => (slog += d));
   for (let i = 0; i < 80; i++) { try { await call("GET", "/api/rev"); break; } catch { await new Promise((r) => setTimeout(r, 250)); } }
@@ -185,27 +185,27 @@ const tally = (rs) => rs.reduce((m, r) => ((m[r.status] = (m[r.status] || 0) + 1
   r = await ops(A, [{ op: "upsert", coll: "moduleGrants", rec: { id: "MG-U1", "grants.masters": { view: true, edit: true, delete: true } } }]);
   check("39. changing grants still requires an admin (403 for anyone else)", r.status === 403, String(r.status));
 
-  console.log("--- kept deletes and audit archive (KEEP_DELETED_DAYS / EVENTS_ARCHIVE_DAYS on)");
+  console.log("--- deleted records are archived (main's trash) and an admin can list/restore them; audit archive (EVENTS_ARCHIVE_DAYS on)");
   await db.collection("snags").insertOne({ id: "SNG-DEL1", projectId: "P1", title: "to be deleted", status: "Open" });
   r = await ops(ADMIN, [{ op: "delete", coll: "snags", id: "SNG-DEL1" }]);
-  const kept = await db.collection("deletedRecords").findOne({ id: "SNG-DEL1" });
-  check("40. an admin delete first copies the record aside (deletedRecords) with who/when/expiry", r.status === 200 && kept && kept.doc.title === "to be deleted" && kept.by === "U-ADMIN" && kept.expireAt > new Date());
+  const kept = await db.collection("trash").findOne({ originalColl: "snags", "doc.id": "SNG-DEL1" });
+  check("40. an admin delete archives the record in trash first, with who/when", r.status === 200 && kept && kept.doc.title === "to be deleted" && kept.deletedBy === "U-ADMIN" && kept.deletedAt > 0);
   const lst = await call("GET", "/api/deleted", ADMIN);
-  check("41. the admin can list it", lst.status === 200 && lst.json.deleted.some((d) => d.id === "SNG-DEL1" && d.doc.title === "to be deleted"));
+  check("41. the admin can list it", lst.status === 200 && lst.json.deleted.some((d) => d.originalColl === "snags" && d.doc.id === "SNG-DEL1" && d.doc.title === "to be deleted"));
   check("42. a non-admin cannot list or restore", (await call("GET", "/api/deleted", A)).status === 403 && (await call("POST", "/api/deleted/restore", A, { coll: "snags", id: "SNG-DEL1" })).status === 403);
   r = await call("POST", "/api/deleted/restore", ADMIN, { coll: "snags", id: "SNG-DEL1" });
-  check("43. restore puts the record back exactly and removes the kept copy", r.status === 200 && (await db.collection("snags").findOne({ id: "SNG-DEL1" })).title === "to be deleted" && !(await db.collection("deletedRecords").findOne({ id: "SNG-DEL1" })));
+  check("43. restore puts the record back exactly and removes it from trash", r.status === 200 && (await db.collection("snags").findOne({ id: "SNG-DEL1" })).title === "to be deleted" && !(await db.collection("trash").findOne({ "doc.id": "SNG-DEL1" })));
   await ops(ADMIN, [{ op: "delete", coll: "snags", id: "SNG-DEL1" }]); await db.collection("snags").insertOne({ id: "SNG-DEL1", title: "re-created" });
   r = await call("POST", "/api/deleted/restore", ADMIN, { coll: "snags", id: "SNG-DEL1" });
   check("44. restore never overwrites: 409 if the id exists again", r.status === 409 && (await db.collection("snags").findOne({ id: "SNG-DEL1" })).title === "re-created");
   await db.collection("users").insertOne({ id: "USR-DEL", name: "Gone", email: "gone@x.test", passwordHash: "h", passwordSalt: "s" });
   await ops(ADMIN, [{ op: "delete", coll: "users", id: "USR-DEL" }]);
-  const ku = await db.collection("deletedRecords").findOne({ id: "USR-DEL" });
-  check("45. a deleted user's copy carries NO password hash/salt, and users cannot be restored from there", ku && !("passwordHash" in ku.doc) && !("passwordSalt" in ku.doc) && (await call("POST", "/api/deleted/restore", ADMIN, { coll: "users", id: "USR-DEL" })).status === 400);
+  r = await call("POST", "/api/deleted/restore", ADMIN, { coll: "users", id: "USR-DEL" });
+  check("45. a deleted user can be restored from trash (the archived copy is the whole record)", r.status === 200 && (await db.collection("users").countDocuments({ id: "USR-DEL" })) === 1);
   await db.collection("projects").insertOne({ id: "PD", code: "PD", name: "Doomed" });
-  const bkBefore = await db.collection("backups").countDocuments({ createdBy: /^pre-delete-project:/ });
+  await db.collection("floors").insertOne({ id: "FD1", projectId: "PD" }); await db.collection("units").insertOne({ id: "UD1", projectId: "PD", floorId: "FD1" });
   r = await ops(ADMIN, [{ op: "delete", coll: "projects", id: "PD" }]);
-  check("46. deleting a PROJECT first saves the whole board as a pre-delete-project backup", r.status === 200 && (await db.collection("backups").countDocuments({ createdBy: /^pre-delete-project:/ })) === bkBefore + 1);
+  check("46. deleting a PROJECT archives it and its cascade (floors, units) in trash", r.status === 200 && (await db.collection("trash").countDocuments({ originalColl: "projects", "doc.id": "PD" })) === 1 && (await db.collection("trash").countDocuments({ originalColl: "floors", "doc.id": "FD1" })) === 1 && (await db.collection("trash").countDocuments({ originalColl: "units", "doc.id": "UD1" })) === 1 && (await db.collection("floors").countDocuments({ projectId: "PD" })) === 0);
   await db.collection("events").deleteMany({}); await db.collection("eventsArchive").deleteMany({});
   await db.collection("events").insertMany(Array.from({ length: 5012 }, (_, i) => ({ ts: 1000 + i, userId: "U", action: "A" + i, targetId: "", stageId: "", detail: "d" })));
   r = await ops(ADMIN, [{ op: "event", ev: { ts: 9999999, userId: "U-ADMIN", action: "NEWEST", targetId: "", stageId: "", detail: "d" } }]);

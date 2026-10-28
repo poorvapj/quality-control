@@ -24,14 +24,16 @@ An `upsert` op is a field-level merge (`updateOne({id}, {$set…}, {upsert:true}
 | 14 | Permission matrix: the last admin to save overwrote every module another admin changed | saves only the modules/flags this admin changed since the user/role was loaded (dotted keys `grants.<module>`); also fixes the role editor writing the stored (old) `grants` back over the edited ones | `PermissionMatrix.tsx`, `recordDiff.ts`, `applyOpsLocal.ts` |
 | 15 | A refused change had no UI | "N change(s) refused — view" badge: list, copy details, dismiss | `RejectedChangesBadge.tsx` |
 
-## Flags (all default OFF; set on Render, then restart; unset + restart rolls back)
+## Flags (default OFF; set on Render, then restart; unset + restart rolls back)
 | Variable | Effect |
 |---|---|
 | `OPS_ATOMIC=1` | each `/api/ops` batch is written in one database transaction (all or nothing). At every start the log says whether transactions are available (a **read-only** probe; nothing is written); if not, batches keep the old non-atomic writes |
 | `PROGRESS_CELL_MERGE=1` | item-based checklist cells are merged by `itemId`; with the item list the browser now sends, the stage `status` is also decided **on the server** from the merged cells (two people finishing the last two items at once end with `done`) |
 | `EVENTS_ARCHIVE_DAYS=N` | the audit log still keeps its 5000 newest events, but the ones trimmed away are **moved** to `eventsArchive` and kept N days (TTL index) instead of being deleted |
-| `KEEP_DELETED_DAYS=N` | an admin delete first copies the record to `deletedRecords` (N days; a user's copy never has its password hash); admin can `GET /api/deleted` and `POST /api/deleted/restore {coll,id}` (409 if the id exists again; users cannot be restored). Deleting a **project** first takes a `pre-delete-project:` backup (refused if that backup cannot be made) |
-Local verification: `backend/dataIntegrity2.e2e.js` (replica set, 24 checks) and `backend/dataIntegrity.e2e.js` (49 checks); each flag-gated behaviour was mutation-checked (turn it off and its checks fail). **Not verified on Atlas/Render** — the startup probe line in the Render log (`OPS_ATOMIC=1: database transactions are available`) is the first thing to look for after enabling. Without the flags: a mid-batch failure can still leave earlier ops written (and a retry then answer 409 for its own creates), concurrent checklist cells can still overwrite each other, trimmed audit events and deleted records are gone for good. Storage note: `eventsArchive` and `deletedRecords` are bounded by their TTL.
+Local verification: `backend/dataIntegrity2.e2e.js` (replica set, 25 checks) and `backend/dataIntegrity.e2e.js` (51 checks); each flag-gated behaviour was mutation-checked (turn it off and its checks fail). **Not verified on Atlas/Render** — the startup probe line in the Render log (`OPS_ATOMIC=1: database transactions are available`) is the first thing to look for after enabling. Without the flags: a mid-batch failure can still leave earlier ops written (and a retry then answer 409 for its own creates), concurrent checklist cells can still overwrite each other, trimmed audit events are gone for good. Storage note: `eventsArchive` is bounded by its TTL.
+
+## Deleted records: one archive (`trash`, from main commit fa8fc2f)
+Main now copies every deleted record (and a project's whole cascade) into `trash` before deleting (always on, `archiveBeforeDelete`). This branch uses that archive instead of a second one: the admin endpoints `GET /api/deleted` (list) and `POST /api/deleted/restore {coll,id}` (put one record back; **409 if the id exists again**, never overwrites; also lifts the VMS tombstone) read `trash`; under `OPS_ATOMIC=1` the archive writes join the batch transaction. Two things to know about `trash` itself: it keeps the **whole** record (a deleted user's password hash included) and it has **no expiry**, so it grows without bound.
 
 ## Compatibility (zero breaking change)
 - Old browser + new backend: ops without `create`/`push` behave **exactly as before**.
@@ -41,8 +43,9 @@ Local verification: `backend/dataIntegrity2.e2e.js` (replica set, 24 checks) and
 
 ## Still open (honest list)
 - **Nothing above is active in production until the flags are set** (and none of it has run on Atlas/Render).
-- The 5000-event cap of the *live* audit log is unchanged (the archive keeps what is trimmed, when enabled). Hard-delete stays a hard delete in the UI; with `KEEP_DELETED_DAYS` it is recoverable for N days, by an admin through the API (there is no screen for it yet).
+- The 5000-event cap of the *live* audit log is unchanged (the archive keeps what is trimmed, when enabled). Hard-delete stays a hard delete in the UI; it is recoverable from `trash` by an admin through the API (there is no screen for it yet).
 - `releaseNextOps` (releasing the next stage after a stage completes) still runs in the browser.
+- `trash` has no expiry and keeps password hashes of deleted users (main's design; not changed here).
 - A form that closes after a refused save still loses what was on screen; the content is in the refused-changes list (badge).
 - Production data was **not** inspected; whether and how much data was lost in production is unknown.
 
