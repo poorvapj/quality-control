@@ -697,6 +697,71 @@
       height: 36px;
     }
 
+    /* Phones — tighten the page header and action-button row too, so the
+       filter bar and the first row of stat cards both land in the first
+       screenful instead of several scrolls of header/whitespace first. */
+    @media (max-width: 719px) {
+      .page-header {
+        margin: 2px 0 12px;
+        gap: 10px;
+      }
+      .page-header-left {
+        gap: 10px;
+      }
+      .page-icon {
+        width: 34px;
+        height: 34px;
+        font-size: 16px;
+      }
+      .page-title {
+        font-size: 16px;
+      }
+      .page-desc {
+        font-size: 12px;
+        margin-top: 2px;
+      }
+      .page-header-actions {
+        gap: 6px;
+      }
+      .page-header-actions .btn {
+        height: 32px;
+        padding: 0 10px;
+        font-size: 12.5px;
+      }
+    }
+
+    /* Phones — each field's own min-width (150-170px, set inline per page)
+       forced every one onto its own full-width row, so three filters plus
+       the action button took up most of the screen before any real
+       content appeared. Lay them out two to a row instead. */
+    @media (max-width: 719px) {
+      .filter-bar {
+        padding: 10px 12px;
+        gap: 8px 10px;
+        margin-bottom: 12px;
+      }
+      .filter-bar > .field {
+        min-width: 0 !important;
+        flex: 1 1 calc(50% - 5px);
+      }
+      .filter-bar > .field label {
+        margin-bottom: 2px;
+      }
+      .filter-bar > .btn {
+        margin-top: 0;
+        width: 100%;
+        order: 99;
+      }
+      .filter-bar .select,
+      .filter-bar .input {
+        height: 32px;
+        font-size: 12.5px;
+      }
+      .filter-bar .btn {
+        height: 34px;
+      }
+    }
+
     /* SearchDropdown.tsx is fully inline-styled —
        no shared CSS classes to keep in sync here. */
 
@@ -930,6 +995,37 @@
       position: relative;
       box-shadow: var(--shadow-card);
       transition: all 0.2s ease;
+    }
+
+    /* Phones only — the full padding/icon/value size made a page with 5+
+       stat cards (e.g. the DPR page for a DRI) scroll for several screens
+       just to get past them. */
+    @media (max-width: 719px) {
+      .stats-grid {
+        gap: 8px;
+        margin-bottom: 10px !important;
+      }
+      .stat-card {
+        padding: 8px 10px;
+      }
+      .stat-val {
+        font-size: 15px;
+        margin-top: 1px;
+      }
+      .stat-label {
+        font-size: 10.5px;
+        line-height: 1.2;
+      }
+      .stat-icon {
+        width: 20px;
+        height: 20px;
+        top: 8px;
+        right: 8px;
+      }
+      .stat-icon svg {
+        width: 12px;
+        height: 12px;
+      }
     }
 
     .stat-card:hover {
