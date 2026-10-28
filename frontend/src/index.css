@@ -904,9 +904,21 @@
       margin-bottom: 8px;
     }
 
+    /* On a 2-column phone layout, 5 cards leave the last one alone, half-width,
+       on its own row — stretch it across both columns instead. */
+    .stats-grid.cols-5 > *:last-child {
+      grid-column: span 2;
+    }
+
     @media (min-width: 720px) {
       .stats-grid {
         grid-template-columns: repeat(4, 1fr);
+      }
+      .stats-grid.cols-5 {
+        grid-template-columns: repeat(5, 1fr);
+      }
+      .stats-grid.cols-5 > *:last-child {
+        grid-column: span 1;
       }
     }
 

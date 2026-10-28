@@ -100,7 +100,10 @@ export default function DailyProgressReportPage() {
     setOpen(false);
   }
   const [drOpen, setDrOpen] = useState(false);
-  const [tab, setTab] = useState<DprTab>("work");
+  // A DRI's first stop here is almost always "did my own report go through" —
+  // the Summary tab's list is what answers that, so start there instead of
+  // Work Progress (which is a site-wide view, less relevant to them first).
+  const [tab, setTab] = useState<DprTab>(isDri ? "summary" : "work");
   const [summaryPage, setSummaryPage] = useState(1);
   const SUMMARY_PAGE_SIZE = 10;
   const [viewReportId, setViewReportId] = useState<string | null>(null);
@@ -536,7 +539,7 @@ export default function DailyProgressReportPage() {
         <button className="btn btn-primary" onClick={generateReport}>⬇ Generate Report</button>
       </div>
 
-      <div className="stats-grid" style={{ marginBottom: 20 }}>
+      <div className={"stats-grid" + (isDri ? " cols-5" : "")} style={{ marginBottom: 20 }}>
         {/* Each card jumps to wherever that number is actually broken down —
             all four live entirely on this page's own tabs. "Work Progress
             (Overall)" is DPR's own metric (% of the 16 work-type categories
@@ -562,6 +565,13 @@ export default function DailyProgressReportPage() {
           <div className="stat-val">{activeProjects}</div>
           <div className="stat-icon"><NavIcon name="board" size={15} /></div>
         </div>
+        {isDri && (
+          <div className="stat-card" style={{ cursor: "pointer" }} onClick={() => setTab("summary")}>
+            <div className="stat-label">My DPR Submissions (All Time)</div>
+            <div className="stat-val">{allDpr.filter((r) => r.submittedByUserId === currentUserId).length}</div>
+            <div className="stat-icon"><NavIcon name="dpr" size={15} /></div>
+          </div>
+        )}
       </div>
 
       <div className="panel-card">
