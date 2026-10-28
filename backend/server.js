@@ -674,6 +674,19 @@ function recordFailedLogin(email) {
   }
   loginAttempts.set(email, entry);
 }
+/* Persistent counterpart to the in-memory lockout counter above (which
+   only ever decided when to 429 someone, and forgets everything on a
+   restart) — Audit Logs could show a successful LOGIN but had no record
+   at all of failed attempts, so "is someone trying to get into this
+   account" was invisible. Never includes the password itself, only the
+   e-mail that was tried, the account it resolved to (if any), and why it
+   failed. Best-effort, same as every other audit insert here. */
+function logFailedLogin(email, userId, reason) {
+  mongoDb.collection("events").insertOne({
+    ts: Date.now(), userId: userId || "", action: "LOGIN_FAILED", targetId: userId || "", stageId: "",
+    detail: `Failed sign-in for ${email} — ${reason}`
+  }).catch((e) => console.error("Failed to log LOGIN_FAILED event:", e.message));
+}
 function clearLoginAttempts(email) {
   loginAttempts.delete(email);
 }
@@ -1974,17 +1987,19 @@ async function handleApi(req, res, urlPath) {
     }
 
     const user = await mongoDb.collection("users").findOne({ email: new RegExp("^" + email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$", "i") });
-    if (!user) { recordFailedLogin(email); return sendJson(res, 401, { error: "Invalid email or password" }); }
-    if (user.active === false) return sendJson(res, 401, { error: "This account is inactive" });
+    if (!user) { recordFailedLogin(email); logFailedLogin(email, null, "no account with this e-mail"); return sendJson(res, 401, { error: "Invalid email or password" }); }
+    if (user.active === false) { logFailedLogin(email, user.id, "account is inactive"); return sendJson(res, 401, { error: "This account is inactive" }); }
 
     if (user.passwordHash && user.passwordSalt) {
       if (!verifyPassword(password, user.passwordSalt, user.passwordHash)) {
         recordFailedLogin(email);
+        logFailedLogin(email, user.id, "wrong password");
         return sendJson(res, 401, { error: "Invalid email or password" });
       }
     } else if (user.legacyPasswordHash) {
       if (!bcrypt.compareSync(password, user.legacyPasswordHash)) {
         recordFailedLogin(email);
+        logFailedLogin(email, user.id, "wrong password");
         return sendJson(res, 401, { error: "Invalid email or password" });
       }
       // First successful login on a legacy account — migrate to our own
@@ -1997,6 +2012,7 @@ async function handleApi(req, res, urlPath) {
       );
     } else {
       recordFailedLogin(email);
+      logFailedLogin(email, user.id, "no password set on this account");
       return sendJson(res, 401, { error: "Invalid email or password" });
     }
 

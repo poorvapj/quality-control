@@ -46,6 +46,7 @@ export const ACTION_LABEL: Record<string, string> = {
   RESTORE_BACKUP: "Backup restored",
   BACKUP_FAILED: "Scheduled backup failed",
   LOGIN: "Signed in",
+  LOGIN_FAILED: "Failed sign-in attempt",
   MODULE_VIEW: "Module opened",
   CASE_STUDY_CREATE: "Case study logged",
   CASE_STUDY_DELETE: "Case study deleted",
@@ -89,7 +90,7 @@ const MODULES: ModuleDef[] = [
   // (its own restore path, distinct from Backups.tsx's own BACKUP_RESTORE
   // call) — both named here so neither kind of restore is invisible.
   { key: "backups", label: "Backups", desc: "Board backups and restores", icon: "database", actions: ["BACKUP_CREATE", "BACKUP_RESTORE", "RESTORE_BACKUP", "BACKUP_DELETE", "BACKUP_FAILED"] },
-  { key: "logins", label: "Logins", desc: "Who signed in, and when", icon: "clock", actions: ["LOGIN"] },
+  { key: "authentication", label: "Authentication", desc: "Successful sign-ins and failed attempts", icon: "permissions", actions: ["LOGIN", "LOGIN_FAILED"] },
   { key: "moduleAccess", label: "Module Access", desc: "Who opened which module — logged the first time each person opens it per browser session", icon: "eye", actions: ["MODULE_VIEW"] },
   { key: "caseStudies", label: "Case Studies", desc: "Case studies logged and deleted", icon: "award", actions: ["CASE_STUDY_CREATE", "CASE_STUDY_DELETE"] },
   { key: "qualityInspection", label: "Quality Inspection", desc: "Inspections recorded and deleted", icon: "eye", actions: ["QUALITY_INSPECTION", "QUALITY_INSPECTION_DELETE"] },
