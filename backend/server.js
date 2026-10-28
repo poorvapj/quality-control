@@ -71,6 +71,7 @@ const { getVmsDrawingRequests } = require("./vmsDrawingRequests.js");
 const { deriveApprovalOnCreate, resolveApprovalOnUpdate, findPendingApprovals } = require("./approvalRules.js");
 const approvalSlack = require("./approvalSlack.js");
 const { createOpsBatchStore, isValidBatchId } = require("./opsBatch.js");
+const { classifyError } = require("./errorMap.js");
 const backups = require("./backups.js");
 const { createStateBuilder } = require("./stateBuilder.js");
 const { createSaveDiagnostics, isEnabled: saveDiagnosticsEnabled } = require("./saveDiagnostics.js");
@@ -100,6 +101,22 @@ const photoGuard = createPhotoGuard();
 const PHOTO_GUARD_ENFORCE = process.env.PHOTO_GUARD_ENFORCE === "1";
 const CLIENT_IP_HOPS_FROM_RIGHT = parseInt(process.env.CLIENT_IP_HOPS_FROM_RIGHT, 10) || 0;
 const opsBatch = createOpsBatchStore(() => mongoDb); // /api/ops retry idempotency, see opsBatch.js
+// Both OFF unless set to exactly "1" (docs/data-integrity-fixes.md):
+//  OPS_ATOMIC=1            a whole /api/ops batch is written in ONE database transaction (all or nothing); Slack
+//                          notifications are sent after it commits. Needs a replica set (Atlas is); falls back to the old
+//                          non-atomic writes if transactions are unavailable.
+//  PROGRESS_CELL_MERGE=1   an item-based stage's checklist (cells keyed by itemId) is MERGED cell by cell on the server
+//                          instead of the whole array being replaced, so two people working on different items of the
+//                          same unit/stage cannot overwrite each other.
+const OPS_ATOMIC = process.env.OPS_ATOMIC === "1";
+const PROGRESS_CELL_MERGE = process.env.PROGRESS_CELL_MERGE === "1";
+//  EVENTS_ARCHIVE_DAYS=N   when the audit log is trimmed to its 5000 newest events, the trimmed ones are MOVED to
+//                          collection eventsArchive and kept N days (instead of being deleted). Unset/0 = old behaviour.
+//  KEEP_DELETED_DAYS=N     a record an admin deletes is first copied to collection deletedRecords and kept N days (admin
+//                          can list/restore it: GET /api/deleted, POST /api/deleted/restore); deleting a PROJECT also takes
+//                          a "pre-delete-project" backup first. Unset/0 = old behaviour.
+const EVENTS_ARCHIVE_DAYS = Math.max(0, parseInt(process.env.EVENTS_ARCHIVE_DAYS, 10) || 0);
+const KEEP_DELETED_DAYS = Math.max(0, parseInt(process.env.KEEP_DELETED_DAYS, 10) || 0);
 const { sanitizePoEvent, matchProjectByName, isStaleUpdate } = require("./imsWebhook.js");
 const { buildTeamDailyReport, slackSummaryFor } = require("./teamDailyReports.js");
 const { verifySlackSignature, parseSlackActionPayload, parseActionId, snagCloseBlocks, teamReportApproveBlocks } = require("./slackActions.js");
@@ -729,6 +746,24 @@ async function connectMongo() {
   // weekly-report markers) don't, so they are never removed.
   await mongoDb.collection("meta").createIndex({ expireAt: 1 }, { expireAfterSeconds: 0 });
 
+  if (EVENTS_ARCHIVE_DAYS > 0) await mongoDb.collection("eventsArchive").createIndex({ expireAt: 1 }, { expireAfterSeconds: 0 });
+  if (KEEP_DELETED_DAYS > 0) {
+    await mongoDb.collection("deletedRecords").createIndex({ expireAt: 1 }, { expireAfterSeconds: 0 });
+    await mongoDb.collection("deletedRecords").createIndex({ coll: 1, id: 1 });
+  }
+  if (OPS_ATOMIC) {
+    // READ-ONLY probe (a transaction that only reads and commits nothing): says in the log, at every start, whether
+    // OPS_ATOMIC can really work on this database. If not, batches silently keep the old non-atomic writes.
+    try {
+      const probe = client.startSession();
+      try { await probe.withTransaction(async () => { await mongoDb.collection("meta").findOne({ _id: "rev" }, { session: probe }); }); }
+      finally { await probe.endSession(); }
+      console.log("  OPS_ATOMIC=1: database transactions are available — /api/ops batches are all-or-nothing");
+    } catch (e) {
+      console.warn("  ! OPS_ATOMIC=1 but transactions are NOT available (" + (e && e.message) + ") — batches keep the old non-atomic writes");
+    }
+  }
+
   const projectCount = await mongoDb.collection("projects").countDocuments();
   if (projectCount === 0) {
     console.log("  no data found — starting with an empty board (use /api/reset to seed demo data if needed)");
@@ -1121,19 +1156,20 @@ async function assertOpAllowed(op, session) {
 
   if (op.op === "upsert" && op.coll === "workMeasurements" && op.rec) {
     if (!session) { const e = new Error("Sign-in required"); e.status = 401; throw e; }
-    const err = workMeasurements.validateWorkMeasurement(op.rec);
+    const wmBase = await recordForValidation(op);
+    const err = workMeasurements.validateWorkMeasurement(wmBase);
     if (err) { const e = new Error(err); e.status = 400; throw e; }
     // The link is never taken from the client as-is: it is re-derived from
     // live VMS data here (a client-proposed item is only honoured if it is
     // one of the verified candidates). Reference-only — nothing is written
     // to VMS or to any other QC record.
-    Object.assign(op.rec, await workMeasurements.resolveLink(op.rec));
+    Object.assign(op.rec, await workMeasurements.resolveLink(wmBase));
     return;
   }
 
   if (op.op === "upsert" && op.coll === "materialMeasurements" && op.rec) {
     if (!session) { const e = new Error("Sign-in required"); e.status = 401; throw e; }
-    const err = validateMeasurement(op.rec);
+    const err = validateMeasurement(await recordForValidation(op));
     if (err) { const e = new Error(err); e.status = 400; throw e; }
     return;
   }
@@ -1174,6 +1210,139 @@ async function assertOpAllowed(op, session) {
   }
 }
 
+/* A db-like object whose every call joins one transaction (only the methods applyOps uses). */
+function sessionDb(txSession) {
+  const o = (opts) => Object.assign({}, opts, { session: txSession });
+  return {
+    collection(name) {
+      const c = mongoDb.collection(name);
+      return {
+        findOne: (f, opts) => c.findOne(f, o(opts)),
+        find: (f, opts) => c.find(f, o(opts)),
+        updateOne: (f, u, opts) => c.updateOne(f, u, o(opts)),
+        insertOne: (d, opts) => c.insertOne(d, o(opts)),
+        deleteOne: (f, opts) => c.deleteOne(f, o(opts)),
+        deleteMany: (f, opts) => c.deleteMany(f, o(opts)),
+        countDocuments: (f, opts) => c.countDocuments(f, o(opts))
+      };
+    }
+  };
+}
+
+/* progress update for an item-based checklist: a single atomic pipeline update that merges the incoming cells into the
+   stored array by itemId (a cell present on both sides gets the incoming fields on top, cells only on one side are kept).
+   Anything else (flag off, no/empty checklist, cells without an itemId) returns the classic $set/$unset update. */
+function progressUpdate(patch, classic, items) {
+  if (!PROGRESS_CELL_MERGE) return classic;
+  const cells = patch && patch.checklist;
+  if (!Array.isArray(cells) || cells.length === 0 || !cells.every((c) => c && typeof c === "object" && typeof c.itemId === "string" && c.itemId)) return classic;
+  const lit = (v) => ({ $literal: v }); // values are data, never field paths ("$100" in a note must stay text)
+  const setStage = {}; const unsetFields = [];
+  for (const [k, v] of Object.entries(patch)) {
+    if (k === "checklist") continue;
+    if (v === null) unsetFields.push(k); else setStage[k] = lit(v);
+  }
+  setStage.checklist = {
+    $let: {
+      vars: { cur: { $cond: [{ $isArray: "$checklist" }, "$checklist", []] }, inc: lit(cells) },
+      in: {
+        $concatArrays: [
+          { $map: { input: "$$cur", as: "c", in: { $let: { vars: { m: { $first: { $filter: { input: "$$inc", as: "i", cond: { $eq: ["$$i.itemId", "$$c.itemId"] } } } } }, in: { $cond: [{ $eq: [{ $type: "$$m" }, "missing"] }, "$$c", { $mergeObjects: ["$$c", "$$m"] }] } } } } },
+          { $filter: { input: "$$inc", as: "i", cond: { $not: [{ $in: ["$$i.itemId", { $map: { input: "$$cur", as: "c", in: "$$c.itemId" } }] }] } } }
+        ]
+      }
+    }
+  };
+  const stages = [{ $set: setStage }];
+  // The stage's own status is "done" only when EVERY listed item's cell is done, judged on the MERGED cells — so two
+  // people finishing the last two items at the same moment still end with "done" (each browser only sees its own cell).
+  // The browser lists the stage's item ids; it only has an effect when this write also sets the status.
+  const ids = Array.isArray(items) ? items.filter((x) => typeof x === "string" && x && x.length <= 200).slice(0, 500) : [];
+  if (ids.length && Object.prototype.hasOwnProperty.call(setStage, "status")) {
+    stages.push({ $set: { status: { $cond: [{ $allElementsTrue: [{ $map: { input: lit(ids), as: "id", in: { $eq: [{ $let: { vars: { cell: { $first: { $filter: { input: "$checklist", as: "c", cond: { $eq: ["$$c.itemId", "$$id"] } } } } }, in: "$$cell.status" } }, "done"] } } }] }, "done", "wip"] } } });
+  }
+  if (unsetFields.length) stages.push({ $unset: unsetFields });
+  return stages;
+}
+
+// The record a validation rule should see: the stored record with the incoming fields on top, so a PARTIAL update
+// (just an approval decision, just a confirmed link) is validated against the whole record, not against its few fields.
+async function recordForValidation(op) {
+  if (!op.rec || !op.rec.id || op.create === true) return op.rec;
+  const existing = await mongoDb.collection(op.coll).findOne({ id: op.rec.id }, { projection: { _id: 0 } });
+  return existing ? Object.assign({}, existing, op.rec) : op.rec;
+}
+
+/* ---- creates, uniqueness, appends (docs/data-integrity-fixes.md)
+   An upsert is a field-level merge, so a "create" that happens to reuse an existing id used to silently overwrite
+   that record (ids come from the browser: max+1 over its possibly stale copy of the board). A client that means
+   "create" now sets `create: true` on the op: the server then INSERTS, and an existing id is a 409 conflict
+   (nothing is written, the user is told). Ops without the flag behave exactly as before (older browsers).
+   `push` appends ONE object to an array field instead of replacing the whole array (two people adding a photo
+   or comment at the same time no longer lose one of them). */
+const PUSHABLE_FIELDS = { snags: ["photos", "comments"] };
+function conflict(message) { const e = new Error(message); e.status = 409; return e; }
+function validatePush(op) {
+  if (op.push === undefined) return;
+  const allowed = PUSHABLE_FIELDS[op.coll] || [];
+  const keys = op.push && typeof op.push === "object" && !Array.isArray(op.push) ? Object.keys(op.push) : null;
+  if (!keys || keys.length === 0 || keys.some((k) => !allowed.includes(k) || !op.push[k] || typeof op.push[k] !== "object" || Array.isArray(op.push[k]))) {
+    const e = new Error("push is only allowed for " + (allowed.length ? allowed.join("/") : "no field") + " on " + op.coll + ", one object at a time");
+    e.status = 400; throw e;
+  }
+  if (op.rec && keys.some((k) => Object.prototype.hasOwnProperty.call(op.rec, k))) { const e = new Error("a field cannot be both set and pushed in one op"); e.status = 400; throw e; }
+}
+async function assertCreatesAndUniques(ops) {
+  const seenCreates = new Set();
+  for (const op of ops || []) {
+    if (!op || typeof op !== "object" || op.op !== "upsert" || !COLLECTIONS.includes(op.coll) || !op.rec || !op.rec.id) continue;
+    validatePush(op);
+    if (op.create === true) {
+      const key = op.coll + "::" + op.rec.id;
+      if (seenCreates.has(key)) throw conflict(op.rec.id + " appears twice in one save — your change was not saved.");
+      seenCreates.add(key);
+      const exists = await mongoDb.collection(op.coll).findOne({ id: op.rec.id }, { projection: { _id: 1 } });
+      if (exists) throw conflict(op.rec.id + " already exists (someone else created it a moment ago) — your change was NOT saved. Reload and try again.");
+    }
+    if (op.coll === "users" && typeof op.rec.email === "string" && op.rec.email) {
+      const clash = await mongoDb.collection("users").findOne({ email: op.rec.email, id: { $ne: op.rec.id } }, { projection: { _id: 1 } });
+      if (clash) throw conflict("That e-mail address is already used by another user — your change was not saved.");
+    }
+  }
+}
+// The single write of an upsert op: insert-only for a create, the usual upsert otherwise.
+async function writeRecord(db, op, update) {
+  if (op.create === true) {
+    const doc = Object.assign({}, update.$set || { id: op.rec.id });
+    for (const [field, spec] of Object.entries(update.$push || {})) doc[field] = spec.$each.slice();
+    try {
+      await db.collection(op.coll).insertOne(doc);
+    } catch (e) {
+      if (e && e.code === 11000 && e.keyPattern && e.keyPattern.id) throw conflict(op.rec.id + " already exists (someone else created it a moment ago) — your change was NOT saved. Reload and try again.");
+      throw e;
+    }
+    return { matchedCount: 0, upsertedCount: 1 };
+  }
+  return db.collection(op.coll).updateOne({ id: op.rec.id }, update, { upsert: true });
+}
+// With KEEP_DELETED_DAYS: the deleted record is copied aside first (never a password hash) so it can be listed/restored.
+async function keepDeletedCopy(db, coll, id, byUserId) {
+  if (!KEEP_DELETED_DAYS) return;
+  const old = await db.collection(coll).findOne({ id }, { projection: { _id: 0 } });
+  if (!old) return;
+  if (coll === "users") { delete old.passwordHash; delete old.passwordSalt; delete old.legacyPasswordHash; }
+  const now = Date.now();
+  await db.collection("deletedRecords").insertOne({ coll, id, doc: old, at: now, by: byUserId || null, expireAt: new Date(now + KEEP_DELETED_DAYS * 86400000) });
+}
+
+// A deleted VMS-origin record must not be re-imported by the VMS poller / live push (see syncVmsDpr.js).
+const VMS_ID_PREFIX = { dpr: "DPR-VMS-", drawingRequests: "DR-VMS-" };
+async function recordVmsTombstone(db, coll, id) {
+  const prefix = VMS_ID_PREFIX[coll];
+  if (!prefix || typeof id !== "string" || !id.startsWith(prefix)) return;
+  await db.collection("meta").updateOne({ _id: "tomb:" + id }, { $set: { coll, at: Date.now() } }, { upsert: true });
+}
+
 // `trace` is optional and used ONLY by the log-only save diagnostics (saveDiagnostics.js): when present, the two
 // side effects below record counts into it. It is undefined in normal operation and never influences a write.
 async function applyOps(ops, session, trace) {
@@ -1184,151 +1353,176 @@ async function applyOps(ops, session, trace) {
     if (!op || typeof op !== "object") continue;
     await assertOpAllowed(op, session);
   }
+  // Conflicts (existing id on a create, e-mail already used, bad push) are raised HERE, before any write of the batch.
+  await assertCreatesAndUniques(ops);
 
-  for (const op of ops || []) {
-    if (!op || typeof op !== "object") continue;
+  // Everything below is the WRITE phase of the batch. With OPS_ATOMIC=1 it runs in one transaction and the Slack
+  // follow-ups wait for the commit; otherwise it behaves exactly as before (each op written as it is reached).
+  const deferred = [];
+  let txSession = null;
+  const after = OPS_ATOMIC ? (fn) => { deferred.push(fn); } : (fn) => { fn(); };
+  const runMaybeNested = (fn) => (OPS_ATOMIC ? fn(txSession) : withOptionalTransaction(fn));
+  const writeAll = async (db) => {
+    deferred.length = 0; // the transaction callback can be retried
+    for (const op of ops || []) {
+      if (!op || typeof op !== "object") continue;
 
-    if (op.op === "upsert" && COLLECTIONS.includes(op.coll) && op.rec && op.rec.id) {
-      const rec = Object.assign({}, op.rec);
-      // A plaintext "password" field on a users upsert (e.g. set via Masters
-      // ▸ User Master) is hashed here and never stored/echoed back raw.
-      if (op.coll === "users" && typeof rec.password === "string" && rec.password) {
-        const salt = crypto.randomBytes(16).toString("hex");
-        rec.passwordHash = hashPassword(rec.password, salt);
-        rec.passwordSalt = salt;
-      }
-      delete rec.password;
-      const { set, unset } = splitSetUnset(rec);
-      const update = {};
-      if (Object.keys(set).length) update.$set = set;
-      if (Object.keys(unset).length) update.$unset = unset;
+      if (op.op === "upsert" && COLLECTIONS.includes(op.coll) && op.rec && op.rec.id) {
+        const rec = Object.assign({}, op.rec);
+        // A plaintext "password" field on a users upsert (e.g. set via Masters
+        // ▸ User Master) is hashed here and never stored/echoed back raw.
+        if (op.coll === "users" && typeof rec.password === "string" && rec.password) {
+          const salt = crypto.randomBytes(16).toString("hex");
+          rec.passwordHash = hashPassword(rec.password, salt);
+          rec.passwordSalt = salt;
+        }
+        delete rec.password;
+        const { set, unset } = splitSetUnset(rec);
+        const update = {};
+        if (Object.keys(set).length) update.$set = set;
+        if (Object.keys(unset).length) update.$unset = unset;
+        if (op.push) {
+          update.$push = {};
+          for (const [field, value] of Object.entries(op.push)) update.$push[field] = { $each: [value] };
+        }
 
-      if (op.coll === "drawingRequests" && rec.reviewStatus) {
-        // Compare-and-swap on the stage the client thought it was
-        // transitioning FROM, instead of a plain updateOne — two concurrent
-        // approvals reading the same "current stage" used to both pass
-        // assertOpAllowed's check and then both write, silently losing one
-        // transition to last-write-wins. filter.reviewStatus below makes
-        // the second writer's update simply match nothing instead.
-        const existing = await mongoDb.collection("drawingRequests").findOne({ id: op.rec.id }, { projection: { reviewStatus: 1 } });
-        const from = existing ? existing.reviewStatus : undefined;
-        const filter = existing ? { id: op.rec.id, reviewStatus: from } : { id: op.rec.id };
-        const result = await mongoDb.collection(op.coll).updateOne(filter, update, { upsert: !existing });
-        if (existing && result.matchedCount === 0) {
-          const e = new Error(`${op.rec.id} was already moved to a different stage by someone else — reload and retry`);
-          e.status = 409;
-          throw e;
-        }
-        if (rec.reviewStatus !== from) {
-          const saved = await mongoDb.collection("drawingRequests").findOne({ id: op.rec.id }, { projection: { _id: 0 } });
-          if (saved) notifyDrawingRequestStageChange(saved);
-        }
-      } else if (op.coll === "assignments" && rec.assignedTo) {
-        const existing = await mongoDb.collection("assignments").findOne({ id: op.rec.id }, { projection: { assignedTo: 1 } });
-        await mongoDb.collection(op.coll).updateOne({ id: op.rec.id }, update, { upsert: true });
-        // Notify on a brand-new assignment or a hand-off to someone else —
-        // not on every incidental field edit (e.g. a note tweak) to the
-        // same assignee.
-        if (!existing || existing.assignedTo !== rec.assignedTo) {
-          notifyAssignmentTarget("work_assigned", rec);
-        }
-      } else if (op.coll === "snags") {
-        const existing = await mongoDb.collection("snags").findOne(
-          { id: op.rec.id },
-          { projection: { assignedTo: 1, status: 1, reopenCount: 1, title: 1, projectId: 1 } }
-        );
-        await mongoDb.collection(op.coll).updateOne({ id: op.rec.id }, update, { upsert: true });
-        const reopened = !!existing && existing.status === "Closed" && rec.status && rec.status !== "Closed"
-          && (rec.reopenCount || 0) > (existing.reopenCount || 0);
-        const reassigned = !!rec.assignedTo && (!existing || existing.assignedTo !== rec.assignedTo);
-        // A single write can technically be both (reopened straight onto a
-        // new assignee) — the reopen is the more important thing to flag,
-        // so it wins rather than firing two events for one save.
-        if (reopened) {
-          notifySnagTarget("snag_reopened", rec, existing);
-        } else if (reassigned) {
-          notifySnagTarget("snag_assigned", rec, existing);
-        }
-      } else if (op.coll === "qualityInspections") {
-        await mongoDb.collection(op.coll).updateOne({ id: op.rec.id }, update, { upsert: true });
-        // Every submission (not just a Fail) — there's no edit path for an
-        // already-saved inspection (only a fresh re-inspect record), so
-        // this upsert is always a brand-new one.
-        notifyQualityInspectionSubmitted(rec);
-        // A passing re-inspection closes the ORIGINAL failed inspection's
-        // linked Snag server-side — never trust the client alone to close
-        // its own loop, since that Snag's status gates the "open issues"
-        // KPI everyone else sees. The corrective-action ASSIGNMENT
-        // notification itself already happened via the "snags" upsert
-        // branch above, in the same apply() batch that created this record.
-        if (shouldResolveOriginal(rec)) {
-          const original = await mongoDb.collection("qualityInspections").findOne(
-            { id: rec.reInspectionOf },
-            { projection: { linkedSnagId: 1 } }
+        if (op.coll === "drawingRequests" && rec.reviewStatus) {
+          // Compare-and-swap on the stage the client thought it was
+          // transitioning FROM, instead of a plain updateOne — two concurrent
+          // approvals reading the same "current stage" used to both pass
+          // assertOpAllowed's check and then both write, silently losing one
+          // transition to last-write-wins. filter.reviewStatus below makes
+          // the second writer's update simply match nothing instead.
+          const existing = await db.collection("drawingRequests").findOne({ id: op.rec.id }, { projection: { reviewStatus: 1 } });
+          const from = existing ? existing.reviewStatus : undefined;
+          const filter = existing ? { id: op.rec.id, reviewStatus: from } : { id: op.rec.id };
+          const result = op.create === true ? await writeRecord(db, op, update) : await db.collection(op.coll).updateOne(filter, update, { upsert: !existing });
+          if (existing && result.matchedCount === 0) {
+            const e = new Error(`${op.rec.id} was already moved to a different stage by someone else — reload and retry`);
+            e.status = 409;
+            throw e;
+          }
+          if (rec.reviewStatus !== from) {
+            const saved = await db.collection("drawingRequests").findOne({ id: op.rec.id }, { projection: { _id: 0 } });
+            if (saved) after(() => notifyDrawingRequestStageChange(saved));
+          }
+        } else if (op.coll === "assignments" && rec.assignedTo) {
+          const existing = await db.collection("assignments").findOne({ id: op.rec.id }, { projection: { assignedTo: 1 } });
+          await writeRecord(db, op, update);
+          // Notify on a brand-new assignment or a hand-off to someone else —
+          // not on every incidental field edit (e.g. a note tweak) to the
+          // same assignee.
+          if (!existing || existing.assignedTo !== rec.assignedTo) {
+            after(() => notifyAssignmentTarget("work_assigned", rec));
+          }
+        } else if (op.coll === "snags") {
+          const existing = await db.collection("snags").findOne(
+            { id: op.rec.id },
+            { projection: { assignedTo: 1, status: 1, reopenCount: 1, title: 1, projectId: 1 } }
           );
-          if (original?.linkedSnagId) {
-            const closedRes = await mongoDb.collection("snags").updateOne(
-              { id: original.linkedSnagId },
-              { $set: { status: "Closed", closedAt: Date.now(), closedBy: session ? session.userId : null } }
+          await writeRecord(db, op, update);
+          const reopened = !!existing && existing.status === "Closed" && rec.status && rec.status !== "Closed"
+            && (rec.reopenCount || 0) > (existing.reopenCount || 0);
+          const reassigned = !!rec.assignedTo && (!existing || existing.assignedTo !== rec.assignedTo);
+          // A single write can technically be both (reopened straight onto a
+          // new assignee) — the reopen is the more important thing to flag,
+          // so it wins rather than firing two events for one save.
+          if (reopened) {
+            after(() => notifySnagTarget("snag_reopened", rec, existing));
+          } else if (reassigned) {
+            after(() => notifySnagTarget("snag_assigned", rec, existing));
+          }
+        } else if (op.coll === "qualityInspections") {
+          await writeRecord(db, op, update);
+          // Every submission (not just a Fail) — there's no edit path for an
+          // already-saved inspection (only a fresh re-inspect record), so
+          // this upsert is always a brand-new one.
+          after(() => notifyQualityInspectionSubmitted(rec));
+          // A passing re-inspection closes the ORIGINAL failed inspection's
+          // linked Snag server-side — never trust the client alone to close
+          // its own loop, since that Snag's status gates the "open issues"
+          // KPI everyone else sees. The corrective-action ASSIGNMENT
+          // notification itself already happened via the "snags" upsert
+          // branch above, in the same apply() batch that created this record.
+          if (shouldResolveOriginal(rec)) {
+            const original = await db.collection("qualityInspections").findOne(
+              { id: rec.reInspectionOf },
+              { projection: { linkedSnagId: 1 } }
             );
-            if (trace) trace.snagClosed = closedRes?.modifiedCount || 0; // (diagnostics only)
+            if (original?.linkedSnagId) {
+              const closedRes = await db.collection("snags").updateOne(
+                { id: original.linkedSnagId },
+                { $set: { status: "Closed", closedAt: Date.now(), closedBy: session ? session.userId : null } }
+              );
+              if (trace) trace.snagClosed = closedRes?.modifiedCount || 0; // (diagnostics only)
+            }
           }
+        } else {
+          await writeRecord(db, op, update);
         }
-      } else {
-        await mongoDb.collection(op.coll).updateOne({ id: op.rec.id }, update, { upsert: true });
+      } else if (op.op === "delete" && COLLECTIONS.includes(op.coll) && op.id) {
+        if (op.coll === "projects") {
+          // Project delete + its full cascade (scoped collections, plus the
+          // progress records keyed by the floor/unit ids it owns) is one
+          // transaction — a crash halfway used to leave the project gone but
+          // some of its floors/units/snags/progress still behind, or vice
+          // versa, rather than either all-gone or all-untouched.
+          await runMaybeNested(async (session) => {
+            const floorIds = (await db.collection("floors").find({ projectId: op.id }, { projection: { id: 1 }, session }).toArray()).map((f) => f.id);
+            const unitIds = (await db.collection("units").find({ projectId: op.id }, { projection: { id: 1 }, session }).toArray()).map((u) => u.id);
+            await db.collection(op.coll).deleteOne({ id: op.id }, { session });
+            // A deleted project would otherwise leave its floors/units/snags/
+            // assignments/dpr/drawingRequests/stagemap rows behind with a
+            // projectId that no longer resolves to anything — every page that
+            // joins on projectId assumes it always does.
+            if (trace) trace.cascade = {}; // (diagnostics only; reset because the transaction callback can be retried)
+            for (const c of PROJECT_SCOPED_COLLECTIONS) {
+              const deleted = await db.collection(c).deleteMany({ projectId: op.id }, { session });
+              if (trace) trace.cascade[c] = deleted?.deletedCount;
+            }
+            // progress documents are keyed `${targetId}::${stageId}` (see
+            // frontend shared/rules.ts's pkey) — projectId isn't one of their
+            // own fields, so they're only reachable via the floor/unit ids
+            // gathered above, before those rows were deleted.
+            const targetIds = [...floorIds, ...unitIds];
+            if (targetIds.length) {
+              const pattern = "^(" + targetIds.map(escapeRegExp).join("|") + ")::";
+              const deletedProgress = await db.collection("progress").deleteMany({ _id: { $regex: pattern } }, { session });
+              if (trace) trace.cascade.progress = deletedProgress?.deletedCount;
+            }
+          });
+        } else {
+          await keepDeletedCopy(db, op.coll, op.id, session && session.userId);
+          await db.collection(op.coll).deleteOne({ id: op.id });
+          await recordVmsTombstone(db, op.coll, op.id);
+        }
+      } else if (op.op === "progress" && op.key && op.patch) {
+        const { set, unset } = splitSetUnset(op.patch);
+        const update = {};
+        if (Object.keys(set).length) update.$set = set;
+        if (Object.keys(unset).length) update.$unset = unset;
+        await db.collection("progress").updateOne({ _id: op.key }, progressUpdate(op.patch, update, op.items), { upsert: true });
+      } else if (op.op === "event" && op.ev) {
+        await db.collection("events").insertOne(Object.assign({}, op.ev));
       }
-    } else if (op.op === "delete" && COLLECTIONS.includes(op.coll) && op.id) {
-      if (op.coll === "projects") {
-        // Project delete + its full cascade (scoped collections, plus the
-        // progress records keyed by the floor/unit ids it owns) is one
-        // transaction — a crash halfway used to leave the project gone but
-        // some of its floors/units/snags/progress still behind, or vice
-        // versa, rather than either all-gone or all-untouched.
-        await withOptionalTransaction(async (session) => {
-          const floorIds = (await mongoDb.collection("floors").find({ projectId: op.id }, { projection: { id: 1 }, session }).toArray()).map((f) => f.id);
-          const unitIds = (await mongoDb.collection("units").find({ projectId: op.id }, { projection: { id: 1 }, session }).toArray()).map((u) => u.id);
-          await mongoDb.collection(op.coll).deleteOne({ id: op.id }, { session });
-          // A deleted project would otherwise leave its floors/units/snags/
-          // assignments/dpr/drawingRequests/stagemap rows behind with a
-          // projectId that no longer resolves to anything — every page that
-          // joins on projectId assumes it always does.
-          if (trace) trace.cascade = {}; // (diagnostics only; reset because the transaction callback can be retried)
-          for (const c of PROJECT_SCOPED_COLLECTIONS) {
-            const deleted = await mongoDb.collection(c).deleteMany({ projectId: op.id }, { session });
-            if (trace) trace.cascade[c] = deleted?.deletedCount;
-          }
-          // progress documents are keyed `${targetId}::${stageId}` (see
-          // frontend shared/rules.ts's pkey) — projectId isn't one of their
-          // own fields, so they're only reachable via the floor/unit ids
-          // gathered above, before those rows were deleted.
-          const targetIds = [...floorIds, ...unitIds];
-          if (targetIds.length) {
-            const pattern = "^(" + targetIds.map(escapeRegExp).join("|") + ")::";
-            const deletedProgress = await mongoDb.collection("progress").deleteMany({ _id: { $regex: pattern } }, { session });
-            if (trace) trace.cascade.progress = deletedProgress?.deletedCount;
-          }
-        });
-      } else {
-        await mongoDb.collection(op.coll).deleteOne({ id: op.id });
-      }
-    } else if (op.op === "progress" && op.key && op.patch) {
-      const { set, unset } = splitSetUnset(op.patch);
-      const update = {};
-      if (Object.keys(set).length) update.$set = set;
-      if (Object.keys(unset).length) update.$unset = unset;
-      await mongoDb.collection("progress").updateOne({ _id: op.key }, update, { upsert: true });
-    } else if (op.op === "event" && op.ev) {
-      await mongoDb.collection("events").insertOne(Object.assign({}, op.ev));
-    }
 
-    // Slack follow-ups for approvals — after the write, never blocking or failing it
-    if (op._notifyApprovalRequest) notifyApprovalRequest(op._notifyApprovalRequest, op.rec);
-    if (op._notifyApprovalDecision) {
-      const d = op._notifyApprovalDecision;
-      mongoDb.collection(d.coll).findOne({ id: op.rec.id }, { projection: { _id: 0 } })
-        .then((saved) => saved && notifyApprovalDecision(d.coll, saved, d.status, d.remark, d.byUserId))
-        .catch((e) => console.error("approval decision notify failed:", e.message));
+      // Slack follow-ups for approvals — after the write, never blocking or failing it
+      if (op._notifyApprovalRequest) after(() => notifyApprovalRequest(op._notifyApprovalRequest, op.rec));
+      if (op._notifyApprovalDecision) {
+        const d = op._notifyApprovalDecision;
+        after(() => {
+          mongoDb.collection(d.coll).findOne({ id: op.rec.id }, { projection: { _id: 0 } })
+            .then((saved) => saved && notifyApprovalDecision(d.coll, saved, d.status, d.remark, d.byUserId))
+            .catch((e) => console.error("approval decision notify failed:", e.message));
+        });
+      }
     }
+  };
+  if (OPS_ATOMIC) {
+    await withOptionalTransaction(async (txs) => { txSession = txs; return writeAll(txs ? sessionDb(txs) : mongoDb); });
+    for (const fn of deferred) { try { fn(); } catch (e) { console.error("post-commit notification failed:", e && e.message); } }
+  } else {
+    await writeAll(mongoDb);
   }
   await trimEvents();
   return bumpRev();
@@ -1419,10 +1613,16 @@ async function trimEvents() {
   const excess = count - MAX_EVENTS;
   const oldest = await mongoDb
     .collection("events")
-    .find({}, { projection: { _id: 1 } })
+    .find({}, EVENTS_ARCHIVE_DAYS > 0 ? {} : { projection: { _id: 1 } })
     .sort({ ts: 1 })
     .limit(excess)
     .toArray();
+  if (oldest.length && EVENTS_ARCHIVE_DAYS > 0) {
+    // keep them (EVENTS_ARCHIVE_DAYS): copy first, delete only what was copied; a duplicate (already archived) is fine
+    const expireAt = new Date(Date.now() + EVENTS_ARCHIVE_DAYS * 86400000), archivedAt = Date.now();
+    try { await mongoDb.collection("eventsArchive").insertMany(oldest.map((e) => Object.assign({}, e, { archivedAt, expireAt })), { ordered: false }); }
+    catch (e) { if (!(e && (e.code === 11000 || (e.writeErrors || []).every((w) => w.code === 11000)))) throw e; }
+  }
   if (oldest.length) await mongoDb.collection("events").deleteMany({ _id: { $in: oldest.map((o) => o._id) } });
 }
 
@@ -1452,8 +1652,9 @@ async function withOptionalTransaction(work) {
   }
 }
 
-async function resetDb(mode, actorUserId) {
+async function resetDb(mode, actorUserId, opts) {
   const seed = mode === "blank" ? blankData() : seedData();
+  await takeSafetyBackup("pre-reset", actorUserId, opts);
   return withOptionalTransaction(async (session) => {
     for (const c of COLLECTIONS) {
       await mongoDb.collection(c).deleteMany({}, { session });
@@ -1559,13 +1760,33 @@ function stripBackupPasswords(doc) {
   return Object.assign({}, doc, { collections });
 }
 
-async function restoreBackup(id, actorUserId) {
+/* A restore (and a reset) replaces the whole live board. First save what is there now as an ordinary backup, so a
+   restore of the wrong/old backup can itself be undone. If that backup cannot be made nothing is touched, unless the
+   caller explicitly sends skipSafetyBackup:true. */
+async function takeSafetyBackup(kind, actorUserId, opts) {
+  if (opts && opts.skipSafetyBackup === true) return null;
+  try {
+    return (await createBackup(kind + ":" + (actorUserId || "?"))).id;
+  } catch (e) {
+    const err = new Error("Could not take a safety backup first (" + e.message + ") — nothing was changed. To continue without one, repeat the request with skipSafetyBackup:true.");
+    err.status = 409;
+    throw err;
+  }
+}
+
+async function restoreBackup(id, actorUserId, opts) {
   const doc = await mongoDb.collection("backups").findOne({ id });
   if (!doc) { const e = new Error("Backup not found"); e.status = 404; throw e; }
+  const safetyId = await takeSafetyBackup("pre-restore", actorUserId, opts);
+  const skipped = [];
   return withOptionalTransaction(async (session) => {
+    skipped.length = 0; // the transaction callback can be retried
     for (const c of COLLECTIONS) {
+      // An older backup predates some collections (e.g. columnMaster, caseStudies). Restoring it used to EMPTY those
+      // collections; now a collection the backup does not contain is left exactly as it is.
+      if (!doc.collections || !Array.isArray(doc.collections[c])) { skipped.push(c); continue; }
       await mongoDb.collection(c).deleteMany({}, { session });
-      const rows = doc.collections[c] || [];
+      const rows = doc.collections[c];
       if (rows.length) await mongoDb.collection(c).insertMany(rows, { session });
     }
     await mongoDb.collection("progress").deleteMany({}, { session });
@@ -1579,7 +1800,7 @@ async function restoreBackup(id, actorUserId) {
     // of the board), so the loop above never touches it — this insert
     // survives the restore, recording who restored which backup and when.
     await mongoDb.collection("events").insertOne(
-      { ts: Date.now(), userId: actorUserId || "", action: "RESTORE_BACKUP", targetId: id, stageId: "", detail: `Restored backup ${id}` },
+      { ts: Date.now(), userId: actorUserId || "", action: "RESTORE_BACKUP", targetId: id, stageId: "", detail: `Restored backup ${id}` + (safetyId ? ` (board saved first as ${safetyId})` : "") + (skipped.length ? ` — kept current data for ${skipped.length} collection(s) this backup does not contain: ${skipped.join(", ")}` : "") },
       { session }
     );
     return rev;
@@ -1767,6 +1988,11 @@ async function handleApi(req, res, urlPath) {
     // LOG-ONLY diagnostics (null unless SAVE_DIAGNOSTICS=1): observes this batch, never alters it — no body,
     // write or ordering depends on it, and every call into it swallows its own errors.
     const probe = saveDiag ? saveDiag.begin(body.ops, { anonymous: !opsSession }) : null;
+    if (KEEP_DELETED_DAYS > 0 && opsSession && opsSession.isAdmin && body.ops.some((o) => o && o.op === "delete" && o.coll === "projects")) {
+      // a project delete removes its floors/units/snags/... too — too much to copy per record, so save the whole board first
+      try { await takeSafetyBackup("pre-delete-project", opsSession.userId); }
+      catch (e) { if (batchId !== null) await opsBatch.release(batchId); return sendJson(res, e.status || 409, { error: e.message }); }
+    }
     try {
       await applyOps(body.ops, opsSession, probe ? probe.trace : undefined);
       if (probe) probe.finish();
@@ -2067,7 +2293,12 @@ async function handleApi(req, res, urlPath) {
     if (!session) return sendJson(res, 401, { error: "Sign-in required" });
     if (!session.isAdmin) return sendJson(res, 403, { error: "Admin access required" });
     const body = await readBody(req);
-    await resetDb(body.mode === "blank" ? "blank" : "demo", session.userId);
+    try {
+      await resetDb(body.mode === "blank" ? "blank" : "demo", session.userId, { skipSafetyBackup: body.skipSafetyBackup === true });
+    } catch (e) {
+      if (e.status) return sendJson(res, e.status, { error: e.message });
+      throw e;
+    }
     return sendStateResponse(req, res);
   }
   if (req.method === "POST" && urlPath === "/api/backups") {
@@ -2169,6 +2400,30 @@ async function handleApi(req, res, urlPath) {
     // summaries are computed inside MongoDB — the full backup documents are never loaded into memory
     return sendJson(res, 200, { backups: await backups.listBackupSummaries(mongoDb) });
   }
+  if (req.method === "GET" && urlPath === "/api/deleted") {
+    const session = getSession(req);
+    if (!session) return sendJson(res, 401, { error: "Sign-in required" });
+    if (!session.isAdmin) return sendJson(res, 403, { error: "Admin access required" });
+    const rows = await mongoDb.collection("deletedRecords").find({}, { projection: { _id: 0, coll: 1, id: 1, at: 1, by: 1, "doc.name": 1, "doc.title": 1, "doc.ticketNo": 1 } }).sort({ at: -1 }).limit(200).toArray();
+    return sendJson(res, 200, { keepDays: KEEP_DELETED_DAYS, deleted: rows });
+  }
+  if (req.method === "POST" && urlPath === "/api/deleted/restore") {
+    const session = getSession(req);
+    if (!session) return sendJson(res, 401, { error: "Sign-in required" });
+    if (!session.isAdmin) return sendJson(res, 403, { error: "Admin access required" });
+    const body = await readBody(req);
+    if (!COLLECTIONS.includes(body.coll) || typeof body.id !== "string") return sendJson(res, 400, { error: "coll and id are required" });
+    if (body.coll === "users") return sendJson(res, 400, { error: "A deleted user cannot be restored from here (its password is not kept) — create the user again." });
+    const row = await mongoDb.collection("deletedRecords").findOne({ coll: body.coll, id: body.id }, { sort: { at: -1 } });
+    if (!row) return sendJson(res, 404, { error: "No kept copy of that record (it may be older than KEEP_DELETED_DAYS)" });
+    try { await mongoDb.collection(body.coll).insertOne(Object.assign({}, row.doc)); }
+    catch (e) { if (e && e.code === 11000) return sendJson(res, 409, { error: body.id + " already exists again — nothing was restored." }); throw e; }
+    await mongoDb.collection("deletedRecords").deleteOne({ _id: row._id });
+    await mongoDb.collection("meta").deleteOne({ _id: "tomb:" + body.id }); // a restored VMS-origin record is not blocked any more
+    await mongoDb.collection("events").insertOne({ ts: Date.now(), userId: session.userId, action: "RESTORE_DELETED", targetId: body.id, stageId: "", detail: "Restored deleted " + body.coll + " record " + body.id });
+    await bumpRev();
+    return sendJson(res, 200, { ok: true });
+  }
   const backupIdMatch = /^\/api\/backups\/([^/]+)$/.exec(urlPath);
   if (req.method === "GET" && backupIdMatch) {
     const session = getSession(req);
@@ -2185,7 +2440,8 @@ async function handleApi(req, res, urlPath) {
     if (!session) return sendJson(res, 401, { error: "Sign-in required" });
     if (!session.isAdmin) return sendJson(res, 403, { error: "Admin access required" });
     try {
-      await restoreBackup(restoreMatch[1], session.userId);
+      const restoreBody = await readBody(req).catch(() => ({}));
+      await restoreBackup(restoreMatch[1], session.userId, { skipSafetyBackup: !!restoreBody && restoreBody.skipSafetyBackup === true });
     } catch (e) {
       if (e.status) return sendJson(res, e.status, { error: e.message });
       throw e;
@@ -2235,7 +2491,12 @@ async function handleApi(req, res, urlPath) {
       if (already) continue;
       const report = buildTeamDailyReport(state.data, team, dateStr);
       if (!report) continue; // no members — nothing to report
-      await mongoDb.collection("teamDailyReports").updateOne({ id: report.id }, { $set: report }, { upsert: true });
+      try {
+        await mongoDb.collection("teamDailyReports").insertOne(Object.assign({}, report));
+      } catch (e) {
+        if (e && e.code === 11000) continue; // another run created it a moment ago — never overwrite (it may already be signed off)
+        throw e;
+      }
       generated.push(report.id);
       if (team.leaderId) {
         const leader = await mongoDb.collection("users").findOne({ id: team.leaderId }, { projection: { email: 1, slackId: 1 } });
@@ -2277,7 +2538,11 @@ const server = http.createServer(async (req, res) => {
     try {
       return await handleApi(req, res, urlPath);
     } catch (e) {
-      return sendJson(res, 400, { error: e.message });
+      // 409 for a duplicate key, 503 for a transient database problem (the browser keeps and retries the change),
+      // 400 for everything else exactly as before — see errorMap.js.
+      const { status, message } = classifyError(e);
+      if (status !== 400) console.error("[api] " + status + " on " + req.method + " " + urlPath + ": " + (e && e.message ? e.message : e));
+      return sendJson(res, status, { error: message });
     }
   }
 

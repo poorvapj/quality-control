@@ -115,7 +115,7 @@ export function useActions() {
       const p = byId(coll(data, "qparams"), f.paramId);
       if (!p) continue;
       ops.push({
-        op: "upsert", coll: "snags",
+        op: "upsert", coll: "snags", create: true,
         rec: {
           id: nextId("SNG", coll(data, "snags")).replace(/(\d+)$/, (m) => String(parseInt(m, 10) + n++).padStart(4, "0")),
           projectId: currentProjectId || "",
@@ -154,7 +154,7 @@ export function useActions() {
       note: input.note
     };
     const synced = await apply([
-      { op: "upsert", coll: "assignments", rec },
+      { op: "upsert", coll: "assignments", create: true, rec },
       logEvent("ASSIGN", rec.targetId, rec.stageId, "Assigned to " + refLabel(data, "users", rec.assignedTo))
     ]);
     toast(synced ? "Assigned to " + refLabel(data, "users", rec.assignedTo) : OFFLINE_TOAST);
@@ -163,7 +163,9 @@ export function useActions() {
   async function setAssignStatus(id: string, status: "Assigned" | "Accepted" | "Done") {
     const a = byId(coll(data, "assignments"), id);
     if (!a) return;
-    const rec: any = Object.assign({}, a, { status });
+    // only the fields this action changes (not the whole record as it was on this screen): a colleague's change to
+    // any other field of the same assignment is not written back with an old value
+    const rec: any = { id: a.id, status };
     if (status === "Done") { rec.doneAt = Date.now(); rec.doneBy = currentUserId; }
     const synced = await apply([
       { op: "upsert", coll: "assignments", rec },
@@ -193,7 +195,7 @@ export function useActions() {
       photos: [], comments: []
     };
     const synced = await apply([
-      { op: "upsert", coll: "snags", rec },
+      { op: "upsert", coll: "snags", create: true, rec },
       logEvent("SNAG_RAISE", rec.unitId, rec.stageId, rec.title)
     ]);
     toast(synced ? "Snag " + rec.id + " raised" : OFFLINE_TOAST);
@@ -203,7 +205,8 @@ export function useActions() {
     const s = byId(coll(data, "snags"), id);
     if (!s) return;
     const reopening = s.status === "Closed" && status !== "Closed";
-    const patch: any = Object.assign({}, s, { status });
+    // only the fields this action changes (see setAssignStatus)
+    const patch: any = { id: s.id, status };
     if (status === "Closed") { patch.closedAt = Date.now(); patch.closedBy = currentUserId; }
     else { patch.closedAt = null; patch.closedBy = null; }
     if (reopening) {
@@ -223,7 +226,7 @@ export function useActions() {
     const s = byId(coll(data, "snags"), id);
     if (!s) return;
     const synced = await apply([
-      { op: "upsert", coll: "snags", rec: Object.assign({}, s, { assignedTo: to, lastReassignedBy: currentUserId, lastReassignedAt: Date.now() }) },
+      { op: "upsert", coll: "snags", rec: { id: s.id, assignedTo: to, lastReassignedBy: currentUserId, lastReassignedAt: Date.now() } },
       logEvent("SNAG_REASSIGN", s.unitId || "", s.stageId, "to " + refLabel(data, "users", to))
     ]);
     reopenDrawer();
@@ -251,7 +254,8 @@ export function useActions() {
     let synced = true;
     if (kind === "snag") {
       const s = byId(coll(data, "snags"), id);
-      if (s) synced = await apply([{ op: "upsert", coll: "snags", rec: Object.assign({}, s, { photos: (s.photos || []).concat([photo]) }) }]);
+      // appended on the server — two people adding a photo to the same snag no longer replace each other's list
+      if (s) synced = await apply([{ op: "upsert", coll: "snags", rec: { id: s.id }, push: { photos: photo } }]);
     } else {
       synced = await apply([
         { op: "progress", key: pkey(id, stageId), patch: { meas: Date.now(), measBy: currentUserId || "", photo } },
@@ -288,7 +292,7 @@ export function useActions() {
     return items.every((it) => cells.find((c) => c.itemId === it.id)?.status === "done") ? "done" : "wip";
   }
   async function writeStageCells(unitId: string, stageId: string, cells: any[], items: { id: string; name?: string }[]) {
-    return apply([{ op: "progress", key: pkey(unitId, stageId), patch: { status: itemStageStatus(cells, items), checklist: cells } }]);
+    return apply([{ op: "progress", items: items.map((it) => it.id), key: pkey(unitId, stageId), patch: { status: itemStageStatus(cells, items), checklist: cells } }]);
   }
 
   async function ackStageItem(unitId: string, stageId: string, itemId: string) {
@@ -318,7 +322,7 @@ export function useActions() {
     let cells = upsertCell(stageCells(unitId, stageId), itemId, { status: "done", at: Date.now(), by: currentUserId || "", note: null });
     cells = releaseNextStageItem(cells, items, idx);
     const ops: Op[] = [
-      { op: "progress", key: pkey(unitId, stageId), patch: { status: itemStageStatus(cells, items), checklist: cells } },
+      { op: "progress", items: items.map((it) => it.id), key: pkey(unitId, stageId), patch: { status: itemStageStatus(cells, items), checklist: cells } },
       logEvent("COMPLETE", unitId, stageId, (items[idx]?.name || itemId) + " completed"),
     ];
     if (itemStageStatus(cells, items) === "done") ops.push(...releaseNextOps("unit", unitId, stageId));
@@ -348,7 +352,7 @@ export function useActions() {
       let cells = upsertCell(stageCells(unitId, stageId), itemId, { status: "done", at: now, by: currentUserId || "", note: null });
       cells = releaseNextStageItem(cells, items, idx);
       const ops: Op[] = [
-        { op: "progress", key: pkey(unitId, stageId), patch: { status: itemStageStatus(cells, items), checklist: cells, checklistId } },
+        { op: "progress", items: items.map((it) => it.id), key: pkey(unitId, stageId), patch: { status: itemStageStatus(cells, items), checklist: cells, checklistId } },
         logEvent("QC_PASS", unitId, stageId, (item?.name || itemId) + " checklist passed (" + results.length + " lines)"),
       ];
       if (itemStageStatus(cells, items) === "done") ops.push(...releaseNextOps("unit", unitId, stageId));
@@ -368,7 +372,7 @@ export function useActions() {
       const p = byId(coll(data, "qparams"), f.paramId);
       if (!p) continue;
       ops.push({
-        op: "upsert", coll: "snags",
+        op: "upsert", coll: "snags", create: true,
         rec: {
           id: nextId("SNG", coll(data, "snags")).replace(/(\d+)$/, (m) => String(parseInt(m, 10) + n++).padStart(4, "0")),
           projectId: currentProjectId || "",

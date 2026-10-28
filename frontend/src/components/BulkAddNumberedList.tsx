@@ -61,7 +61,7 @@ export default function BulkAddNumberedList({
         const id = nextNewId;
         const n = parseInt(id.split("-")[1], 10);
         nextNewId = idPrefix + "-" + String(n + 1).padStart(4, "0");
-        ops.push({ op: "upsert", coll: master, rec: { id, projectId, name: `${prefix.trim()} ${i}`, seq, active: true } });
+        ops.push({ op: "upsert", coll: master, create: true, rec: { id, projectId, name: `${prefix.trim()} ${i}`, seq, active: true } });
       }
       ops.push(buildEventOp(currentUserId, "MASTER_SAVE", projectId, "", `${idPrefix === "COL" ? "Column" : "Slab"} Master · bulk created ${toN - fromN + 1}`));
       const synced = await apply(ops);

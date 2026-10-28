@@ -1,5 +1,6 @@
 import type { Approval, BoardData, Op } from "../types";
 import { coll } from "./rules";
+import { buildDecisionOp } from "./approvalOp";
 
 /* Team-leader approval helpers — the browser-side mirror of
    backend/approvalRules.js. The server is the authority (it re-derives the
@@ -78,7 +79,7 @@ export function describeRecord(c: ApprovalColl, r: Rec): string {
   return `${r.projectCode} · ${r.category} · ${r.measuredQty} ${r.measuredUnit}`;
 }
 
-/** The save that records a decision. The server stamps who/when and re-checks the rights. */
+/** The save that records a decision (just the id and the decision — see shared/approvalOp.ts). The server stamps who/when and re-checks the rights. */
 export function decideOp(c: ApprovalColl, r: Rec, status: "approved" | "rejected", remark?: string, base?: Approval): Op {
-  return { op: "upsert", coll: c, rec: { ...r, approval: { ...((base ?? r.approval) as Approval), status, remark: remark?.trim() || undefined } } } as Op;
+  return buildDecisionOp(c, r, status, remark, base);
 }

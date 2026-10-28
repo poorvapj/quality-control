@@ -277,7 +277,7 @@ function CaseStudyForm({
       createdAt: Date.now()
     };
     const synced = await apply([
-      { op: "upsert", coll: "caseStudies", rec },
+      { op: "upsert", coll: "caseStudies", create: true, rec },
       buildEventOp(currentUserId || "", "CASE_STUDY_CREATE", rec.id, "", `Case study logged · ${rec.title}`)
     ]);
     setSaving(false);

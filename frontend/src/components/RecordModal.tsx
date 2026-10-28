@@ -3,6 +3,7 @@ import { useApp } from "../context/AppContext";
 import { MASTERS, ROLES } from "../services/config";
 import { byId, coll, refLabel } from "../shared/rules";
 import { nextId } from "../shared/helpers";
+import { diffRecord } from "../shared/recordDiff";
 import { buildEventOp } from "../shared/eventLog";
 import Modal from "./Modal";
 import SearchDropdown from "./SearchDropdown";
@@ -250,7 +251,7 @@ export default function RecordModal() {
             out[f.k] = v;
           }
           if (!out.code) out.code = out.id;
-          ops.push({ op: "upsert", coll: "units", rec: out });
+          ops.push({ op: "upsert", coll: "units", create: true, rec: out });
           ops.push(buildEventOp(currentUserId, "MASTER_SAVE", out.id, "", `${master!.label} · created · ${out.name || out.code}`));
         }
         const synced = await apply(ops);
@@ -283,8 +284,10 @@ export default function RecordModal() {
         if (dup) { toast("A Work Target for this project + category already exists"); return; }
       }
 
+      // An edit sends only the fields that changed (the form's copy of the record may be minutes old); a new record is a
+      // "create", so an id someone else just took is refused instead of overwriting their record.
       const synced = await apply([
-        { op: "upsert", coll: recordModal!.master, rec: out },
+        { op: "upsert", coll: recordModal!.master, rec: recordModal!.id ? diffRecord(rec as any, out) : out, ...(recordModal!.id ? {} : { create: true }) } as any,
         buildEventOp(currentUserId, "MASTER_SAVE", out.id, "", `${master!.label} · ${recordModal!.id ? "updated" : "created"} · ${out.name || out.code || out.id}`)
       ]);
       closeRecordModal();

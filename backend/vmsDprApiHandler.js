@@ -7,6 +7,10 @@
    successful no-op, never an error, never an overwrite. */
 const REQUIRED_FIELDS = ["id", "projectId", "date", "vendorCode", "shift", "labourCount"];
 
+async function isTombstoned(mongoDb, id) {
+  try { return !!(await mongoDb.collection("meta").findOne({ _id: "tomb:" + id }, { projection: { _id: 1 } })); } catch { return false; }
+}
+
 async function handleVmsDprSync(body, mongoDb) {
   for (const f of REQUIRED_FIELDS) {
     if (body[f] === undefined || body[f] === null || body[f] === "") {
@@ -26,6 +30,8 @@ async function handleVmsDprSync(body, mongoDb) {
 
   const existing = await mongoDb.collection("dpr").findOne({ id: body.id }, { projection: { id: 1 } });
   if (existing) return { status: 200, body: { ok: true, id: body.id, created: false } };
+  // deleted in QC on purpose (server.js keeps a tombstone): acknowledge, do not bring it back
+  if (await isTombstoned(mongoDb, body.id)) return { status: 200, body: { ok: true, id: body.id, created: false } };
 
   const doc = {
     id: body.id,

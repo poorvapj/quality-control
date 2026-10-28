@@ -841,9 +841,12 @@ export interface SlabMaster extends BaseRecord {
 export type CollectionName = keyof Omit<BoardData, "progress" | "events">;
 
 export type Op =
-  | { op: "upsert"; coll: CollectionName; rec: BaseRecord }
+  // create: insert-only (the server answers 409 if the id already exists instead of overwriting it);
+  // push: append ONE object to an array field (snags: photos/comments) instead of replacing the array. See docs/data-integrity-fixes.md.
+  | { op: "upsert"; coll: CollectionName; rec: BaseRecord; create?: boolean; push?: Record<string, object> }
   | { op: "delete"; coll: CollectionName; id: string }
-  | { op: "progress"; key: string; patch: Partial<ProgressPatch> }
+  // items: the stage's item ids, so the server can decide the stage status from the MERGED checklist cells (PROGRESS_CELL_MERGE)
+  | { op: "progress"; key: string; patch: Partial<ProgressPatch>; items?: string[] }
   | { op: "event"; ev: EventLog };
 
 export type TabKey = "dash" | "misDashboard" | "userMis" | "executionReconciliation" | "qualityInspection" | "qualityFails" | "caseStudies" | "unitExecutionWorkflow" | "measurement" | "progressAnalysis" | "purchaseOrders" | "work" | "board" | "handoverChecklist" | "handoverInternal" | "handoverOwner" | "snags" | "team" | "masters" | "addUser" | "dpr" | "drawingRequests" | "backups" | "auditLog" | "permissionMatrix";

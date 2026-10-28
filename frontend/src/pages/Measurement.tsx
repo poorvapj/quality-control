@@ -290,7 +290,7 @@ export default function Measurement() {
         onConfirm={async (itemId) => {
           if (!confirming) return;
           const synced = await apply([
-            { op: "upsert", coll: "workMeasurements", rec: { ...confirming, linkedItemId: itemId } },
+            { op: "upsert", coll: "workMeasurements", rec: { id: confirming.id, linkedItemId: itemId } },
             buildEventOp(currentUserId, "WORK_MEASUREMENT_LINK", confirming.id, "", `Link confirmed · ${confirming.category}`)
           ]);
           toast(synced ? "VMS link confirmed" : "Saved on this device — will finish submitting once you're back online");
@@ -474,7 +474,7 @@ function MeasurementPanel({ open, onClose, categories, categoriesNote, existing,
     };
     try {
       const synced = await apply([
-        { op: "upsert", coll: "workMeasurements", rec },
+        { op: "upsert", coll: "workMeasurements", create: true, rec },
         buildEventOp(userId, "WORK_MEASUREMENT", id, "", `Measurement · ${category} · ${q} ${rec.measuredUnit}`)
       ]);
       toast(synced ? "Measurement recorded" : "Saved on this device — will finish submitting once you're back online");

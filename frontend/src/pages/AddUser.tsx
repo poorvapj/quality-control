@@ -66,7 +66,7 @@ export default function AddUser() {
     const id = nextId("USR", coll(data, "users"));
     const ops: Op[] = [
       {
-        op: "upsert", coll: "users",
+        op: "upsert", coll: "users", create: true,
         rec: {
           id, name: name.trim(), email: email.trim(), phone: phone.trim() || undefined,
           slackId: slackId.trim() || undefined, password, role, teamId: teamId || undefined, active
@@ -74,7 +74,7 @@ export default function AddUser() {
       }
     ];
     if (Object.keys(grants).length > 0) {
-      ops.push({ op: "upsert", coll: "moduleGrants", rec: { id: "MG-" + id, userId: id, grants } });
+      ops.push({ op: "upsert", coll: "moduleGrants", create: true, rec: { id: "MG-" + id, userId: id, grants } });
     }
     ops.push(buildEventOp(currentUserId, "MASTER_SAVE", id, "", `Created user ${name.trim()}`));
     const synced = await apply(ops);

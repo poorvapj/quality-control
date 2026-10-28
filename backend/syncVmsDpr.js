@@ -81,6 +81,36 @@ async function clearPollerFailure(mongoDb) {
   }
 }
 
+/* Records the admin deletes make in QC (server.js writes meta "tomb:<id>" when a VMS-origin DPR is deleted) so this
+   additive sync does not bring a deliberately deleted report back on its next cycle. Tolerant by design: if the
+   tombstones cannot be read the sync behaves exactly as it did before they existed. */
+async function loadTombstones(mongoDb, idPrefix) {
+  try {
+    const rows = await mongoDb.collection("meta").find({ _id: { $regex: "^tomb:" + idPrefix } }, { projection: { _id: 1 } }).toArray();
+    return new Set(rows.map((r) => String(r._id).slice("tomb:".length)));
+  } catch {
+    return new Set();
+  }
+}
+
+// Reports skipped because their project matches nothing in QC were only ever a console line, every cycle, forever.
+// Keep ONE small record (project names + count, no report content) in meta so it can be looked at; it is removed
+// again when nothing is unmatched any more. Best-effort: never allowed to fail or slow the sync.
+const POLLER_UNMATCHED_ID = "vms-dpr-unmatched";
+async function recordUnmatchedProjects(mongoDb, names, skippedCount) {
+  try {
+    if (names.length) {
+      await mongoDb.collection("meta").updateOne(
+        { _id: POLLER_UNMATCHED_ID },
+        { $set: { projects: names.slice(0, 50), skippedReports: skippedCount, lastSeenAt: new Date() } },
+        { upsert: true }
+      );
+    } else {
+      await mongoDb.collection("meta").deleteOne({ _id: POLLER_UNMATCHED_ID });
+    }
+  } catch { /* best-effort */ }
+}
+
 // Extracted as its own pure function so it's unit-testable without a real
 // Mongo connection (see syncVmsDpr.test.js) — exact same mapping syncToQc.js
 // (the VMS-side live push) uses.
@@ -145,6 +175,7 @@ async function syncVmsDprCycle(mongoDb, sourceDb) {
     mongoDb.collection("dpr").find({}, { projection: { id: 1 } }).toArray()
   ]);
   const existing = new Set(existingIds.map((d) => d.id));
+  const deletedInQc = await loadTombstones(mongoDb, "DPR-VMS-");
   // Projects are matched by `code` (PRJ-xxx) first — the one field VMS and
   // QC's project records reliably share even when a project's display name
   // has diverged between the two apps (e.g. VMS's "Regal Garden Villa -
@@ -158,13 +189,15 @@ async function syncVmsDprCycle(mongoDb, sourceDb) {
 
   const toInsert = [];
   const unmatchedProjects = new Set();
+  let unmatchedReports = 0;
   for (const r of vmsReports) {
     const id = "DPR-VMS-" + r._id;
     if (existing.has(id)) continue;
+    if (deletedInQc.has(id)) continue; // an admin deleted this one in QC on purpose
 
     const vmsCode = r.projectId ? vmsProjectIdToCode.get(String(r.projectId)) : null;
     const projectId = resolveProjectId({ projectCode: vmsCode, projectName: r.projectName }, projectMaps);
-    if (!projectId) { unmatchedProjects.add(r.projectName); continue; }
+    if (!projectId) { unmatchedProjects.add(r.projectName); unmatchedReports++; continue; }
     const submittedByUserId = userByName.get(norm(r.driName)) || null;
 
     toInsert.push({
@@ -209,6 +242,7 @@ async function syncVmsDprCycle(mongoDb, sourceDb) {
   // previously-open poller failure (e.g. a transient error on an earlier
   // cycle that has since recovered).
   await clearPollerFailure(mongoDb);
+  await recordUnmatchedProjects(mongoDb, Array.from(unmatchedProjects), unmatchedReports);
   return {
     inserted: insertedCount,
     skippedUnmatchedProjects: unmatchedProjects.size ? Array.from(unmatchedProjects) : undefined
@@ -219,5 +253,5 @@ module.exports = {
   syncVmsDpr, mapWorkEntry, buildProjectMaps, resolveProjectId,
   // Exported for syncVmsDpr.test.js only — same "pure helpers, no behavior
   // change" convention already used for the others above.
-  logPollerFailure, clearPollerFailure, POLLER_FAILURE_TYPE, POLLER_FAILURE_SOURCE_ID
+  logPollerFailure, clearPollerFailure, POLLER_FAILURE_TYPE, POLLER_FAILURE_SOURCE_ID, loadTombstones, POLLER_UNMATCHED_ID
 };
