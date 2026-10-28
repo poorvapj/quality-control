@@ -71,6 +71,7 @@ const { getVmsDrawingRequests } = require("./vmsDrawingRequests.js");
 const { deriveApprovalOnCreate, resolveApprovalOnUpdate, findPendingApprovals } = require("./approvalRules.js");
 const approvalSlack = require("./approvalSlack.js");
 const { createOpsBatchStore, isValidBatchId } = require("./opsBatch.js");
+const { classifyError } = require("./errorMap.js");
 const backups = require("./backups.js");
 const { createStateBuilder } = require("./stateBuilder.js");
 const { createSaveDiagnostics, isEnabled: saveDiagnosticsEnabled } = require("./saveDiagnostics.js");
@@ -1174,6 +1175,66 @@ async function assertOpAllowed(op, session) {
   }
 }
 
+/* ---- creates, uniqueness, appends (docs/data-integrity-fixes.md)
+   An upsert is a field-level merge, so a "create" that happens to reuse an existing id used to silently overwrite
+   that record (ids come from the browser: max+1 over its possibly stale copy of the board). A client that means
+   "create" now sets `create: true` on the op: the server then INSERTS, and an existing id is a 409 conflict
+   (nothing is written, the user is told). Ops without the flag behave exactly as before (older browsers).
+   `push` appends ONE object to an array field instead of replacing the whole array (two people adding a photo
+   or comment at the same time no longer lose one of them). */
+const PUSHABLE_FIELDS = { snags: ["photos", "comments"] };
+function conflict(message) { const e = new Error(message); e.status = 409; return e; }
+function validatePush(op) {
+  if (op.push === undefined) return;
+  const allowed = PUSHABLE_FIELDS[op.coll] || [];
+  const keys = op.push && typeof op.push === "object" && !Array.isArray(op.push) ? Object.keys(op.push) : null;
+  if (!keys || keys.length === 0 || keys.some((k) => !allowed.includes(k) || !op.push[k] || typeof op.push[k] !== "object" || Array.isArray(op.push[k]))) {
+    const e = new Error("push is only allowed for " + (allowed.length ? allowed.join("/") : "no field") + " on " + op.coll + ", one object at a time");
+    e.status = 400; throw e;
+  }
+  if (op.rec && keys.some((k) => Object.prototype.hasOwnProperty.call(op.rec, k))) { const e = new Error("a field cannot be both set and pushed in one op"); e.status = 400; throw e; }
+}
+async function assertCreatesAndUniques(ops) {
+  const seenCreates = new Set();
+  for (const op of ops || []) {
+    if (!op || typeof op !== "object" || op.op !== "upsert" || !COLLECTIONS.includes(op.coll) || !op.rec || !op.rec.id) continue;
+    validatePush(op);
+    if (op.create === true) {
+      const key = op.coll + "::" + op.rec.id;
+      if (seenCreates.has(key)) throw conflict(op.rec.id + " appears twice in one save — your change was not saved.");
+      seenCreates.add(key);
+      const exists = await mongoDb.collection(op.coll).findOne({ id: op.rec.id }, { projection: { _id: 1 } });
+      if (exists) throw conflict(op.rec.id + " already exists (someone else created it a moment ago) — your change was NOT saved. Reload and try again.");
+    }
+    if (op.coll === "users" && typeof op.rec.email === "string" && op.rec.email) {
+      const clash = await mongoDb.collection("users").findOne({ email: op.rec.email, id: { $ne: op.rec.id } }, { projection: { _id: 1 } });
+      if (clash) throw conflict("That e-mail address is already used by another user — your change was not saved.");
+    }
+  }
+}
+// The single write of an upsert op: insert-only for a create, the usual upsert otherwise.
+async function writeRecord(op, update) {
+  if (op.create === true) {
+    const doc = Object.assign({}, update.$set || { id: op.rec.id });
+    for (const [field, spec] of Object.entries(update.$push || {})) doc[field] = spec.$each.slice();
+    try {
+      await mongoDb.collection(op.coll).insertOne(doc);
+    } catch (e) {
+      if (e && e.code === 11000 && e.keyPattern && e.keyPattern.id) throw conflict(op.rec.id + " already exists (someone else created it a moment ago) — your change was NOT saved. Reload and try again.");
+      throw e;
+    }
+    return { matchedCount: 0, upsertedCount: 1 };
+  }
+  return mongoDb.collection(op.coll).updateOne({ id: op.rec.id }, update, { upsert: true });
+}
+// A deleted VMS-origin record must not be re-imported by the VMS poller / live push (see syncVmsDpr.js).
+const VMS_ID_PREFIX = { dpr: "DPR-VMS-", drawingRequests: "DR-VMS-" };
+async function recordVmsTombstone(coll, id) {
+  const prefix = VMS_ID_PREFIX[coll];
+  if (!prefix || typeof id !== "string" || !id.startsWith(prefix)) return;
+  await mongoDb.collection("meta").updateOne({ _id: "tomb:" + id }, { $set: { coll, at: Date.now() } }, { upsert: true });
+}
+
 // `trace` is optional and used ONLY by the log-only save diagnostics (saveDiagnostics.js): when present, the two
 // side effects below record counts into it. It is undefined in normal operation and never influences a write.
 async function applyOps(ops, session, trace) {
@@ -1184,6 +1245,8 @@ async function applyOps(ops, session, trace) {
     if (!op || typeof op !== "object") continue;
     await assertOpAllowed(op, session);
   }
+  // Conflicts (existing id on a create, e-mail already used, bad push) are raised HERE, before any write of the batch.
+  await assertCreatesAndUniques(ops);
 
   for (const op of ops || []) {
     if (!op || typeof op !== "object") continue;
@@ -1202,6 +1265,10 @@ async function applyOps(ops, session, trace) {
       const update = {};
       if (Object.keys(set).length) update.$set = set;
       if (Object.keys(unset).length) update.$unset = unset;
+      if (op.push) {
+        update.$push = {};
+        for (const [field, value] of Object.entries(op.push)) update.$push[field] = { $each: [value] };
+      }
 
       if (op.coll === "drawingRequests" && rec.reviewStatus) {
         // Compare-and-swap on the stage the client thought it was
@@ -1213,7 +1280,7 @@ async function applyOps(ops, session, trace) {
         const existing = await mongoDb.collection("drawingRequests").findOne({ id: op.rec.id }, { projection: { reviewStatus: 1 } });
         const from = existing ? existing.reviewStatus : undefined;
         const filter = existing ? { id: op.rec.id, reviewStatus: from } : { id: op.rec.id };
-        const result = await mongoDb.collection(op.coll).updateOne(filter, update, { upsert: !existing });
+        const result = op.create === true ? await writeRecord(op, update) : await mongoDb.collection(op.coll).updateOne(filter, update, { upsert: !existing });
         if (existing && result.matchedCount === 0) {
           const e = new Error(`${op.rec.id} was already moved to a different stage by someone else — reload and retry`);
           e.status = 409;
@@ -1225,7 +1292,7 @@ async function applyOps(ops, session, trace) {
         }
       } else if (op.coll === "assignments" && rec.assignedTo) {
         const existing = await mongoDb.collection("assignments").findOne({ id: op.rec.id }, { projection: { assignedTo: 1 } });
-        await mongoDb.collection(op.coll).updateOne({ id: op.rec.id }, update, { upsert: true });
+        await writeRecord(op, update);
         // Notify on a brand-new assignment or a hand-off to someone else —
         // not on every incidental field edit (e.g. a note tweak) to the
         // same assignee.
@@ -1237,7 +1304,7 @@ async function applyOps(ops, session, trace) {
           { id: op.rec.id },
           { projection: { assignedTo: 1, status: 1, reopenCount: 1, title: 1, projectId: 1 } }
         );
-        await mongoDb.collection(op.coll).updateOne({ id: op.rec.id }, update, { upsert: true });
+        await writeRecord(op, update);
         const reopened = !!existing && existing.status === "Closed" && rec.status && rec.status !== "Closed"
           && (rec.reopenCount || 0) > (existing.reopenCount || 0);
         const reassigned = !!rec.assignedTo && (!existing || existing.assignedTo !== rec.assignedTo);
@@ -1250,7 +1317,7 @@ async function applyOps(ops, session, trace) {
           notifySnagTarget("snag_assigned", rec, existing);
         }
       } else if (op.coll === "qualityInspections") {
-        await mongoDb.collection(op.coll).updateOne({ id: op.rec.id }, update, { upsert: true });
+        await writeRecord(op, update);
         // Every submission (not just a Fail) — there's no edit path for an
         // already-saved inspection (only a fresh re-inspect record), so
         // this upsert is always a brand-new one.
@@ -1275,7 +1342,7 @@ async function applyOps(ops, session, trace) {
           }
         }
       } else {
-        await mongoDb.collection(op.coll).updateOne({ id: op.rec.id }, update, { upsert: true });
+        await writeRecord(op, update);
       }
     } else if (op.op === "delete" && COLLECTIONS.includes(op.coll) && op.id) {
       if (op.coll === "projects") {
@@ -1310,6 +1377,7 @@ async function applyOps(ops, session, trace) {
         });
       } else {
         await mongoDb.collection(op.coll).deleteOne({ id: op.id });
+        await recordVmsTombstone(op.coll, op.id);
       }
     } else if (op.op === "progress" && op.key && op.patch) {
       const { set, unset } = splitSetUnset(op.patch);
@@ -1452,8 +1520,9 @@ async function withOptionalTransaction(work) {
   }
 }
 
-async function resetDb(mode, actorUserId) {
+async function resetDb(mode, actorUserId, opts) {
   const seed = mode === "blank" ? blankData() : seedData();
+  await takeSafetyBackup("pre-reset", actorUserId, opts);
   return withOptionalTransaction(async (session) => {
     for (const c of COLLECTIONS) {
       await mongoDb.collection(c).deleteMany({}, { session });
@@ -1526,13 +1595,33 @@ function stripBackupPasswords(doc) {
   return Object.assign({}, doc, { collections });
 }
 
-async function restoreBackup(id, actorUserId) {
+/* A restore (and a reset) replaces the whole live board. First save what is there now as an ordinary backup, so a
+   restore of the wrong/old backup can itself be undone. If that backup cannot be made nothing is touched, unless the
+   caller explicitly sends skipSafetyBackup:true. */
+async function takeSafetyBackup(kind, actorUserId, opts) {
+  if (opts && opts.skipSafetyBackup === true) return null;
+  try {
+    return (await createBackup(kind + ":" + (actorUserId || "?"))).id;
+  } catch (e) {
+    const err = new Error("Could not take a safety backup first (" + e.message + ") — nothing was changed. To continue without one, repeat the request with skipSafetyBackup:true.");
+    err.status = 409;
+    throw err;
+  }
+}
+
+async function restoreBackup(id, actorUserId, opts) {
   const doc = await mongoDb.collection("backups").findOne({ id });
   if (!doc) { const e = new Error("Backup not found"); e.status = 404; throw e; }
+  const safetyId = await takeSafetyBackup("pre-restore", actorUserId, opts);
+  const skipped = [];
   return withOptionalTransaction(async (session) => {
+    skipped.length = 0; // the transaction callback can be retried
     for (const c of COLLECTIONS) {
+      // An older backup predates some collections (e.g. columnMaster, caseStudies). Restoring it used to EMPTY those
+      // collections; now a collection the backup does not contain is left exactly as it is.
+      if (!doc.collections || !Array.isArray(doc.collections[c])) { skipped.push(c); continue; }
       await mongoDb.collection(c).deleteMany({}, { session });
-      const rows = doc.collections[c] || [];
+      const rows = doc.collections[c];
       if (rows.length) await mongoDb.collection(c).insertMany(rows, { session });
     }
     await mongoDb.collection("progress").deleteMany({}, { session });
@@ -1546,7 +1635,7 @@ async function restoreBackup(id, actorUserId) {
     // of the board), so the loop above never touches it — this insert
     // survives the restore, recording who restored which backup and when.
     await mongoDb.collection("events").insertOne(
-      { ts: Date.now(), userId: actorUserId || "", action: "RESTORE_BACKUP", targetId: id, stageId: "", detail: `Restored backup ${id}` },
+      { ts: Date.now(), userId: actorUserId || "", action: "RESTORE_BACKUP", targetId: id, stageId: "", detail: `Restored backup ${id}` + (safetyId ? ` (board saved first as ${safetyId})` : "") + (skipped.length ? ` — kept current data for ${skipped.length} collection(s) this backup does not contain: ${skipped.join(", ")}` : "") },
       { session }
     );
     return rev;
@@ -2026,7 +2115,12 @@ async function handleApi(req, res, urlPath) {
     if (!session) return sendJson(res, 401, { error: "Sign-in required" });
     if (!session.isAdmin) return sendJson(res, 403, { error: "Admin access required" });
     const body = await readBody(req);
-    await resetDb(body.mode === "blank" ? "blank" : "demo", session.userId);
+    try {
+      await resetDb(body.mode === "blank" ? "blank" : "demo", session.userId, { skipSafetyBackup: body.skipSafetyBackup === true });
+    } catch (e) {
+      if (e.status) return sendJson(res, e.status, { error: e.message });
+      throw e;
+    }
     return sendStateResponse(req, res);
   }
   if (req.method === "POST" && urlPath === "/api/backups") {
@@ -2144,7 +2238,8 @@ async function handleApi(req, res, urlPath) {
     if (!session) return sendJson(res, 401, { error: "Sign-in required" });
     if (!session.isAdmin) return sendJson(res, 403, { error: "Admin access required" });
     try {
-      await restoreBackup(restoreMatch[1], session.userId);
+      const restoreBody = await readBody(req).catch(() => ({}));
+      await restoreBackup(restoreMatch[1], session.userId, { skipSafetyBackup: !!restoreBody && restoreBody.skipSafetyBackup === true });
     } catch (e) {
       if (e.status) return sendJson(res, e.status, { error: e.message });
       throw e;
@@ -2194,7 +2289,12 @@ async function handleApi(req, res, urlPath) {
       if (already) continue;
       const report = buildTeamDailyReport(state.data, team, dateStr);
       if (!report) continue; // no members — nothing to report
-      await mongoDb.collection("teamDailyReports").updateOne({ id: report.id }, { $set: report }, { upsert: true });
+      try {
+        await mongoDb.collection("teamDailyReports").insertOne(Object.assign({}, report));
+      } catch (e) {
+        if (e && e.code === 11000) continue; // another run created it a moment ago — never overwrite (it may already be signed off)
+        throw e;
+      }
       generated.push(report.id);
       if (team.leaderId) {
         const leader = await mongoDb.collection("users").findOne({ id: team.leaderId }, { projection: { email: 1, slackId: 1 } });
@@ -2233,7 +2333,11 @@ const server = http.createServer(async (req, res) => {
     try {
       return await handleApi(req, res, urlPath);
     } catch (e) {
-      return sendJson(res, 400, { error: e.message });
+      // 409 for a duplicate key, 503 for a transient database problem (the browser keeps and retries the change),
+      // 400 for everything else exactly as before — see errorMap.js.
+      const { status, message } = classifyError(e);
+      if (status !== 400) console.error("[api] " + status + " on " + req.method + " " + urlPath + ": " + (e && e.message ? e.message : e));
+      return sendJson(res, status, { error: message });
     }
   }
 
