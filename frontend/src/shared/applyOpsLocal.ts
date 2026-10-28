@@ -33,7 +33,12 @@ export function applyOpsLocal(d: BoardData, ops: Op[]) {
       const list = ((d as any)[op.coll] = (d as any)[op.coll] || []);
       const rec = localRecord(String(op.coll), op.rec);
       const i = list.findIndex((r: any) => r.id === rec.id);
-      const merged = i === -1 ? rec : Object.assign({}, list[i], rec);
+      const pushed = (op as any).push;
+      // a copy when something is appended, so the op that is sent to the server keeps its rec exactly as built
+      const merged = i === -1 ? (pushed ? Object.assign({}, rec) : rec) : Object.assign({}, list[i], rec);
+      if (pushed && typeof pushed === "object") {
+        for (const [k, v] of Object.entries(pushed)) (merged as any)[k] = (Array.isArray((merged as any)[k]) ? (merged as any)[k] : []).concat([v]);
+      }
       for (const k of Object.keys(merged)) if ((merged as any)[k] === null) delete (merged as any)[k];
       if (i === -1) list.push(merged);
       else list[i] = merged;

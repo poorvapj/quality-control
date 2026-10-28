@@ -5,6 +5,7 @@ import { byId, coll } from "../shared/rules";
 import { classifyStatus, flushQueue, newBatchId, normalizeQueue, tokenUserId, type QueuedBatch } from "../shared/opQueue";
 import { judgeStateResponse, needsFullBoardAfterLogin } from "../shared/stateSync";
 import { applyOpsLocal, scrubLocalBoard } from "../shared/applyOpsLocal";
+import { addRejected, REJECTED_KEY } from "../shared/rejected";
 
 const LS_KEY = "neoteric_board_v5";
 const SESSION_KEY = "neoteric_session";
@@ -160,10 +161,25 @@ export function AppProvider({ children, publicRoute = false }: { children: React
   const modeRef = useRef<StoreMode>("connecting");
   modeRef.current = mode;
 
-  const toast = useCallback((msg: string) => {
+  const toast = useCallback((msg: string, ms: number = 2600) => {
     setToastMsg(msg);
     window.clearTimeout((toast as any)._t);
-    (toast as any)._t = window.setTimeout(() => setToastMsg(null), 2600);
+    (toast as any)._t = window.setTimeout(() => setToastMsg(null), ms);
+  }, []);
+
+  // A save that did NOT reach the server (refused, queued, offline) shows its own explanation, and a page that then
+  // says "Saved!" in the same tick used to overwrite it (only the last toast is shown) — so the person believed a
+  // refused change was saved. The toast pages get from the context therefore stays silent for a moment after such a
+  // failure, leaving the explanation on screen. (Only 2 of ~58 call sites check apply()'s result.)
+  const applyFailedAtRef = useRef(0);
+  const markApplyFailed = useCallback(() => { applyFailedAtRef.current = Date.now(); }, []);
+  const pageToast = useCallback((msg: string) => {
+    if (Date.now() - applyFailedAtRef.current < 2000) return;
+    toast(msg);
+  }, [toast]);
+  // Keeps a change the server refused (without any plaintext password) so typed-in data is not simply gone.
+  const rememberRejected = useCallback((ops: Op[], error: string) => {
+    try { localStorage.setItem(REJECTED_KEY, JSON.stringify(addRejected(localStorage.getItem(REJECTED_KEY), ops, error))); } catch {}
   }, []);
 
   // Public pages (/dpr/new, /forms/…) are served the allow-listed public snapshot; everywhere else a public
@@ -312,12 +328,12 @@ export function AppProvider({ children, publicRoute = false }: { children: React
           return { status: r.status, error };
         },
         currentTokenUser: currentTokenUser(),
-        onRejected: (_batch, error) => toast("A change saved earlier was refused by the server and could not be applied: " + error)
+        onRejected: (batch, error) => { rememberRejected(batch.ops, error); toast("A change saved earlier was refused by the server and could not be applied: " + error, 8000); }
       });
     } finally {
       isFlushingRef.current = false;
     }
-  }, [savePendingOps, toast]);
+  }, [savePendingOps, toast, rememberRejected]);
 
   // Returns whether the change actually reached the server just now (true)
   // or was only queued/rejected (false) — callers that show their own
@@ -343,6 +359,8 @@ export function AppProvider({ children, publicRoute = false }: { children: React
       // local blob, which the next reconnect would otherwise overwrite.
       queueOps(ops, batchId);
       persistLocal(next);
+      markApplyFailed();
+      toast("Offline — your change is saved on this device and will sync automatically", 5000);
       return false;
     }
     try {
@@ -359,7 +377,8 @@ export function AppProvider({ children, publicRoute = false }: { children: React
           // after a commit whose reply was lost can't apply it twice).
           queueOps(ops, batchId);
           persistLocal(next);
-          toast("The server is busy — your change is saved and will be retried automatically");
+          markApplyFailed();
+          toast("The server is busy — your change is saved and will be retried automatically", 5000);
           return false;
         }
         if (r.status === 401) {
@@ -372,7 +391,8 @@ export function AppProvider({ children, publicRoute = false }: { children: React
           // sends it with the fresh token.
           queueOps(ops, batchId);
           persistLocal(next);
-          toast("Your session expired — please sign in again. This will finish submitting once you do.");
+          markApplyFailed();
+          toast("Your session expired — please sign in again. This will finish submitting once you do.", 6000);
           return false;
         }
         // The optimistic local update above already applied — the server
@@ -383,7 +403,9 @@ export function AppProvider({ children, publicRoute = false }: { children: React
         // network-failure branch below and queue a change the server just refused)
         const fresh = await fetchBoard().catch(() => null);
         if (fresh && fresh.data && acceptState(fresh)) { setData(fresh.data); dataRef.current = fresh.data; setRev(fresh.rev); }
-        toast(j.error || "That action isn't allowed");
+        rememberRejected(ops, j.error || "rejected by the server");
+        markApplyFailed();
+        toast(j.error || "That action isn't allowed", 7000);
         return false;
       }
       if (j.data && acceptState(j)) { setData(j.data); dataRef.current = j.data; setRev(j.rev); }
@@ -397,10 +419,11 @@ export function AppProvider({ children, publicRoute = false }: { children: React
       queueOps(ops, batchId);
       modeRef.current = "offline";
       setMode("offline");
-      toast("Offline — will save automatically once back online");
+      markApplyFailed();
+      toast("Offline — will save automatically once back online", 5000);
       return false;
     }
-  }, [persistLocal, queueOps, toast, acceptState]);
+  }, [persistLocal, queueOps, toast, acceptState, markApplyFailed, rememberRejected]);
 
   /* Initial load + poll */
   useEffect(() => {
@@ -604,7 +627,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
     setCurrentUserId, setCurrentProjectId, setActiveTab, setActiveMaster, openDrawer, closeDrawer,
     openAssignModal, closeAssignModal, openSnagModal, closeSnagModal,
     openChecklistModal, closeChecklistModal, openRecordModal, closeRecordModal, setOpenDrawingRequestId, setReInspectQualityId, setCaseStudyDraft,
-    login, logout, toast, apply, me, myRole
+    login, logout, toast: pageToast, apply, me, myRole
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

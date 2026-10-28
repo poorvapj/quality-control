@@ -841,7 +841,9 @@ export interface SlabMaster extends BaseRecord {
 export type CollectionName = keyof Omit<BoardData, "progress" | "events">;
 
 export type Op =
-  | { op: "upsert"; coll: CollectionName; rec: BaseRecord }
+  // create: insert-only (the server answers 409 if the id already exists instead of overwriting it);
+  // push: append ONE object to an array field (snags: photos/comments) instead of replacing the array. See docs/data-integrity-fixes.md.
+  | { op: "upsert"; coll: CollectionName; rec: BaseRecord; create?: boolean; push?: Record<string, object> }
   | { op: "delete"; coll: CollectionName; id: string }
   | { op: "progress"; key: string; patch: Partial<ProgressPatch> }
   | { op: "event"; ev: EventLog };

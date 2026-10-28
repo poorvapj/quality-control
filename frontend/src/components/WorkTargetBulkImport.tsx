@@ -114,7 +114,7 @@ export default function WorkTargetBulkImport({ onClose }: { onClose: () => void 
         plannedQty: Number(r.plannedQty),
         active: true
       };
-      ops.push({ op: "upsert", coll: "workTargets", rec });
+      ops.push({ op: "upsert", coll: "workTargets", rec, ...(match ? {} : { create: true }) });
       if (match) updated++; else created++;
     }
     ops.push(buildEventOp(currentUserId, "MASTER_SAVE", "", "", `Work Target · bulk import · ${created} created, ${updated} updated`));

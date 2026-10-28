@@ -790,7 +790,7 @@ function InspectionForm({
     setCustomAreaText(""); setAddingCustomArea(false);
     const exists = areaOptions.some((a) => a.toLowerCase() === name.toLowerCase());
     if (!exists) {
-      apply([{ op: "upsert", coll: "customAreaNames", rec: { id: nextId("CARE", coll(data, "customAreaNames")), name } }]);
+      apply([{ op: "upsert", coll: "customAreaNames", create: true, rec: { id: nextId("CARE", coll(data, "customAreaNames")), name } }]);
     }
   }
   // Column/Slab option lists live in Masters ▸ Column Master / Slab Master
@@ -809,7 +809,7 @@ function InspectionForm({
     if (!exists) {
       const slabs = coll(data, "slabMaster");
       const maxSeq = slabs.filter((s: any) => s.projectId === projectId).reduce((m, s: any) => Math.max(m, s.seq || 0), 0);
-      apply([{ op: "upsert", coll: "slabMaster", rec: { id: nextId("SLB", slabs), projectId, name, seq: maxSeq + 1, active: true } }]);
+      apply([{ op: "upsert", coll: "slabMaster", create: true, rec: { id: nextId("SLB", slabs), projectId, name, seq: maxSeq + 1, active: true } }]);
     }
   }
   const [contractor, setContractor] = useState("");
@@ -1126,7 +1126,7 @@ function InspectionForm({
       };
 
       ops.push(
-        { op: "upsert", coll: "qualityInspections", rec },
+        { op: "upsert", coll: "qualityInspections", create: true, rec },
         buildEventOp(currentUserId, "QUALITY_INSPECTION", id, "", `Quality Inspection · ${result} · ${rec.floorName}${rec.unitName ? " / " + rec.unitName : ""}`)
       );
       if (needsSnag && snagId) {
@@ -1137,7 +1137,7 @@ function InspectionForm({
         const location = rec.unitName ? `${rec.floorName} / ${rec.unitName}` : rec.floorName;
         const label = itemEntry?.description ? `${location} · ${itemEntry.description}` : location;
         ops.push({
-          op: "upsert", coll: "snags",
+          op: "upsert", coll: "snags", create: true,
           rec: {
             id: snagId,
             projectId,

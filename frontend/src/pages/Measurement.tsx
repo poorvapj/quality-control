@@ -474,7 +474,7 @@ function MeasurementPanel({ open, onClose, categories, categoriesNote, existing,
     };
     try {
       await apply([
-        { op: "upsert", coll: "workMeasurements", rec },
+        { op: "upsert", coll: "workMeasurements", create: true, rec },
         buildEventOp(userId, "WORK_MEASUREMENT", id, "", `Measurement · ${category} · ${q} ${rec.measuredUnit}`)
       ]);
       toast("Measurement recorded");

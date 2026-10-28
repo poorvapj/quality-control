@@ -105,7 +105,7 @@ export default function PermissionMatrix() {
       const stageRec = { id: existingStageGrants?.id || nextId("PRM", coll(data, "permissions")), userId, ...stageGrants };
       await apply([
         { op: "upsert", coll: "moduleGrants", rec },
-        { op: "upsert", coll: "permissions", rec: stageRec },
+        { op: "upsert", coll: "permissions", rec: stageRec, ...(existingStageGrants?.id ? {} : { create: true }) },
         buildEventOp(currentUserId, "PERMISSION_UPDATE", userId, "", `Updated module grants for ${user?.name || userId}`)
       ]);
       toast("Permissions saved");

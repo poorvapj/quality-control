@@ -325,7 +325,7 @@ function MeasurementForm({
       createdAt: Date.now()
     };
     await apply([
-      { op: "upsert", coll: "materialMeasurements", rec },
+      { op: "upsert", coll: "materialMeasurements", create: true, rec },
       buildEventOp(currentUserId, "MATERIAL_MEASUREMENT", id, "", `Measurement · ${rec.unitName} · ${mQty} ${rec.measuredUnit}`)
     ]);
     setSaving(false);

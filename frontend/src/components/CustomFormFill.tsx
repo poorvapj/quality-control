@@ -51,7 +51,7 @@ export default function CustomFormFill({ form, onDone }: { form: CustomFormDef; 
     const id = nextId("SUB", coll(data, "formSubmissions"));
     await apply([
       {
-        op: "upsert", coll: "formSubmissions",
+        op: "upsert", coll: "formSubmissions", create: true,
         rec: {
           id, formId: form.id, values, submittedAt: Date.now(),
           submittedByUserId: currentUserId || null, isPublic: !currentUserId
