@@ -191,6 +191,21 @@ export function AppProvider({ children, publicRoute = false }: { children: React
   // failure, leaving the explanation on screen. (Only 2 of ~58 call sites check apply()'s result.)
   const applyFailedAtRef = useRef(0);
   const markApplyFailed = useCallback(() => { applyFailedAtRef.current = Date.now(); }, []);
+  // A 401 on a save means the stored token itself is dead (expired/invalid) —
+  // queuing it and toasting "please sign in again" every single time it's
+  // retried (every 5s poll tick, or every tap of a stuck Submit button) just
+  // repeats the same toast forever while the user stays on a screen that
+  // still claims to be signed in, with no real way out of the loop. Flagged
+  // once: force the sign-in screen so re-authenticating actually clears it,
+  // instead of nagging on a dead session indefinitely. Reset on a fresh sign-in.
+  const sessionExpiredFlaggedRef = useRef(false);
+  const flagSessionExpired = useCallback(() => {
+    if (sessionExpiredFlaggedRef.current) return;
+    sessionExpiredFlaggedRef.current = true;
+    try { localStorage.removeItem(SESSION_KEY); } catch {}
+    setLoggedIn(false);
+    toast("Your session expired — please sign in again. Your unsaved changes are kept and will finish submitting once you do.", 8000);
+  }, [toast]);
   const pageToast = useCallback((msg: string) => {
     if (Date.now() - applyFailedAtRef.current < 2000) return;
     toast(msg);
@@ -347,6 +362,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
             headers: { "Content-Type": "application/json", ...(batch.by === null ? {} : authHeaders()) },
             body: JSON.stringify({ ops: batch.ops, batchId: batch.id })
           });
+          if (r.status === 401 && batch.by !== null) flagSessionExpired();
           let error: string | undefined;
           if (!r.ok) { try { error = (await r.json()).error; } catch {} }
           return { status: r.status, error };
@@ -357,7 +373,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
     } finally {
       isFlushingRef.current = false;
     }
-  }, [savePendingOps, toast, rememberRejected]);
+  }, [savePendingOps, toast, rememberRejected, flagSessionExpired]);
 
   // Returns whether the change actually reached the server just now (true)
   // or was only queued/rejected (false) — callers that show their own
@@ -416,7 +432,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
           queueOps(ops, batchId);
           persistLocal(next);
           markApplyFailed();
-          toast("Your session expired — please sign in again. This will finish submitting once you do.", 6000);
+          flagSessionExpired();
           return false;
         }
         // The optimistic local update above already applied — the server
@@ -447,7 +463,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
       toast("Offline — will save automatically once back online", 5000);
       return false;
     }
-  }, [persistLocal, queueOps, toast, acceptState, markApplyFailed, rememberRejected]);
+  }, [persistLocal, queueOps, toast, acceptState, markApplyFailed, rememberRejected, flagSessionExpired]);
 
   // "Who's opening which module" had no trail at all before this — Audit
   // Logs only ever recorded create/edit/delete actions, never a view.
@@ -630,6 +646,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
         // actually switch there from Admin this session.
         localStorage.removeItem("neoteric_impersonating_from");
       } catch {}
+      sessionExpiredFlaggedRef.current = false;
       setLoggedIn(true);
       return null;
     } catch {
