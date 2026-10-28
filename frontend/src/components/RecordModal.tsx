@@ -228,17 +228,20 @@ export default function RecordModal() {
     try {
       if (isNewUnit) {
         if (multiFloorIds.length === 0) { toast("Pick at least one floor"); return; }
-        const existingUnits = coll(data, "units");
-        // Same running-id pattern as WorkTargetBulkImport's takeNextId(): one
-        // nextId() scan, then bump it ourselves per new row — calling
-        // nextId() again inside the loop would hand every floor the same id
-        // (it never sees the ones already queued in this same batch).
-        let nextNewId = nextId("UNT", existingUnits);
+        // Was nextId("UNT", existingUnits) — but this collection's regular
+        // flats/units carry bulk-import ids like "UNT-PRJ-001-0101", which
+        // that scan's "^UNT-(\d+)$" never matches, so it always counted
+        // from 0 among this screen's own small plain-numbered pool
+        // regardless of how many real units already exist. Two admins
+        // adding a unit around the same time (neither had re-synced to see
+        // the other's save) could both land on "UNT-0001" and silently
+        // overwrite one another — same bug class as the DPR/Drawing
+        // Request fixes. A timestamp+random id per floor can't collide.
+        const batchStamp = Date.now().toString(36).toUpperCase();
+        let seq = 0;
         const ops: any[] = [];
         for (const floorId of multiFloorIds) {
-          const out: any = { id: nextNewId };
-          const n = parseInt(nextNewId.split("-")[1], 10);
-          nextNewId = "UNT-" + String(n + 1).padStart(4, "0");
+          const out: any = { id: "UNT-" + batchStamp + "-" + String(++seq).padStart(2, "0") + "-" + Math.random().toString(36).slice(2, 5).toUpperCase() };
           for (const f of master!.fields) {
             if (f.k === "floorId") { out.floorId = floorId; continue; }
             let v = values[f.k];

@@ -926,9 +926,19 @@ function InspectionForm({
   // the shared common-area "flats" apply across floors, not real units.
   const MULTI_FLOOR_UNIT_NAMES = ["Inner Common", "Outer Plaster", "Exterior Area"];
   const unitListFloorId = floorIds[0] || "";
-  const units = flatWise && projectId && unitListFloorId
-    ? floorUnits(data, projectId, unitListFloorId).filter((u) => !multiFloor || MULTI_FLOOR_UNIT_NAMES.includes(u.name))
-    : [];
+  // floorUnits() filters+sorts the WHOLE "units" collection (2600+ rows in
+  // production, the app's biggest collection) every time it's called — this
+  // used to re-run on every render of this form, including every keystroke
+  // in Remarks/checklist-remarks (unrelated state, but this form only has
+  // the one component to re-render), which is exactly the lag the inspector
+  // felt typing. Only actually needs to redo the scan when the floor/project
+  // picked (or the underlying data) changes.
+  const units = useMemo(
+    () => (flatWise && projectId && unitListFloorId
+      ? floorUnits(data, projectId, unitListFloorId).filter((u) => !multiFloor || MULTI_FLOOR_UNIT_NAMES.includes(u.name))
+      : []),
+    [data, projectId, unitListFloorId, flatWise, multiFloor] // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const unit = byId(units, unitId);
 
   // Grouped once per allInspections change — not on every render — into
