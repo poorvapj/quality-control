@@ -110,6 +110,13 @@ const opsBatch = createOpsBatchStore(() => mongoDb); // /api/ops retry idempoten
 //                          same unit/stage cannot overwrite each other.
 const OPS_ATOMIC = process.env.OPS_ATOMIC === "1";
 const PROGRESS_CELL_MERGE = process.env.PROGRESS_CELL_MERGE === "1";
+//  EVENTS_ARCHIVE_DAYS=N   when the audit log is trimmed to its 5000 newest events, the trimmed ones are MOVED to
+//                          collection eventsArchive and kept N days (instead of being deleted). Unset/0 = old behaviour.
+//  KEEP_DELETED_DAYS=N     a record an admin deletes is first copied to collection deletedRecords and kept N days (admin
+//                          can list/restore it: GET /api/deleted, POST /api/deleted/restore); deleting a PROJECT also takes
+//                          a "pre-delete-project" backup first. Unset/0 = old behaviour.
+const EVENTS_ARCHIVE_DAYS = Math.max(0, parseInt(process.env.EVENTS_ARCHIVE_DAYS, 10) || 0);
+const KEEP_DELETED_DAYS = Math.max(0, parseInt(process.env.KEEP_DELETED_DAYS, 10) || 0);
 const { sanitizePoEvent, matchProjectByName, isStaleUpdate } = require("./imsWebhook.js");
 const { buildTeamDailyReport, slackSummaryFor } = require("./teamDailyReports.js");
 const { verifySlackSignature, parseSlackActionPayload, parseActionId, snagCloseBlocks, teamReportApproveBlocks } = require("./slackActions.js");
@@ -739,6 +746,24 @@ async function connectMongo() {
   // weekly-report markers) don't, so they are never removed.
   await mongoDb.collection("meta").createIndex({ expireAt: 1 }, { expireAfterSeconds: 0 });
 
+  if (EVENTS_ARCHIVE_DAYS > 0) await mongoDb.collection("eventsArchive").createIndex({ expireAt: 1 }, { expireAfterSeconds: 0 });
+  if (KEEP_DELETED_DAYS > 0) {
+    await mongoDb.collection("deletedRecords").createIndex({ expireAt: 1 }, { expireAfterSeconds: 0 });
+    await mongoDb.collection("deletedRecords").createIndex({ coll: 1, id: 1 });
+  }
+  if (OPS_ATOMIC) {
+    // READ-ONLY probe (a transaction that only reads and commits nothing): says in the log, at every start, whether
+    // OPS_ATOMIC can really work on this database. If not, batches silently keep the old non-atomic writes.
+    try {
+      const probe = client.startSession();
+      try { await probe.withTransaction(async () => { await mongoDb.collection("meta").findOne({ _id: "rev" }, { session: probe }); }); }
+      finally { await probe.endSession(); }
+      console.log("  OPS_ATOMIC=1: database transactions are available — /api/ops batches are all-or-nothing");
+    } catch (e) {
+      console.warn("  ! OPS_ATOMIC=1 but transactions are NOT available (" + (e && e.message) + ") — batches keep the old non-atomic writes");
+    }
+  }
+
   const projectCount = await mongoDb.collection("projects").countDocuments();
   if (projectCount === 0) {
     console.log("  no data found — starting with an empty board (use /api/reset to seed demo data if needed)");
@@ -1207,7 +1232,7 @@ function sessionDb(txSession) {
 /* progress update for an item-based checklist: a single atomic pipeline update that merges the incoming cells into the
    stored array by itemId (a cell present on both sides gets the incoming fields on top, cells only on one side are kept).
    Anything else (flag off, no/empty checklist, cells without an itemId) returns the classic $set/$unset update. */
-function progressUpdate(patch, classic) {
+function progressUpdate(patch, classic, items) {
   if (!PROGRESS_CELL_MERGE) return classic;
   const cells = patch && patch.checklist;
   if (!Array.isArray(cells) || cells.length === 0 || !cells.every((c) => c && typeof c === "object" && typeof c.itemId === "string" && c.itemId)) return classic;
@@ -1229,6 +1254,13 @@ function progressUpdate(patch, classic) {
     }
   };
   const stages = [{ $set: setStage }];
+  // The stage's own status is "done" only when EVERY listed item's cell is done, judged on the MERGED cells — so two
+  // people finishing the last two items at the same moment still end with "done" (each browser only sees its own cell).
+  // The browser lists the stage's item ids; it only has an effect when this write also sets the status.
+  const ids = Array.isArray(items) ? items.filter((x) => typeof x === "string" && x && x.length <= 200).slice(0, 500) : [];
+  if (ids.length && Object.prototype.hasOwnProperty.call(setStage, "status")) {
+    stages.push({ $set: { status: { $cond: [{ $allElementsTrue: [{ $map: { input: lit(ids), as: "id", in: { $eq: [{ $let: { vars: { cell: { $first: { $filter: { input: "$checklist", as: "c", cond: { $eq: ["$$c.itemId", "$$id"] } } } } }, in: "$$cell.status" } }, "done"] } } }] }, "done", "wip"] } } });
+  }
   if (unsetFields.length) stages.push({ $unset: unsetFields });
   return stages;
 }
@@ -1293,6 +1325,16 @@ async function writeRecord(db, op, update) {
   }
   return db.collection(op.coll).updateOne({ id: op.rec.id }, update, { upsert: true });
 }
+// With KEEP_DELETED_DAYS: the deleted record is copied aside first (never a password hash) so it can be listed/restored.
+async function keepDeletedCopy(db, coll, id, byUserId) {
+  if (!KEEP_DELETED_DAYS) return;
+  const old = await db.collection(coll).findOne({ id }, { projection: { _id: 0 } });
+  if (!old) return;
+  if (coll === "users") { delete old.passwordHash; delete old.passwordSalt; delete old.legacyPasswordHash; }
+  const now = Date.now();
+  await db.collection("deletedRecords").insertOne({ coll, id, doc: old, at: now, by: byUserId || null, expireAt: new Date(now + KEEP_DELETED_DAYS * 86400000) });
+}
+
 // A deleted VMS-origin record must not be re-imported by the VMS poller / live push (see syncVmsDpr.js).
 const VMS_ID_PREFIX = { dpr: "DPR-VMS-", drawingRequests: "DR-VMS-" };
 async function recordVmsTombstone(db, coll, id) {
@@ -1450,6 +1492,7 @@ async function applyOps(ops, session, trace) {
             }
           });
         } else {
+          await keepDeletedCopy(db, op.coll, op.id, session && session.userId);
           await db.collection(op.coll).deleteOne({ id: op.id });
           await recordVmsTombstone(db, op.coll, op.id);
         }
@@ -1458,7 +1501,7 @@ async function applyOps(ops, session, trace) {
         const update = {};
         if (Object.keys(set).length) update.$set = set;
         if (Object.keys(unset).length) update.$unset = unset;
-        await db.collection("progress").updateOne({ _id: op.key }, progressUpdate(op.patch, update), { upsert: true });
+        await db.collection("progress").updateOne({ _id: op.key }, progressUpdate(op.patch, update, op.items), { upsert: true });
       } else if (op.op === "event" && op.ev) {
         await db.collection("events").insertOne(Object.assign({}, op.ev));
       }
@@ -1570,10 +1613,16 @@ async function trimEvents() {
   const excess = count - MAX_EVENTS;
   const oldest = await mongoDb
     .collection("events")
-    .find({}, { projection: { _id: 1 } })
+    .find({}, EVENTS_ARCHIVE_DAYS > 0 ? {} : { projection: { _id: 1 } })
     .sort({ ts: 1 })
     .limit(excess)
     .toArray();
+  if (oldest.length && EVENTS_ARCHIVE_DAYS > 0) {
+    // keep them (EVENTS_ARCHIVE_DAYS): copy first, delete only what was copied; a duplicate (already archived) is fine
+    const expireAt = new Date(Date.now() + EVENTS_ARCHIVE_DAYS * 86400000), archivedAt = Date.now();
+    try { await mongoDb.collection("eventsArchive").insertMany(oldest.map((e) => Object.assign({}, e, { archivedAt, expireAt })), { ordered: false }); }
+    catch (e) { if (!(e && (e.code === 11000 || (e.writeErrors || []).every((w) => w.code === 11000)))) throw e; }
+  }
   if (oldest.length) await mongoDb.collection("events").deleteMany({ _id: { $in: oldest.map((o) => o._id) } });
 }
 
@@ -1898,6 +1947,11 @@ async function handleApi(req, res, urlPath) {
     // LOG-ONLY diagnostics (null unless SAVE_DIAGNOSTICS=1): observes this batch, never alters it — no body,
     // write or ordering depends on it, and every call into it swallows its own errors.
     const probe = saveDiag ? saveDiag.begin(body.ops, { anonymous: !opsSession }) : null;
+    if (KEEP_DELETED_DAYS > 0 && opsSession && opsSession.isAdmin && body.ops.some((o) => o && o.op === "delete" && o.coll === "projects")) {
+      // a project delete removes its floors/units/snags/... too — too much to copy per record, so save the whole board first
+      try { await takeSafetyBackup("pre-delete-project", opsSession.userId); }
+      catch (e) { if (batchId !== null) await opsBatch.release(batchId); return sendJson(res, e.status || 409, { error: e.message }); }
+    }
     try {
       await applyOps(body.ops, opsSession, probe ? probe.trace : undefined);
       if (probe) probe.finish();
@@ -2304,6 +2358,30 @@ async function handleApi(req, res, urlPath) {
     if (!session.isAdmin) return sendJson(res, 403, { error: "Admin access required" });
     // summaries are computed inside MongoDB — the full backup documents are never loaded into memory
     return sendJson(res, 200, { backups: await backups.listBackupSummaries(mongoDb) });
+  }
+  if (req.method === "GET" && urlPath === "/api/deleted") {
+    const session = getSession(req);
+    if (!session) return sendJson(res, 401, { error: "Sign-in required" });
+    if (!session.isAdmin) return sendJson(res, 403, { error: "Admin access required" });
+    const rows = await mongoDb.collection("deletedRecords").find({}, { projection: { _id: 0, coll: 1, id: 1, at: 1, by: 1, "doc.name": 1, "doc.title": 1, "doc.ticketNo": 1 } }).sort({ at: -1 }).limit(200).toArray();
+    return sendJson(res, 200, { keepDays: KEEP_DELETED_DAYS, deleted: rows });
+  }
+  if (req.method === "POST" && urlPath === "/api/deleted/restore") {
+    const session = getSession(req);
+    if (!session) return sendJson(res, 401, { error: "Sign-in required" });
+    if (!session.isAdmin) return sendJson(res, 403, { error: "Admin access required" });
+    const body = await readBody(req);
+    if (!COLLECTIONS.includes(body.coll) || typeof body.id !== "string") return sendJson(res, 400, { error: "coll and id are required" });
+    if (body.coll === "users") return sendJson(res, 400, { error: "A deleted user cannot be restored from here (its password is not kept) — create the user again." });
+    const row = await mongoDb.collection("deletedRecords").findOne({ coll: body.coll, id: body.id }, { sort: { at: -1 } });
+    if (!row) return sendJson(res, 404, { error: "No kept copy of that record (it may be older than KEEP_DELETED_DAYS)" });
+    try { await mongoDb.collection(body.coll).insertOne(Object.assign({}, row.doc)); }
+    catch (e) { if (e && e.code === 11000) return sendJson(res, 409, { error: body.id + " already exists again — nothing was restored." }); throw e; }
+    await mongoDb.collection("deletedRecords").deleteOne({ _id: row._id });
+    await mongoDb.collection("meta").deleteOne({ _id: "tomb:" + body.id }); // a restored VMS-origin record is not blocked any more
+    await mongoDb.collection("events").insertOne({ ts: Date.now(), userId: session.userId, action: "RESTORE_DELETED", targetId: body.id, stageId: "", detail: "Restored deleted " + body.coll + " record " + body.id });
+    await bumpRev();
+    return sendJson(res, 200, { ok: true });
   }
   const backupIdMatch = /^\/api\/backups\/([^/]+)$/.exec(urlPath);
   if (req.method === "GET" && backupIdMatch) {

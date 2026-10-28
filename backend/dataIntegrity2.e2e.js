@@ -102,6 +102,22 @@ const tally = (rs) => rs.reduce((m, r) => ((m[r.status] = (m[r.status] || 0) + 1
   await ops(ADMIN, [{ op: "progress", key: "UNY::STG-X", patch: { status: null } }]);
   check("17. a null patch field still removes the field", !("status" in (await db.collection("progress").findOne({ _id: "UNY::STG-X" }))));
 
+  console.log("--- stage status is decided on the server");
+  const both = (key, items) => Promise.all(["IT-A", "IT-B"].map((id) => ops(ADMIN, [{ op: "progress", items, key, patch: { status: "wip", checklist: [{ itemId: id, status: "done" }] } }])));
+  await both("UNS::STG-RCC", ["IT-A", "IT-B"]);
+  check("18. two people finish the LAST TWO items at the same moment (each browser computes 'wip'): the stage ends 'done'", (await db.collection("progress").findOne({ _id: "UNS::STG-RCC" })).status === "done");
+  await both("UNT::STG-RCC", ["IT-A", "IT-B", "IT-C"]);
+  check("19. with a third item still open it stays 'wip'", (await db.collection("progress").findOne({ _id: "UNT::STG-RCC" })).status === "wip");
+  await ops(ADMIN, [{ op: "progress", items: ["IT-A", "IT-B", "IT-C"], key: "UNT::STG-RCC", patch: { status: "wip", checklist: [{ itemId: "IT-C", status: "done" }] } }]);
+  check("20. and becomes 'done' when the last one is completed (judged on the merged cells)", (await db.collection("progress").findOne({ _id: "UNT::STG-RCC" })).status === "done");
+  await ops(ADMIN, [{ op: "progress", items: ["IT-A", "IT-B", "IT-C"], key: "UNT::STG-RCC", patch: { checklist: [{ itemId: "IT-C", status: "fail" }] } }]);
+  check("21. a write that does not set the status leaves it alone, even with an item list", (await db.collection("progress").findOne({ _id: "UNT::STG-RCC" })).status === "done");
+  await ops(ADMIN, [{ op: "progress", key: "UNW::STG-RCC", patch: { status: "wip", checklist: [{ itemId: "IT-A", status: "done" }] } }]);
+  check("22. without an item list the status is exactly what was sent (older browsers)", (await db.collection("progress").findOne({ _id: "UNW::STG-RCC" })).status === "wip");
+  await ops(ADMIN, [{ op: "progress", items: ["IT-A", "IT-B"], key: "UNV::STG-RCC", patch: { status: "wip", checklist: [{ itemId: "IT-A", status: "$ne" }] } }]);
+  check("23. an item list with odd content cannot change what is stored in a cell", (await db.collection("progress").findOne({ _id: "UNV::STG-RCC" })).checklist[0].status === "$ne");
+  check("24. the startup check reported that transactions are available (read-only probe)", /OPS_ATOMIC=1: database transactions are available/.test(slog));
+
   srv.kill(); await client.close(); await rs.stop();
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASSED");
   if (fails) console.log(slog.split("\n").slice(-20).join("\n"));

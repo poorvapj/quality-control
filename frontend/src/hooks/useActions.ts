@@ -281,7 +281,7 @@ export function useActions() {
     return items.every((it) => cells.find((c) => c.itemId === it.id)?.status === "done") ? "done" : "wip";
   }
   async function writeStageCells(unitId: string, stageId: string, cells: any[], items: { id: string; name?: string }[]) {
-    await apply([{ op: "progress", key: pkey(unitId, stageId), patch: { status: itemStageStatus(cells, items), checklist: cells } }]);
+    await apply([{ op: "progress", items: items.map((it) => it.id), key: pkey(unitId, stageId), patch: { status: itemStageStatus(cells, items), checklist: cells } }]);
   }
 
   async function ackStageItem(unitId: string, stageId: string, itemId: string) {
@@ -311,7 +311,7 @@ export function useActions() {
     let cells = upsertCell(stageCells(unitId, stageId), itemId, { status: "done", at: Date.now(), by: currentUserId || "", note: null });
     cells = releaseNextStageItem(cells, items, idx);
     const ops: Op[] = [
-      { op: "progress", key: pkey(unitId, stageId), patch: { status: itemStageStatus(cells, items), checklist: cells } },
+      { op: "progress", items: items.map((it) => it.id), key: pkey(unitId, stageId), patch: { status: itemStageStatus(cells, items), checklist: cells } },
       logEvent("COMPLETE", unitId, stageId, (items[idx]?.name || itemId) + " completed"),
     ];
     if (itemStageStatus(cells, items) === "done") ops.push(...releaseNextOps("unit", unitId, stageId));
@@ -341,7 +341,7 @@ export function useActions() {
       let cells = upsertCell(stageCells(unitId, stageId), itemId, { status: "done", at: now, by: currentUserId || "", note: null });
       cells = releaseNextStageItem(cells, items, idx);
       const ops: Op[] = [
-        { op: "progress", key: pkey(unitId, stageId), patch: { status: itemStageStatus(cells, items), checklist: cells, checklistId } },
+        { op: "progress", items: items.map((it) => it.id), key: pkey(unitId, stageId), patch: { status: itemStageStatus(cells, items), checklist: cells, checklistId } },
         logEvent("QC_PASS", unitId, stageId, (item?.name || itemId) + " checklist passed (" + results.length + " lines)"),
       ];
       if (itemStageStatus(cells, items) === "done") ops.push(...releaseNextOps("unit", unitId, stageId));
