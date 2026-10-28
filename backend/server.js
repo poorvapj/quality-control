@@ -1708,6 +1708,14 @@ async function handleApi(req, res, urlPath) {
     clearLoginAttempts(email);
     const { _id, passwordHash, passwordSalt, legacyPasswordHash, ...safeUser } = user;
     const token = issueSession(user);
+    // Best-effort — a logging hiccup must never block a real sign-in. No
+    // persistent login trail existed before this (only the in-memory
+    // lockout counter above, which never survives a restart and was never
+    // meant as an audit record) — Audit Logs couldn't answer "who signed in
+    // and when" at all.
+    mongoDb.collection("events").insertOne({
+      ts: Date.now(), userId: user.id, action: "LOGIN", targetId: user.id, stageId: "", detail: `${user.name || email} signed in`
+    }).catch((e) => console.error("Failed to log LOGIN event:", e.message));
     return sendJson(res, 200, { user: safeUser, token });
   }
   if (req.method === "POST" && urlPath === "/api/ops") {

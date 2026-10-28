@@ -42,7 +42,22 @@ export const ACTION_LABEL: Record<string, string> = {
   PERMISSION_UPDATE: "Permission matrix updated",
   BACKUP_CREATE: "Backup created",
   BACKUP_RESTORE: "Backup restored",
-  BACKUP_DELETE: "Backup deleted"
+  BACKUP_DELETE: "Backup deleted",
+  RESTORE_BACKUP: "Backup restored",
+  BACKUP_FAILED: "Scheduled backup failed",
+  LOGIN: "Signed in",
+  MODULE_VIEW: "Module opened",
+  CASE_STUDY_CREATE: "Case study logged",
+  CASE_STUDY_DELETE: "Case study deleted",
+  QUALITY_INSPECTION: "Quality inspection recorded",
+  QUALITY_INSPECTION_DELETE: "Quality inspection deleted",
+  WORK_MEASUREMENT: "Work measurement recorded",
+  WORK_MEASUREMENT_LINK: "Work measurement linked to a VMS item",
+  MATERIAL_MEASUREMENT: "Material measurement recorded",
+  APPROVAL_APPROVE: "Approved",
+  APPROVAL_REJECT: "Sent back for redo",
+  RESET_DB: "Board reset",
+  WEEKLY_QC_REPORT_SENT: "Weekly Quality Inspection report sent"
 };
 
 /* Modules with an empty `actions` list have no corresponding entry in the
@@ -70,7 +85,17 @@ const MODULES: ModuleDef[] = [
   { key: "masters", label: "Masters", desc: "Project/Floor/Unit/Stage configuration", icon: "masters", actions: ["MASTER_SAVE", "MASTER_DELETE"] },
   { key: "users", label: "Users", desc: "User accounts and roles", icon: "team", actions: [] },
   { key: "permissionMatrix", label: "Permission Matrix", desc: "Admin-managed per-user, per-module access grants", icon: "permissions", actions: ["PERMISSION_UPDATE"] },
-  { key: "backups", label: "Backups", desc: "Board backups and restores", icon: "database", actions: ["BACKUP_CREATE", "BACKUP_RESTORE", "BACKUP_DELETE"] }
+  // RESTORE_BACKUP is a separate action string server.js itself writes
+  // (its own restore path, distinct from Backups.tsx's own BACKUP_RESTORE
+  // call) — both named here so neither kind of restore is invisible.
+  { key: "backups", label: "Backups", desc: "Board backups and restores", icon: "database", actions: ["BACKUP_CREATE", "BACKUP_RESTORE", "RESTORE_BACKUP", "BACKUP_DELETE", "BACKUP_FAILED"] },
+  { key: "logins", label: "Logins", desc: "Who signed in, and when", icon: "clock", actions: ["LOGIN"] },
+  { key: "moduleAccess", label: "Module Access", desc: "Who opened which module — logged the first time each person opens it per browser session", icon: "eye", actions: ["MODULE_VIEW"] },
+  { key: "caseStudies", label: "Case Studies", desc: "Case studies logged and deleted", icon: "award", actions: ["CASE_STUDY_CREATE", "CASE_STUDY_DELETE"] },
+  { key: "qualityInspection", label: "Quality Inspection", desc: "Inspections recorded and deleted", icon: "eye", actions: ["QUALITY_INSPECTION", "QUALITY_INSPECTION_DELETE"] },
+  { key: "measurements", label: "Measurements", desc: "Work and material measurements, and their VMS links", icon: "layers", actions: ["WORK_MEASUREMENT", "WORK_MEASUREMENT_LINK", "MATERIAL_MEASUREMENT"] },
+  { key: "approvals", label: "Approvals", desc: "Team-leader approve/reject decisions on inspections and measurements", icon: "award", actions: ["APPROVAL_APPROVE", "APPROVAL_REJECT"] },
+  { key: "system", label: "System", desc: "Board resets and scheduled jobs", icon: "database", actions: ["RESET_DB", "WEEKLY_QC_REPORT_SENT"] }
 ];
 
 function moduleEvents(events: EventLog[], mod: ModuleDef): EventLog[] {

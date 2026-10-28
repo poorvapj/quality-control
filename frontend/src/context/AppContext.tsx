@@ -5,6 +5,21 @@ import { byId, coll } from "../shared/rules";
 import { classifyStatus, flushQueue, newBatchId, normalizeQueue, tokenUserId, type QueuedBatch } from "../shared/opQueue";
 import { judgeStateResponse, needsFullBoardAfterLogin } from "../shared/stateSync";
 import { applyOpsLocal, scrubLocalBoard } from "../shared/applyOpsLocal";
+import { buildEventOp } from "../shared/eventLog";
+
+// Human label for the MODULE_VIEW audit event's detail text — purely
+// cosmetic (Audit Logs still groups by the raw TabKey), so an entry
+// missing here just falls back to the bare key rather than breaking anything.
+const TAB_VIEW_LABEL: Partial<Record<TabKey, string>> = {
+  dash: "Dashboard", misDashboard: "Quality MIS", userMis: "Users MIS",
+  executionReconciliation: "Execution Reconciliation", qualityInspection: "Quality Inspection",
+  qualityFails: "Fail Register", caseStudies: "Case Studies", unitExecutionWorkflow: "Measurement (Unit)",
+  measurement: "Measurement", progressAnalysis: "Progress Analysis", purchaseOrders: "Purchase Orders",
+  work: "My Work", board: "Tower Board", handoverChecklist: "Handover Checklist",
+  handoverInternal: "Handover Checklist — Internal", handoverOwner: "Handover Checklist — Owner",
+  snags: "Snags", team: "Team", masters: "Masters", addUser: "Add User", dpr: "Daily Progress Report",
+  drawingRequests: "Drawing Requests", backups: "Backups", auditLog: "Audit Logs", permissionMatrix: "Permission Matrix"
+};
 
 const LS_KEY = "neoteric_board_v5";
 const SESSION_KEY = "neoteric_session";
@@ -401,6 +416,20 @@ export function AppProvider({ children, publicRoute = false }: { children: React
       return false;
     }
   }, [persistLocal, queueOps, toast, acceptState]);
+
+  // "Who's opening which module" had no trail at all before this — Audit
+  // Logs only ever recorded create/edit/delete actions, never a view.
+  // Logged once per tab per browser session (not on every click back to a
+  // tab already seen) so normal navigating around the app doesn't flood the
+  // shared events collection — it's a bounded, server-side-capped log
+  // (MAX_EVENTS in server.js), and real action events must not get crowded
+  // out by someone just clicking through tabs.
+  const loggedTabsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!loggedIn || !currentUserId || loggedTabsRef.current.has(activeTab)) return;
+    loggedTabsRef.current.add(activeTab);
+    apply([buildEventOp(currentUserId, "MODULE_VIEW", activeTab, "", `Opened ${TAB_VIEW_LABEL[activeTab] || activeTab}`)]);
+  }, [activeTab, loggedIn, currentUserId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Initial load + poll */
   useEffect(() => {
