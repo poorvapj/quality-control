@@ -745,6 +745,27 @@ async function connectMongo() {
   }
 }
 
+/* Every "delete" op removes the record from its live collection, same as
+   before — but now a copy lands in "trash" first, so a delete (one record,
+   or an entire project's cascade) is always recoverable from the database
+   even though there's no "Undo" button in the UI yet. Never blocks or
+   fails the actual delete: an archiving hiccup must not be the reason a
+   genuine delete can't go through. Not added to seed.js's COLLECTIONS or
+   exposed via /api/state — this is a recovery log, not board data. */
+async function archiveBeforeDelete(coll, filter, deletedByUserId, mongoSession) {
+  try {
+    const docs = await mongoDb.collection(coll).find(filter, { session: mongoSession }).toArray();
+    if (docs.length === 0) return;
+    const deletedAt = Date.now();
+    await mongoDb.collection("trash").insertMany(
+      docs.map((doc) => ({ originalColl: coll, deletedAt, deletedBy: deletedByUserId || null, doc })),
+      { session: mongoSession }
+    );
+  } catch (e) {
+    console.error(`[trash] failed to archive ${coll} before delete:`, e.message);
+  }
+}
+
 async function bumpRev() {
   // One atomic round-trip instead of update-then-read: the old second read
   // could also return a value another concurrent write had already bumped.
@@ -1278,23 +1299,26 @@ async function applyOps(ops, session, trace) {
         await mongoDb.collection(op.coll).updateOne({ id: op.rec.id }, update, { upsert: true });
       }
     } else if (op.op === "delete" && COLLECTIONS.includes(op.coll) && op.id) {
+      const deletedByUserId = session ? session.userId : null;
       if (op.coll === "projects") {
         // Project delete + its full cascade (scoped collections, plus the
         // progress records keyed by the floor/unit ids it owns) is one
         // transaction — a crash halfway used to leave the project gone but
         // some of its floors/units/snags/progress still behind, or vice
         // versa, rather than either all-gone or all-untouched.
-        await withOptionalTransaction(async (session) => {
-          const floorIds = (await mongoDb.collection("floors").find({ projectId: op.id }, { projection: { id: 1 }, session }).toArray()).map((f) => f.id);
-          const unitIds = (await mongoDb.collection("units").find({ projectId: op.id }, { projection: { id: 1 }, session }).toArray()).map((u) => u.id);
-          await mongoDb.collection(op.coll).deleteOne({ id: op.id }, { session });
+        await withOptionalTransaction(async (txnSession) => {
+          const floorIds = (await mongoDb.collection("floors").find({ projectId: op.id }, { projection: { id: 1 }, session: txnSession }).toArray()).map((f) => f.id);
+          const unitIds = (await mongoDb.collection("units").find({ projectId: op.id }, { projection: { id: 1 }, session: txnSession }).toArray()).map((u) => u.id);
+          await archiveBeforeDelete(op.coll, { id: op.id }, deletedByUserId, txnSession);
+          await mongoDb.collection(op.coll).deleteOne({ id: op.id }, { session: txnSession });
           // A deleted project would otherwise leave its floors/units/snags/
           // assignments/dpr/drawingRequests/stagemap rows behind with a
           // projectId that no longer resolves to anything — every page that
           // joins on projectId assumes it always does.
           if (trace) trace.cascade = {}; // (diagnostics only; reset because the transaction callback can be retried)
           for (const c of PROJECT_SCOPED_COLLECTIONS) {
-            const deleted = await mongoDb.collection(c).deleteMany({ projectId: op.id }, { session });
+            await archiveBeforeDelete(c, { projectId: op.id }, deletedByUserId, txnSession);
+            const deleted = await mongoDb.collection(c).deleteMany({ projectId: op.id }, { session: txnSession });
             if (trace) trace.cascade[c] = deleted?.deletedCount;
           }
           // progress documents are keyed `${targetId}::${stageId}` (see
@@ -1304,11 +1328,13 @@ async function applyOps(ops, session, trace) {
           const targetIds = [...floorIds, ...unitIds];
           if (targetIds.length) {
             const pattern = "^(" + targetIds.map(escapeRegExp).join("|") + ")::";
-            const deletedProgress = await mongoDb.collection("progress").deleteMany({ _id: { $regex: pattern } }, { session });
+            await archiveBeforeDelete("progress", { _id: { $regex: pattern } }, deletedByUserId, txnSession);
+            const deletedProgress = await mongoDb.collection("progress").deleteMany({ _id: { $regex: pattern } }, { session: txnSession });
             if (trace) trace.cascade.progress = deletedProgress?.deletedCount;
           }
         });
       } else {
+        await archiveBeforeDelete(op.coll, { id: op.id }, deletedByUserId);
         await mongoDb.collection(op.coll).deleteOne({ id: op.id });
       }
     } else if (op.op === "progress" && op.key && op.patch) {
