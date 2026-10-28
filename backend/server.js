@@ -938,11 +938,34 @@ async function notifyDprSubmitted(rec) {
     // along a leading tab or space, which Slack's API rejects outright.
     const channelId = project && project.slackChannelId && String(project.slackChannelId).trim();
     if (!channelId) return;
-    const categories = (rec.workEntries || []).map((w) => w.category).join(", ") || "—";
-    const text = `📋 Daily Progress Report submitted on QC — *${rec.projectName || rec.projectId}*\n`
+    const entries = rec.workEntries || [];
+    const categories = entries.map((w) => w.category).join(", ") || "—";
+    // Plain-text fallback (shown in notifications/previews where blocks aren't rendered).
+    const text = `📋 New Daily Progress Report — *${rec.projectName || rec.projectId}*\n`
       + `By: *${rec.submittedByName || "—"}* · Contractor: ${rec.vendorName || "—"} · Shift: ${rec.shift || "—"} · Labour: ${rec.labourCount ?? "—"}\n`
       + `Work: ${categories}`;
-    await slackPostMessage(channelId, text, null, { to: "the project channel" });
+    // Same labeled-field + per-category-photo layout VMS's own n8n DPR
+    // notice already uses, so both look consistent in the same channel.
+    const blocks = [{
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: `📋 *New Daily Progress Report*\n`
+          + `*Project:* ${rec.projectName || rec.projectId}\n`
+          + `*DRI:* ${rec.submittedByName || "—"}\n`
+          + `*Vendor:* ${rec.vendorName || "—"}${rec.vendorCode ? ` (${rec.vendorCode})` : ""}\n`
+          + `*Date:* ${rec.date || "—"}   *Shift:* ${rec.shift || "—"}\n`
+          + `*Labour Count:* ${rec.labourCount ?? "—"}`
+      }
+    }];
+    for (const w of entries) {
+      const photos = (w.generalPhotos || []).filter((p) => p?.url);
+      blocks.push({ type: "section", text: { type: "mrkdwn", text: `*${w.category}:*${w.qty ? ` ${w.qty} ${w.unit || ""}` : ""}` } });
+      // Slack hard-caps blocks per message — cap per-category photos so a
+      // multi-category DPR with lots of evidence photos can't blow past it.
+      for (const p of photos.slice(0, 3)) blocks.push({ type: "image", image_url: p.url, alt_text: `${w.category} photo` });
+    }
+    await slackPostMessage(channelId, text, blocks, { to: "the project channel" });
   } catch (e) {
     console.error("notifyDprSubmitted failed:", e.message);
   }
