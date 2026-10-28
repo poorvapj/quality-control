@@ -165,6 +165,13 @@ const tally = (rs) => rs.reduce((m, r) => ((m[r.status] = (m[r.status] || 0) + 1
   })));
   check("36. 6 concurrent report-generation calls all succeed and produce exactly one report per team/day", gens.every((g) => g.status === 200) && (await db.collection("teamDailyReports").countDocuments({ teamId: "T1" })) === 1, JSON.stringify(tally(gens)));
 
+  await db.collection("events").deleteMany({}); await db.collection("eventsArchive").deleteMany({});
+  await db.collection("events").insertMany(Array.from({ length: 4990 }, (_, i) => ({ ts: 100 + i, userId: "U", action: "A", targetId: "", stageId: "", detail: "d" })));
+  await Promise.all(Array.from({ length: 40 }, (_, i) => ops(ADMIN, [{ op: "event", ev: { ts: 100000 + i, userId: "U-ADMIN", action: "L" + i, targetId: "", stageId: "", detail: "d" } }])));
+  const live2 = await db.collection("events").countDocuments(), arch2 = await db.collection("eventsArchive").countDocuments();
+  check("50. 40 parallel saves at the cap leave EXACTLY 5000 live events (no over-trim) and archive exactly the 30 beyond it", live2 === 5000 && arch2 === 30, "live=" + live2 + " archived=" + arch2);
+  check("51. the newest events are the ones kept", (await db.collection("events").countDocuments({ ts: { $gte: 100000 } })) === 40 && (await db.collection("events").find({}).sort({ ts: 1 }).limit(1).toArray())[0].ts === 130);
+
   console.log("--- permission grants are saved per module");
   await ops(ADMIN, [{ op: "upsert", coll: "moduleGrants", rec: { id: "MG-U1", userId: "U1", grants: { masters: { view: true }, dpr: { view: true }, snags: { view: true } } } }]);
   const gp = await Promise.all([
@@ -199,7 +206,7 @@ const tally = (rs) => rs.reduce((m, r) => ((m[r.status] = (m[r.status] || 0) + 1
   const bkBefore = await db.collection("backups").countDocuments({ createdBy: /^pre-delete-project:/ });
   r = await ops(ADMIN, [{ op: "delete", coll: "projects", id: "PD" }]);
   check("46. deleting a PROJECT first saves the whole board as a pre-delete-project backup", r.status === 200 && (await db.collection("backups").countDocuments({ createdBy: /^pre-delete-project:/ })) === bkBefore + 1);
-  await db.collection("events").deleteMany({});
+  await db.collection("events").deleteMany({}); await db.collection("eventsArchive").deleteMany({});
   await db.collection("events").insertMany(Array.from({ length: 5012 }, (_, i) => ({ ts: 1000 + i, userId: "U", action: "A" + i, targetId: "", stageId: "", detail: "d" })));
   r = await ops(ADMIN, [{ op: "event", ev: { ts: 9999999, userId: "U-ADMIN", action: "NEWEST", targetId: "", stageId: "", detail: "d" } }]);
   const live = await db.collection("events").countDocuments(), arch = await db.collection("eventsArchive").find({}).sort({ ts: 1 }).toArray();

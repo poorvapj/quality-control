@@ -1610,12 +1610,15 @@ async function trimEvents() {
   if ((await mongoDb.collection("events").estimatedDocumentCount()) <= MAX_EVENTS) return;
   const count = await mongoDb.collection("events").countDocuments();
   if (count <= MAX_EVENTS) return;
-  const excess = count - MAX_EVENTS;
+  // "Everything older than the newest MAX_EVENTS" is a deterministic set, so concurrent trims all pick the SAME events.
+  // (It used to be "the oldest count-MAX": two trims that both counted before either deleted each removed that many, so a
+  // burst of saves at the cap trimmed the live log BELOW MAX_EVENTS — measured 30 events too many with 40 parallel saves.)
   const oldest = await mongoDb
     .collection("events")
     .find({}, EVENTS_ARCHIVE_DAYS > 0 ? {} : { projection: { _id: 1 } })
-    .sort({ ts: 1 })
-    .limit(excess)
+    .sort({ ts: -1, _id: -1 })
+    .skip(MAX_EVENTS)
+    .limit(5000)
     .toArray();
   if (oldest.length && EVENTS_ARCHIVE_DAYS > 0) {
     // keep them (EVENTS_ARCHIVE_DAYS): copy first, delete only what was copied; a duplicate (already archived) is fine
