@@ -731,7 +731,7 @@ export default function DailyProgressReportPage() {
                         <td>{r.submittedByName}</td>
                         <td><span className={"badge-tag " + (r.shift === "Night" ? "mute" : "wip")}>{r.shift}</span></td>
                         <td className="num">{r.labourCount}</td>
-                        <td><span className="badge-tag wip">{r.workEntries.length} categor{r.workEntries.length === 1 ? "y" : "ies"}</span></td>
+                        <td title={r.workEntries.map((e) => e.category).join(", ")}>{r.workEntries.map((e) => e.category).join(", ") || "—"}</td>
                         <td>
                           <button className="btn btn-secondary btn-sm" title="View" onClick={() => setViewReportId(r.id)}>
                             <NavIcon name="eye" size={13} />
