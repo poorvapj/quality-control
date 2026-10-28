@@ -1492,6 +1492,39 @@ async function resetDb(mode, actorUserId) {
 const createBackup = (createdBy) => backups.createBackup(mongoDb, COLLECTIONS, createdBy);
 const summarizeBackup = backups.summarizeBackup;
 
+/* Automatic, traffic-triggered backup — the "real" scheduled path
+   (/api/backup/scheduled) depends on an external cron pinger, and nothing
+   was ever actually configured to call it: production went from 2026-10-10
+   to 2026-10-21 with zero automatic backups, only two manual ones (both
+   created by a person, not "scheduled"). Rather than depend on an external
+   service existing (or an in-process setInterval, unreliable on Render's
+   free tier since the instance can sleep through it), this piggybacks on
+   real incoming traffic: whichever request happens to arrive once the last
+   backup is 24h+ old creates a fresh one, in the background, never slowing
+   that request down. An idle app with zero visitors still won't back
+   itself up — there's no request to piggyback on — but that's the same
+   idle app that also isn't being changed, so nothing new is at risk either.
+   AUTO_BACKUP_CHECK_MIN_GAP_MS keeps this to one cheap Mongo read per
+   10 minutes of traffic, not per request. */
+const AUTO_BACKUP_CHECK_MIN_GAP_MS = 10 * 60 * 1000;
+const AUTO_BACKUP_MIN_AGE_MS = 24 * 60 * 60 * 1000;
+let lastAutoBackupCheckAt = 0;
+let autoBackupInFlight = false;
+function maybeAutoBackup() {
+  const now = Date.now();
+  if (now - lastAutoBackupCheckAt < AUTO_BACKUP_CHECK_MIN_GAP_MS || autoBackupInFlight) return;
+  lastAutoBackupCheckAt = now;
+  autoBackupInFlight = true;
+  (async () => {
+    const [latest] = await mongoDb.collection("backups").find({}, { projection: { createdAt: 1 } }).sort({ createdAt: -1 }).limit(1).toArray();
+    if (latest && now - latest.createdAt < AUTO_BACKUP_MIN_AGE_MS) return; // not due yet
+    const doc = await createBackup("auto-traffic");
+    console.log(`[backup] automatic (traffic-triggered): ${doc.id}`);
+  })()
+    .catch((e) => reportBackupFailure("auto-traffic", e))
+    .finally(() => { autoBackupInFlight = false; });
+}
+
 /* A failed backup must never be silent. Always logged and recorded in the audit
    log; also sent to Slack (BACKUP_ALERT_EMAILS, default: the QC report owner)
    when Slack is configured. For the scheduled route the HTTP 500 is a second
@@ -2238,6 +2271,9 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (urlPath.startsWith("/api/")) {
+    // Fire-and-forget — never awaited, so a check (or an overdue backup) in
+    // progress can't add latency to this request.
+    if (mongoDb) maybeAutoBackup();
     try {
       return await handleApi(req, res, urlPath);
     } catch (e) {
