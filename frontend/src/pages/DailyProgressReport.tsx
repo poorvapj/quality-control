@@ -94,6 +94,11 @@ export default function DailyProgressReportPage() {
   const isAdmin = currentUserId === "U-ADMIN";
   const isDri = !isAdmin && (myRole() === "ADMIN" || myRole() === "DRI");
   const [open, setOpen] = useState(false);
+  const dprDirtyRef = useRef(false);
+  function guardedCloseDpr() {
+    if (dprDirtyRef.current && !window.confirm("Discard this report? What you've entered so far will be lost.")) return;
+    setOpen(false);
+  }
   const [drOpen, setDrOpen] = useState(false);
   const [tab, setTab] = useState<DprTab>("work");
   const [summaryPage, setSummaryPage] = useState(1);
@@ -740,8 +745,8 @@ export default function DailyProgressReportPage() {
         )}
       </div>
 
-      <SidePanel wide open={open} icon={<NavIcon name="dpr" size={17} />} title="New Daily Progress Report" desc="Fill in today's site details, then check off what work happened." onClose={() => setOpen(false)}>
-        <DprForm isPublic={false} onDone={() => setOpen(false)} />
+      <SidePanel wide open={open} icon={<NavIcon name="dpr" size={17} />} title="New Daily Progress Report" desc="Fill in today's site details, then check off what work happened." onClose={guardedCloseDpr}>
+        <DprForm isPublic={false} onDone={() => setOpen(false)} onDirtyChange={(d) => { dprDirtyRef.current = d; }} />
       </SidePanel>
 
       <SidePanel open={drOpen} icon={<NavIcon name="drawing" size={17} />} title="Request a Drawing" desc="Ask Planning/Design for a drawing you need on site" onClose={() => setDrOpen(false)}>

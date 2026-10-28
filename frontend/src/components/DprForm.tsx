@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, myProjects } from "../shared/rules";
 import { buildEventOp } from "../shared/eventLog";
@@ -71,7 +71,7 @@ const CategoryEntry = React.memo(function CategoryEntry({ cat, entry, target, on
 
 const NO_PHOTOS: Photo[] = [];
 
-export default function DprForm({ isPublic, onDone }: { isPublic: boolean; onDone: (id: string) => void }) {
+export default function DprForm({ isPublic, onDone, onDirtyChange }: { isPublic: boolean; onDone: (id: string) => void; onDirtyChange?: (dirty: boolean) => void }) {
   const { data, apply, toast, currentUserId } = useApp();
   const projects = useMemo(
     () => (isPublic ? coll(data, "projects").filter((p) => p.active !== false) : myProjects(data, currentUserId)),
@@ -153,6 +153,22 @@ export default function DprForm({ isPublic, onDone }: { isPublic: boolean; onDon
   const resolvedVendor = vendorChoice === OTHER_VENDOR
     ? { vendorCode: slugCode(vendorNameOther), vendorName: vendorNameOther.trim() }
     : vendorByCode.get(vendorChoice) || null;
+
+  // Real work entered so far (a project/contractor/labour picked, a work
+  // type checked, or a photo taken) that a stray back-tap, accidental
+  // overlay click, or tab close would otherwise throw away with zero
+  // warning — same guard QualityInspection.tsx's InspectionForm already
+  // has for its own (even more data-heavy) form; this one had none at all.
+  const isDirty = !!projectId || !!vendorChoice || !!submittedByName.trim() || !!labourCount
+    || Object.values(checked).some(Boolean) || Object.values(entries).some((e) => e.generalPhotos.length > 0 || e.beforePhotos.length > 0 || e.afterPhotos.length > 0);
+  useEffect(() => { onDirtyChange?.(isDirty); }, [isDirty, onDirtyChange]);
+  useEffect(() => {
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      if (isDirty) { e.preventDefault(); e.returnValue = ""; }
+    }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [isDirty]);
 
   async function submit() {
     if (!projectId) { toast("Pick a project"); return; }
