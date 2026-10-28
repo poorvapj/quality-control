@@ -290,7 +290,7 @@ export default function Measurement() {
         onConfirm={async (itemId) => {
           if (!confirming) return;
           await apply([
-            { op: "upsert", coll: "workMeasurements", rec: { ...confirming, linkedItemId: itemId } },
+            { op: "upsert", coll: "workMeasurements", rec: { id: confirming.id, linkedItemId: itemId } },
             buildEventOp(currentUserId, "WORK_MEASUREMENT_LINK", confirming.id, "", `Link confirmed · ${confirming.category}`)
           ]);
           toast("VMS link confirmed");

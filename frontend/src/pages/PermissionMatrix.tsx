@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, byId } from "../shared/rules";
 import { nextId } from "../shared/helpers";
+import { diffRecord, grantPatch } from "../shared/recordDiff";
 import { buildEventOp } from "../shared/eventLog";
 import { countGrantedActions, defaultGrantsForRole, effectiveRoleGrants, fillLegacyGrants } from "../shared/permissionMatrix";
 import { ROLES } from "../services/config";
@@ -33,12 +34,16 @@ export default function PermissionMatrix() {
   const [roleLabel, setRoleLabel] = useState(existing?.roleLabel || "");
   const [grants, setGrants] = useState<Record<string, Partial<Record<ModuleAction, boolean>>>>(existing?.grants ? fillLegacyGrants(existing.grants, byId(users, userId)?.role || null) : defaultGrantsForRole(byId(users, userId)?.role));
   const [loadedFor, setLoadedFor] = useState(userId);
+  // what was loaded when this user was picked (NOT the live copy): a save sends only what the admin changed relative to it
+  const [baseGrants, setBaseGrants] = useState<Record<string, any> | null>(existing?.grants ?? null);
+  const [baseLabel, setBaseLabel] = useState<string>(existing?.roleLabel || "");
 
   // Re-sync local draft when the selected user changes (not on every data
   // refresh, so mid-edit toggles aren't clobbered by a live-data poll).
   if (loadedFor !== userId) {
     const rec = coll(data, "moduleGrants").find((g) => g.userId === userId) || null;
     setRoleLabel(rec?.roleLabel || "");
+    setBaseGrants(rec?.grants ?? null); setBaseLabel(rec?.roleLabel || "");
     setGrants(rec?.grants ? fillLegacyGrants(rec.grants, byId(users, userId)?.role || null) : defaultGrantsForRole(byId(users, userId)?.role));
     setLoadedFor(userId);
   }
@@ -49,7 +54,9 @@ export default function PermissionMatrix() {
   const existingStageGrants = coll(data, "permissions").find((p) => p.userId === userId) || null;
   const [stageGrants, setStageGrants] = useState<Partial<Record<StageKey, boolean>>>(existingStageGrants || {});
   const [stageLoadedFor, setStageLoadedFor] = useState(userId);
+  const [baseStage, setBaseStage] = useState<any>(existingStageGrants);
   if (stageLoadedFor !== userId) {
+    setBaseStage(coll(data, "permissions").find((p) => p.userId === userId) || null);
     setStageGrants(coll(data, "permissions").find((p) => p.userId === userId) || {});
     setStageLoadedFor(userId);
   }
@@ -70,7 +77,9 @@ export default function PermissionMatrix() {
     coll(data, "roles").find((r) => r.name === roleOptions[0]?.value) || {}
   );
   const [roleLoadedFor, setRoleLoadedFor] = useState(roleName);
+  const [baseRole, setBaseRole] = useState<any>(coll(data, "roles").find((r) => r.name === roleOptions[0]?.value) || null);
   if (roleLoadedFor !== roleName) {
+    setBaseRole(coll(data, "roles").find((r) => r.name === roleName) || null);
     setRoleGrants(effectiveRoleGrants(data, roleName));
     setRoleStageGrants(coll(data, "roles").find((r) => r.name === roleName) || {});
     setRoleLoadedFor(roleName);
@@ -102,10 +111,14 @@ export default function PermissionMatrix() {
     setSaving(true);
     try {
       const rec: ModuleGrant = { id: "MG-" + userId, userId, roleLabel: roleLabel.trim() || undefined, grants };
-      const stageRec = { id: existingStageGrants?.id || nextId("PRM", coll(data, "permissions")), userId, ...stageGrants };
+      const stageRec = { id: baseStage?.id || existingStageGrants?.id || nextId("PRM", coll(data, "permissions")), userId, ...stageGrants };
+      // Only what this admin changed since the user was loaded (a first save of a user with no stored record writes it whole).
+      const grantsOp: any = baseGrants === null
+        ? rec
+        : { id: rec.id, ...(baseLabel !== (roleLabel.trim() || "") ? { roleLabel: roleLabel.trim() || null } : {}), ...grantPatch(baseGrants, grants) };
       await apply([
-        { op: "upsert", coll: "moduleGrants", rec },
-        { op: "upsert", coll: "permissions", rec: stageRec, ...(existingStageGrants?.id ? {} : { create: true }) },
+        { op: "upsert", coll: "moduleGrants", rec: grantsOp },
+        { op: "upsert", coll: "permissions", rec: baseStage ? diffRecord(baseStage, stageRec as any) : stageRec, ...((baseStage?.id || existingStageGrants?.id) ? {} : { create: true }) } as any,
         buildEventOp(currentUserId, "PERMISSION_UPDATE", userId, "", `Updated module grants for ${user?.name || userId}`)
       ]);
       toast("Permissions saved");
@@ -121,8 +134,15 @@ export default function PermissionMatrix() {
       const rec = existingRoleRec
         ? { ...existingRoleRec, grants: roleGrants, ...roleStageGrants }
         : { id: "ROLE-OVERRIDE-" + roleName.toUpperCase(), name: roleName, builtin: true, grants: roleGrants, ...roleStageGrants };
+      // an existing role record: only the modules/flags this admin changed since it was loaded
+      // (roleStageGrants starts out as the whole stored role record, grants included — only its true/false flags are the
+      // stage permissions, so only those are compared; the grants themselves go through grantPatch)
+      const stageFlags = Object.fromEntries(Object.entries(roleStageGrants).filter(([, v]) => typeof v === "boolean"));
+      const roleOp: any = baseRole
+        ? { id: rec.id, ...grantPatch(baseRole.grants, roleGrants), ...diffRecord(baseRole, { id: rec.id, ...stageFlags } as any) }
+        : rec;
       await apply([
-        { op: "upsert", coll: "roles", rec },
+        { op: "upsert", coll: "roles", rec: roleOp },
         buildEventOp(currentUserId, "PERMISSION_UPDATE", rec.id, "", `Updated default permissions for role ${roleName}`)
       ]);
       toast("Role permissions saved");

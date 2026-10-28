@@ -27,6 +27,26 @@ export function scrubLocalBoard<T extends { users?: any[] } | null>(board: T): T
   return board;
 }
 
+/* A key like "grants.masters" (set by the Permission Matrix so two admins editing the same user's access do not
+   overwrite each other) sets ONE nested entry; a null value removes it. Copy-on-write along the path, so objects shared
+   with the previous board state are never mutated. Mutates `rec` (a fresh copy made by the caller). */
+export function applyDottedKeys(rec: Record<string, any>) {
+  for (const key of Object.keys(rec)) {
+    if (!key.includes(".") || key.startsWith(".") || key.endsWith(".") || key.startsWith("$")) continue;
+    const value = rec[key];
+    delete rec[key];
+    const parts = key.split(".");
+    let cur: any = rec;
+    for (let j = 0; j < parts.length - 1; j++) {
+      const p = parts[j];
+      cur[p] = cur[p] && typeof cur[p] === "object" && !Array.isArray(cur[p]) ? { ...cur[p] } : {};
+      cur = cur[p];
+    }
+    const last = parts[parts.length - 1];
+    if (value === null) delete cur[last]; else cur[last] = value;
+  }
+}
+
 export function applyOpsLocal(d: BoardData, ops: Op[]) {
   for (const op of ops) {
     if (op.op === "upsert") {
@@ -35,10 +55,12 @@ export function applyOpsLocal(d: BoardData, ops: Op[]) {
       const i = list.findIndex((r: any) => r.id === rec.id);
       const pushed = (op as any).push;
       // a copy when something is appended, so the op that is sent to the server keeps its rec exactly as built
-      const merged = i === -1 ? (pushed ? Object.assign({}, rec) : rec) : Object.assign({}, list[i], rec);
+      const hasDotted = Object.keys(rec).some((k) => k.includes("."));
+      const merged = i === -1 ? (pushed || hasDotted ? Object.assign({}, rec) : rec) : Object.assign({}, list[i], rec);
       if (pushed && typeof pushed === "object") {
         for (const [k, v] of Object.entries(pushed)) (merged as any)[k] = (Array.isArray((merged as any)[k]) ? (merged as any)[k] : []).concat([v]);
       }
+      applyDottedKeys(merged as any);
       for (const k of Object.keys(merged)) if ((merged as any)[k] === null) delete (merged as any)[k];
       if (i === -1) list.push(merged);
       else list[i] = merged;

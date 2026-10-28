@@ -18,6 +18,18 @@ An `upsert` op is a field-level merge (`updateOne({id}, {$set…}, {upsert:true}
 | 8 | Deleted VMS-origin DPR comes back at the next poll | delete leaves `meta` tombstone `tomb:<id>`; the poller and the live push skip it | `server.js`, `syncVmsDpr.js`, `vmsDprApiHandler.js` |
 | 9 | VMS reports with an unmatched project skipped forever, only a console line | one record `meta` `vms-dpr-unmatched` (names + count) while any exist | `syncVmsDpr.js` |
 | 10 | Two concurrent team-report runs could overwrite a sign-off | insert-only | `server.js` |
+| 11 | Approval decisions and measurement-link confirmations rewrote the whole record | send only `{id, approval}` / `{id, linkedItemId}`; the server validates against the **stored** record (`recordForValidation`) | `approvalOp.ts`, `Measurement.tsx`, `server.js` |
+| 12 | Item-based stage checklists: two people on different items overwrote each other's cells | **`PROGRESS_CELL_MERGE=1`** (default OFF): one atomic pipeline update merges cells by `itemId` (fields of the same cell are unioned); checklists without `itemId` are replaced as before | `server.js` (`progressUpdate`) |
+| 13 | A failure in the middle of a batch left earlier ops written (and a retry then hit 409 on its own creates) | **`OPS_ATOMIC=1`** (default OFF): the write phase of a batch runs in ONE transaction (all or nothing); Slack follow-ups are sent after the commit; falls back to the old behaviour if transactions are unavailable | `server.js` (`sessionDb`, `writeAll`) |
+| 14 | Permission matrix: the last admin to save overwrote every module another admin changed | saves only the modules/flags this admin changed since the user/role was loaded (dotted keys `grants.<module>`); also fixes the role editor writing the stored (old) `grants` back over the edited ones | `PermissionMatrix.tsx`, `recordDiff.ts`, `applyOpsLocal.ts` |
+| 15 | A refused change had no UI | "N change(s) refused — view" badge: list, copy details, dismiss | `RejectedChangesBadge.tsx` |
+
+## Flags (both default OFF; set to exactly `1` on Render, then restart)
+| Variable | Effect | Roll back |
+|---|---|---|
+| `OPS_ATOMIC` | each `/api/ops` batch is written in one database transaction | unset + restart |
+| `PROGRESS_CELL_MERGE` | item-based checklist cells are merged by `itemId` | unset + restart |
+Verified locally on a one-node replica set (`backend/dataIntegrity2.e2e.js`, 17 checks, mutation-checked: with both flags off the same checks fail — partial batch written, 1 of 10 cells survives). **Not verified on Atlas/Render.** Without `OPS_ATOMIC` a mid-batch failure can still leave earlier ops written, and a retry of such a batch can then answer 409 for its own creates.
 
 ## Compatibility (zero breaking change)
 - Old browser + new backend: ops without `create`/`push` behave **exactly as before**.
@@ -25,14 +37,12 @@ An `upsert` op is a field-level merge (`updateOne({id}, {$set…}, {upsert:true}
 - No schema change, no migration. New `meta` documents: `tomb:<id>` (per deleted VMS-origin record) and `vms-dpr-unmatched`. Restore/reset add one extra `backups` document each.
 - New response codes (409/503) are non-OK for older browsers, which already treat them as "re-sync and show the error".
 
-## NOT fixed (still open)
-- **Stage-progress checklists** (`progress` ops): the `checklist` array is replaced as a whole — two inspectors on different items of the same unit/stage can overwrite each other.
-- **Approvals** (`approval.ts`) and **measurement link confirmation** still send the whole record (the server's validation needs the full record).
-- **Permission matrix** per-user grants: last writer wins for the whole grants object.
-- **Atomic batches:** a failure in the middle of a batch (other than the conflicts now pre-checked) can still leave the earlier ops written.
-- **The 5000-event audit cap** and admin hard-deletes are unchanged (by design); `/api/reset` still clears the audit log (the safety backup now carries a copy).
-- **Callers** that close their modal after a refused save still lose the form's contents on screen (they are kept in `neoteric_rejected_ops`, there is no UI to view them yet).
+## Still open (honest list)
+- **Item-stage `status`** (`wip`/`done`) is still computed in the browser from its own view of the cells. If two people complete the last two items at the same moment, both may compute `wip`; the next action on that stage corrects it. (Computing it on the server needs the stage's item list.)
+- **Atomic batches and the cell merge are flag-gated** (see above): until the flags are turned on in production, those two risks remain.
+- **The 5000-event audit cap and admin hard-deletes** are unchanged (by design); `/api/reset` still clears the audit log (its safety backup now carries a copy).
+- A form that closes after a refused save still loses what was on screen; the content is in the refused-changes list (badge).
 - Production data was **not** inspected; whether and how much data was lost in production is unknown.
 
 ## Tests
-`backend/errorMap.test.js` (6) · `backend/dataIntegrity.e2e.js` (36 checks, real server + in-memory MongoDB, mutation-checked) · `frontend/tests/dataIntegrity.test.mjs` (10) · `frontend/tests/browser-integrity.check.cjs` (real Edge: two admins create the same user id through the real Add User screen — 11 checks). The two e2e/browser scripts need the dev-only `mongodb-memory-server` (and `puppeteer-core` for the browser one) outside the project; see `docs/save-diagnostics-synthetic-test.md`.
+`backend/errorMap.test.js` (6) · `backend/dataIntegrity.e2e.js` (39 checks, real server + in-memory MongoDB, mutation-checked) · `backend/dataIntegrity2.e2e.js` (17 checks, replica set, flags ON) · `frontend/tests/dataIntegrity.test.mjs` (13) · `frontend/tests/browser-integrity.check.cjs` (real Edge: two admins create the same user id through the real Add User screen, the refused-changes badge — 14 checks). The e2e/browser scripts need the dev-only `mongodb-memory-server` (and `puppeteer-core` for the browser one) outside the project; see `docs/save-diagnostics-synthetic-test.md`.

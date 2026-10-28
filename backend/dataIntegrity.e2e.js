@@ -165,6 +165,19 @@ const tally = (rs) => rs.reduce((m, r) => ((m[r.status] = (m[r.status] || 0) + 1
   })));
   check("36. 6 concurrent report-generation calls all succeed and produce exactly one report per team/day", gens.every((g) => g.status === 200) && (await db.collection("teamDailyReports").countDocuments({ teamId: "T1" })) === 1, JSON.stringify(tally(gens)));
 
+  console.log("--- permission grants are saved per module");
+  await ops(ADMIN, [{ op: "upsert", coll: "moduleGrants", rec: { id: "MG-U1", userId: "U1", grants: { masters: { view: true }, dpr: { view: true }, snags: { view: true } } } }]);
+  const gp = await Promise.all([
+    ops(ADMIN, [{ op: "upsert", coll: "moduleGrants", rec: { id: "MG-U1", "grants.masters": { view: true, edit: true } } }]),
+    ops(ADMIN, [{ op: "upsert", coll: "moduleGrants", rec: { id: "MG-U1", "grants.dpr": { view: false } } }]),
+    ops(ADMIN, [{ op: "upsert", coll: "moduleGrants", rec: { id: "MG-U1", "grants.snags": null } }]),
+    ops(ADMIN, [{ op: "upsert", coll: "moduleGrants", rec: { id: "MG-U1", "grants.work": { view: true } } }])]);
+  const mg = await db.collection("moduleGrants").findOne({ id: "MG-U1" });
+  check("37. four admins change four DIFFERENT modules of one user at once: all four changes are kept", gp.every((g) => g.status === 200) && mg.grants.masters.edit === true && mg.grants.dpr.view === false && !("snags" in mg.grants) && mg.grants.work.view === true, JSON.stringify(mg.grants));
+  check("38. no literal dotted field was stored; the record keeps its other fields", !Object.keys(mg).some((k) => k.includes(".")) && mg.userId === "U1");
+  r = await ops(A, [{ op: "upsert", coll: "moduleGrants", rec: { id: "MG-U1", "grants.masters": { view: true, edit: true, delete: true } } }]);
+  check("39. changing grants still requires an admin (403 for anyone else)", r.status === 403, String(r.status));
+
   srv.kill(); await client.close(); await mms.stop();
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASSED");
   if (fails) console.log(slog.split("\n").slice(-15).join("\n"));

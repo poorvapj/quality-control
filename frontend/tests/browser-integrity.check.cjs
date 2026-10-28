@@ -87,6 +87,13 @@ const login = async (email, password) => (await fetch(base + "/api/login", { met
   check("9. no plaintext password anywhere in admin 2's browser storage", !stored.includes("Second-Pw-2222"));
   check("10. the offline queue is empty (the refused change is not retried forever)", JSON.parse(await p2.evaluate(() => localStorage.getItem("neoteric_pending_ops") || "[]")).length === 0);
 
+  const badge = await p2.evaluate(() => [...document.querySelectorAll("button")].map((b) => b.textContent.trim()).find((t) => /change.*refused/.test(t)) || null);
+  check("10b. a visible badge tells admin 2 that 1 change was refused", badge && /^1 change refused/.test(badge), String(badge));
+  await p2.evaluate(() => [...document.querySelectorAll("button")].find((b) => /change.*refused/.test(b.textContent)).click()); await settle(600);
+  const modalText = await p2.evaluate(() => document.body.innerText);
+  check("10c. opening it lists the refused change with the server's reason and what it was (no password)", /Changes the server refused/.test(modalText) && /already exists/.test(modalText) && /create users/.test(modalText) && !/Second-Pw-2222/.test(modalText));
+  await clickText(p2, "Dismiss all"); await settle(600);
+  check("10d. 'Dismiss all' clears the list and the badge", (await p2.evaluate(() => localStorage.getItem("neoteric_rejected_ops"))) === null && !(await p2.evaluate(() => /change.*refused/.test(document.body.innerText))));
   // admin 2 un-freezes (reload = fresh board) and simply tries again: now a free id is picked
   p2.removeAllListeners("request"); await p2.setRequestInterception(false); await p2.reload({ waitUntil: "networkidle0" }); await settle(2500);
   const a3 = await addUser(p2, "Second Person", "second@neoteric.test", "Second-Pw-2222");

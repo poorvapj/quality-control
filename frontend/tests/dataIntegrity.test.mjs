@@ -80,3 +80,36 @@ test("local mirror: patches from two writers keep both fields (field-level merge
   applyOpsLocal(d, [{ op: "upsert", coll: "snags", rec: { id: "S1", assignedTo: "C" } }, { op: "upsert", coll: "snags", rec: { id: "S1", status: "Closed" } }]);
   assert.equal(d.snags[0].assignedTo, "C"); assert.equal(d.snags[0].status, "Closed");
 });
+
+import { grantPatch } from "../src/shared/recordDiff.ts";
+import { buildDecisionOp as decideOp } from "../src/shared/approvalOp.ts";
+
+test("grantPatch: only the modules that changed, as dotted keys; null removes one", () => {
+  const base = { masters: { view: true }, dpr: { view: true, create: true }, snags: { view: true } };
+  const next = { masters: { view: true }, dpr: { view: true, create: false }, work: { view: true } };
+  assert.deepEqual(grantPatch(base, next), { "grants.dpr": { view: true, create: false }, "grants.snags": null, "grants.work": { view: true } });
+  assert.deepEqual(grantPatch(base, base), {});
+  assert.deepEqual(grantPatch(null, { a: { view: true } }), { "grants.a": { view: true } });
+});
+
+test("local mirror of dotted keys: sets one nested entry, removes on null, never mutates the previous object", () => {
+  const prevGrants = { masters: { view: true }, dpr: { view: true } };
+  const d = { moduleGrants: [{ id: "MG-U", userId: "U", grants: prevGrants }], events: [] };
+  applyOpsLocal(d, [{ op: "upsert", coll: "moduleGrants", rec: { id: "MG-U", "grants.dpr": { view: false }, "grants.masters": null, "grants.work": { view: true } } }]);
+  assert.deepEqual(d.moduleGrants[0].grants, { dpr: { view: false }, work: { view: true } });
+  assert.deepEqual(prevGrants, { masters: { view: true }, dpr: { view: true } }, "the earlier object is untouched");
+  assert.ok(!Object.keys(d.moduleGrants[0]).some((k) => k.includes(".")), "no literal dotted key is left on the record");
+  const d2 = { moduleGrants: [], events: [] };
+  applyOpsLocal(d2, [{ op: "upsert", coll: "moduleGrants", rec: { id: "MG-V", userId: "V", "grants.a": { view: true } } }]);
+  assert.deepEqual(d2.moduleGrants[0].grants, { a: { view: true } });
+});
+
+test("approval decisions are sent as just {id, approval} (never the whole record)", () => {
+  const rec = { id: "WM-1", projectCode: "P", category: "RCC", measuredQty: 5, measuredUnit: "m", approval: { status: "pending", approverUserId: "U-A" } };
+  const op = decideOp("workMeasurements", rec, "approved", " ok ");
+  assert.deepEqual(Object.keys(op.rec).sort(), ["approval", "id"]);
+  assert.equal(op.rec.approval.status, "approved"); assert.equal(op.rec.approval.remark, "ok"); assert.equal(op.rec.approval.approverUserId, "U-A");
+  const d = { workMeasurements: [rec], events: [] };
+  applyOpsLocal(d, [op]);
+  assert.equal(d.workMeasurements[0].measuredQty, 5); assert.equal(d.workMeasurements[0].approval.status, "approved");
+});

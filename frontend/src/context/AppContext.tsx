@@ -5,7 +5,7 @@ import { byId, coll } from "../shared/rules";
 import { classifyStatus, flushQueue, newBatchId, normalizeQueue, tokenUserId, type QueuedBatch } from "../shared/opQueue";
 import { judgeStateResponse, needsFullBoardAfterLogin } from "../shared/stateSync";
 import { applyOpsLocal, scrubLocalBoard } from "../shared/applyOpsLocal";
-import { addRejected, REJECTED_KEY } from "../shared/rejected";
+import { addRejected, parseRejected, REJECTED_KEY } from "../shared/rejected";
 
 const LS_KEY = "neoteric_board_v5";
 const SESSION_KEY = "neoteric_session";
@@ -71,6 +71,9 @@ interface AppContextValue {
   // Count of changes saved locally but not yet confirmed on the server —
   // see PendingSyncBadge. 0 once everything's synced.
   pendingCount: number;
+  // Changes the server REFUSED, kept in this browser so they can be re-entered (see RejectedChangesBadge)
+  rejectedCount: number;
+  clearRejected: () => void;
   loggedIn: boolean;
   currentUserId: string | null;
   currentProjectId: string | null;
@@ -178,9 +181,15 @@ export function AppProvider({ children, publicRoute = false }: { children: React
     toast(msg);
   }, [toast]);
   // Keeps a change the server refused (without any plaintext password) so typed-in data is not simply gone.
+  const [rejectedCount, setRejectedCount] = useState<number>(() => { try { return parseRejected(localStorage.getItem(REJECTED_KEY)).length; } catch { return 0; } });
   const rememberRejected = useCallback((ops: Op[], error: string) => {
-    try { localStorage.setItem(REJECTED_KEY, JSON.stringify(addRejected(localStorage.getItem(REJECTED_KEY), ops, error))); } catch {}
+    try {
+      const list = addRejected(localStorage.getItem(REJECTED_KEY), ops, error);
+      localStorage.setItem(REJECTED_KEY, JSON.stringify(list));
+      setRejectedCount(list.length);
+    } catch {}
   }, []);
+  const clearRejected = useCallback(() => { try { localStorage.removeItem(REJECTED_KEY); } catch {} setRejectedCount(0); }, []);
 
   // Public pages (/dpr/new, /forms/…) are served the allow-listed public snapshot; everywhere else a public
   // snapshot means the session expired (see shared/stateSync.ts). Returns whether to use the response.
@@ -622,7 +631,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
   const myRole = useCallback((): Role => me()?.role ?? "ADMIN", [me]);
 
   const value: AppContextValue = {
-    data, rev, mode, pendingCount, loggedIn, currentUserId, currentProjectId, activeTab, activeMaster, drawer, toastMsg,
+    data, rev, mode, pendingCount, rejectedCount, clearRejected, loggedIn, currentUserId, currentProjectId, activeTab, activeMaster, drawer, toastMsg,
     assignModal, snagModal, checklistModal, recordModal, openDrawingRequestId, reInspectQualityId, caseStudyDraft,
     setCurrentUserId, setCurrentProjectId, setActiveTab, setActiveMaster, openDrawer, closeDrawer,
     openAssignModal, closeAssignModal, openSnagModal, closeSnagModal,

@@ -16,3 +16,17 @@ export function diffRecord<T extends { id?: string }>(original: Record<string, a
   }
   return out as any;
 }
+
+/* Permission grants are { moduleKey: { view, create, edit, delete } }. Saving the whole object made the last admin to
+   save overwrite every module another admin had just changed for the same user/role. This returns only the modules
+   that differ from what was loaded, as dotted keys ("grants.masters": {...}, or null to remove one), which the server
+   $sets one by one. */
+export function grantPatch(base: Record<string, any> | null | undefined, next: Record<string, any>, prefix: string = "grants"): Record<string, any> {
+  const out: Record<string, any> = {};
+  const b = base || {};
+  for (const k of new Set([...Object.keys(b), ...Object.keys(next)])) {
+    if (JSON.stringify(b[k]) === JSON.stringify(next[k])) continue;
+    out[prefix + "." + k] = next[k] === undefined ? null : next[k];
+  }
+  return out;
+}
