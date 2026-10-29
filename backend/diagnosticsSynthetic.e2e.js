@@ -81,7 +81,7 @@ async function runServer(label, diag, port) {
   const replies = []; for (const [name, fn] of scenarios(port)) { const r = await fn(); replies.push({ name, status: r.status, err: r.status !== 200 ? JSON.parse(r.text).error : null }); }
   await new Promise((r) => setTimeout(r, 300));
   const stateRaw = JSON.parse((await call(port, "GET", "/api/state", ADMIN)).text);
-  const strip = (v) => { if (Array.isArray(v)) return v.map(strip); if (v && typeof v === "object") { const o = {}; for (const k of Object.keys(v).sort()) if (!/(At|ts|date|Date|time)$/.test(k) && k !== "_id") o[k] = strip(v[k]); return o; } return v; };
+  const strip = (v) => { if (typeof v === "string") return v.replace(/-[0-9A-Z]{6,10}-[0-9A-Z]{3,5}/g, "-<random>"); /* snag/QI ids now carry a timestamp+random part (they differ run to run) */ if (Array.isArray(v)) return v.map(strip); if (v && typeof v === "object") { const o = {}; for (const k of Object.keys(v).sort()) if (!/(At|ts|date|Date|time)$/.test(k) && k !== "_id") o[k] = strip(v[k]); return o; } return v; };
   const final = JSON.stringify(strip({ rev: stateRaw.rev, data: stateRaw.data }));
   const users = await db.collection("users").find({}).toArray();
   srv.kill(); await client.close(); await mms.stop();
