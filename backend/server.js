@@ -438,7 +438,14 @@ const PUBLIC_CREATE_ONLY = ["dpr", "drawingRequests"];
 // project itself is deleted, so removing a project doesn't leave its
 // floors/units/snags/etc. as orphaned records with a projectId that no
 // longer resolves to anything.
-const PROJECT_SCOPED_COLLECTIONS = ["floors", "units", "snags", "assignments", "dpr", "drawingRequests", "stagemap", "workTargets"];
+// Added qualityInspections/workMeasurements/materialMeasurements/caseStudies
+// (2026-10-29): each has its own projectId but wasn't in this list, so
+// deleting a project left their rows behind permanently — not even archived
+// by archiveBeforeDelete, which only runs per-collection inside this same
+// list below. Never actually triggered in production (every project so far
+// has only ever been bulk-seeded, never deleted), but qualityInspections
+// alone already has 89 real rows that would otherwise orphan silently.
+const PROJECT_SCOPED_COLLECTIONS = ["floors", "units", "snags", "assignments", "dpr", "drawingRequests", "stagemap", "workTargets", "qualityInspections", "workMeasurements", "materialMeasurements", "caseStudies"];
 
 // Every Masters collection except "users" (already admin-gated above) —
 // frontend/src/pages/Masters.tsx only shows its "+ New"/edit/delete

@@ -105,11 +105,11 @@ export default function Masters() {
       ? `${refLabel(data, "projects", rec.projectId)} · ${rec.category}`
       : (rec.name || rec.code || id);
     if (!confirm(`Delete ${master.label.toLowerCase()} "${identity}"?\n\nThis removes it for everyone on the board.`)) return;
-    await apply([
+    const synced = await apply([
       { op: "delete", coll: activeMaster, id },
       buildEventOp(currentUserId, "MASTER_DELETE", id, "", `${master.label} · deleted · ${identity}`)
     ]);
-    toast("Deleted " + id);
+    toast(synced ? "Deleted " + id : "Saved on this device — will finish deleting once you're back online");
   }
 
   // Opening Edit on a built-in role that has never been overridden yet

@@ -46,11 +46,11 @@ export default function CaseStudies() {
   async function deleteCase(c: CaseStudy) {
     if (!isAdmin) return;
     if (!window.confirm(`Permanently delete this case study?\n\n${c.title}\n\nThis cannot be undone.`)) return;
-    await apply([
+    const synced = await apply([
       { op: "delete", coll: "caseStudies", id: c.id },
       buildEventOp(currentUserId, "CASE_STUDY_DELETE", c.id, "", `Deleted case study · ${c.title}`)
     ]);
-    toast("Case study deleted");
+    toast(synced ? "Case study deleted" : "Saved on this device — will finish deleting once you're back online");
     setOpenCase(null);
   }
 

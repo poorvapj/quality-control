@@ -24,15 +24,22 @@ export function useDrawingRequestActions() {
     return { ...entry, by: currentUserId, byName: u?.name, at: Date.now() };
   }
 
-  async function saveDrawingRequest(rec: DrawingRequest, action?: string, detail?: string) {
+  // Returns whether the change actually reached the server (true) or only got
+  // queued/rejected (false) — every caller below used to ignore this and
+  // always show its own "done" toast, the same gap createDrawingRequest
+  // already had fixed (see its own comment): a stage transition that only
+  // got as far as the local queue (offline, or a dead session) looked
+  // identical on screen to a real save.
+  async function saveDrawingRequest(rec: DrawingRequest, action?: string, detail?: string): Promise<boolean> {
     const ops: Op[] = [{ op: "upsert", coll: "drawingRequests", rec }];
     // currentUserId is only ever null for the anonymous public submission
     // form (createDrawingRequest's isPublic path, handled separately below)
     // — every other action here is an in-app, signed-in flow, so logging is
     // always safe (the backend requires a session for "event" ops).
     if (action && currentUserId) ops.push(buildEventOp(currentUserId, action, rec.id, "", detail || ""));
-    await apply(ops);
+    return apply(ops);
   }
+  const QUEUED_TOAST = "Saved on this device — will finish submitting once you're back online";
 
   /** Stage 1: forward to production, optionally assigning someone + a committed date. */
   async function forwardToStage2(id: string, assignedTo: string | null, committedDate: string | null, remarks: string) {
@@ -45,8 +52,8 @@ export function useDrawingRequestActions() {
       committedDate,
       reviewHistory: [...dr.reviewHistory, historyEntry({ stage: "stage-1-screen", action: "forwarded", remarks })]
     };
-    await saveDrawingRequest(rec, "DR_FORWARD_STAGE2", `${rec.ticketNo} forwarded to production`);
-    toast("Forwarded to production (Stage 2)");
+    const synced = await saveDrawingRequest(rec, "DR_FORWARD_STAGE2", `${rec.ticketNo} forwarded to production`);
+    toast(synced ? "Forwarded to production (Stage 2)" : QUEUED_TOAST);
   }
 
   /** Stage 1: the drawing isn't needed — dead end until the requester resubmits. */
@@ -58,8 +65,8 @@ export function useDrawingRequestActions() {
       reviewStatus: "returned",
       reviewHistory: [...dr.reviewHistory, historyEntry({ stage: "stage-1-screen", action: "returned", remarks })]
     };
-    await saveDrawingRequest(rec, "DR_RETURN_STAGE1", `${rec.ticketNo} returned to requester`);
-    toast("Returned — the requester can resubmit");
+    const synced = await saveDrawingRequest(rec, "DR_RETURN_STAGE1", `${rec.ticketNo} returned to requester`);
+    toast(synced ? "Returned — the requester can resubmit" : QUEUED_TOAST);
   }
 
   /** Stage 2: upload the drawing(s) and submit for cross-check. */
@@ -72,8 +79,8 @@ export function useDrawingRequestActions() {
       reviewStatus: "stage-3-crosscheck",
       reviewHistory: [...dr.reviewHistory, historyEntry({ stage: "stage-2-produce", action: "submitted", remarks })]
     };
-    await saveDrawingRequest(rec, "DR_SUBMIT_STAGE2", `${rec.ticketNo} submitted for cross-check`);
-    toast("Submitted for cross-check (Stage 3)");
+    const synced = await saveDrawingRequest(rec, "DR_SUBMIT_STAGE2", `${rec.ticketNo} submitted for cross-check`);
+    toast(synced ? "Submitted for cross-check (Stage 3)" : QUEUED_TOAST);
   }
 
   /** Stage 3: approve -> stage 4, or reject -> back to stage 2 (rework, not the original request). */
@@ -85,8 +92,8 @@ export function useDrawingRequestActions() {
       reviewStatus: approved ? "stage-4-final-approve" : "stage-2-produce",
       reviewHistory: [...dr.reviewHistory, historyEntry({ stage: "stage-3-crosscheck", action: approved ? "approved" : "returned", remarks })]
     };
-    await saveDrawingRequest(rec, approved ? "DR_STAGE3_APPROVE" : "DR_STAGE3_REJECT", `${rec.ticketNo} ${approved ? "passed cross-check" : "sent back for rework"}`);
-    toast(approved ? "Cross-check passed · Stage 4" : "Sent back to Stage 2 for rework");
+    const synced = await saveDrawingRequest(rec, approved ? "DR_STAGE3_APPROVE" : "DR_STAGE3_REJECT", `${rec.ticketNo} ${approved ? "passed cross-check" : "sent back for rework"}`);
+    toast(!synced ? QUEUED_TOAST : approved ? "Cross-check passed · Stage 4" : "Sent back to Stage 2 for rework");
   }
 
   /** Stage 4: final approval -> overall approved (+ priority), or reject -> back to stage 2. */
@@ -100,8 +107,8 @@ export function useDrawingRequestActions() {
       trackingStatus: approved ? (dr.trackingStatus || "pending") : dr.trackingStatus,
       reviewHistory: [...dr.reviewHistory, historyEntry({ stage: "stage-4-final-approve", action: approved ? "approved" : "returned", remarks })]
     };
-    await saveDrawingRequest(rec, approved ? "DR_STAGE4_APPROVE" : "DR_STAGE4_REJECT", `${rec.ticketNo} ${approved ? "finally approved" : "sent back for rework"}`);
-    toast(approved ? "Final approval granted" : "Sent back to Stage 2 for rework");
+    const synced = await saveDrawingRequest(rec, approved ? "DR_STAGE4_APPROVE" : "DR_STAGE4_REJECT", `${rec.ticketNo} ${approved ? "finally approved" : "sent back for rework"}`);
+    toast(!synced ? QUEUED_TOAST : approved ? "Final approval granted" : "Sent back to Stage 2 for rework");
   }
 
   /** Only the original requester revives a "returned" ticket — always restarts at stage 1. */
@@ -113,8 +120,8 @@ export function useDrawingRequestActions() {
       reviewStatus: "stage-1-screen",
       reviewHistory: [...dr.reviewHistory, historyEntry({ stage: "stage-1-screen", action: "resubmitted", remarks })]
     };
-    await saveDrawingRequest(rec, "DR_RESUBMIT", `${rec.ticketNo} resubmitted`);
-    toast("Resubmitted — back to Stage 1");
+    const synced = await saveDrawingRequest(rec, "DR_RESUBMIT", `${rec.ticketNo} resubmitted`);
+    toast(synced ? "Resubmitted — back to Stage 1" : QUEUED_TOAST);
   }
 
   async function updateTracking(id: string, patch: Partial<Pick<DrawingRequest, "trackingStatus" | "actualCompletionDate" | "planningVerified" | "projectAcknowledged" | "remarks">>) {

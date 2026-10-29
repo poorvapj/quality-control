@@ -33,8 +33,8 @@ export default function Snags() {
   async function deleteSnag(e: React.MouseEvent, s: { id: string; title: string }) {
     e.stopPropagation();
     if (!confirm(`Delete snag ${s.id} — "${s.title}"?\n\nThis removes it for everyone on the board.`)) return;
-    await apply([{ op: "delete", coll: "snags", id: s.id }]);
-    toast("Deleted " + s.id);
+    const synced = await apply([{ op: "delete", coll: "snags", id: s.id }]);
+    toast(synced ? "Deleted " + s.id : "Saved on this device — will finish deleting once you're back online");
   }
 
   // Every row below used to call refLabel()/snagTarget() several times,

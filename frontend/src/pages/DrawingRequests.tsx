@@ -97,8 +97,8 @@ export default function DrawingRequestsPage() {
 
   async function deleteRequest(r: DrawingRequest) {
     if (!confirm(`Delete drawing request ${r.ticketNo}?\n\nThis removes it for everyone on the board.`)) return;
-    await apply([{ op: "delete", coll: "drawingRequests", id: r.id }]);
-    toast("Deleted " + r.ticketNo);
+    const synced = await apply([{ op: "delete", coll: "drawingRequests", id: r.id }]);
+    toast(synced ? "Deleted " + r.ticketNo : "Saved on this device — will finish deleting once you're back online");
   }
 
   // Matches ui/Filters.tsx's SelectFilter/SearchFilter: h-10 (40px), text-sm (14px),

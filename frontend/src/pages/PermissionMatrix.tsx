@@ -116,12 +116,12 @@ export default function PermissionMatrix() {
       const grantsOp: any = baseGrants === null
         ? rec
         : { id: rec.id, ...(baseLabel !== (roleLabel.trim() || "") ? { roleLabel: roleLabel.trim() || null } : {}), ...grantPatch(baseGrants, grants) };
-      await apply([
+      const synced = await apply([
         { op: "upsert", coll: "moduleGrants", rec: grantsOp },
         { op: "upsert", coll: "permissions", rec: baseStage ? diffRecord(baseStage, stageRec as any) : stageRec, ...((baseStage?.id || existingStageGrants?.id) ? {} : { create: true }) } as any,
         buildEventOp(currentUserId, "PERMISSION_UPDATE", userId, "", `Updated module grants for ${user?.name || userId}`)
       ]);
-      toast("Permissions saved");
+      toast(synced ? "Permissions saved" : "Saved on this device — will finish submitting once you're back online");
     } finally {
       setSaving(false);
     }
@@ -141,11 +141,11 @@ export default function PermissionMatrix() {
       const roleOp: any = baseRole
         ? { id: rec.id, ...grantPatch(baseRole.grants, roleGrants), ...diffRecord(baseRole, { id: rec.id, ...stageFlags } as any) }
         : rec;
-      await apply([
+      const synced = await apply([
         { op: "upsert", coll: "roles", rec: roleOp },
         buildEventOp(currentUserId, "PERMISSION_UPDATE", rec.id, "", `Updated default permissions for role ${roleName}`)
       ]);
-      toast("Role permissions saved");
+      toast(synced ? "Role permissions saved" : "Saved on this device — will finish submitting once you're back online");
     } finally {
       setSaving(false);
     }

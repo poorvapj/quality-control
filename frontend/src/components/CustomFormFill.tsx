@@ -1,7 +1,5 @@
 import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
-import { coll } from "../shared/rules";
-import { nextId } from "../shared/helpers";
 import Card from "../ui/tw/Card";
 import PhotoGroupUploader from "./PhotoGroupUploader";
 import SearchDropdown from "./SearchDropdown";
@@ -17,7 +15,7 @@ const emptyOptionPhotos = (): OptionPhotos => ({ work: [], before: [], after: []
  *  accepts an anonymous formSubmissions upsert for public forms and a
  *  normal authenticated one for everything else. */
 export default function CustomFormFill({ form, onDone }: { form: CustomFormDef; onDone: (id: string) => void }) {
-  const { data, apply, currentUserId, toast } = useApp();
+  const { apply, currentUserId, toast } = useApp();
   const [values, setValues] = useState<Record<string, any>>({});
   const [saving, setSaving] = useState(false);
 
@@ -48,7 +46,11 @@ export default function CustomFormFill({ form, onDone }: { form: CustomFormDef; 
       }
     }
     setSaving(true);
-    const id = nextId("SUB", coll(data, "formSubmissions"));
+    // Was nextId("SUB", coll(data,"formSubmissions")) — same collision class
+    // as the DPR bug that caused real data loss: this is a PUBLIC form link
+    // that can be shared to many people at once, each on a snapshot that
+    // hasn't seen anyone else's submission yet, computing the same next id.
+    const id = "SUB-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
     const synced = await apply([
       {
         op: "upsert", coll: "formSubmissions", create: true,
