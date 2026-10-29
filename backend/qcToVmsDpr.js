@@ -19,7 +19,19 @@ const { MongoClient, ObjectId } = require("mongodb");
 const crypto = require("crypto");
 
 const norm = (s) => String(s || "").trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
-const isEnabled = (env = process.env) => env.QC_TO_VMS_DPR === "1" && !!env.SOURCE_MONGO_URI;
+/* A QC database that is clearly not production (name contains dev/test/local/staging/sandbox as a word). Copying ITS DPRs into the real
+   VMS database would put test data into the billing system — this happened once with the CLI (5 dev DPRs reached production VMS and
+   had to be removed). So the copy refuses to run from such a database unless QC_TO_VMS_ALLOW_NON_PROD=1 (for a dev QC talking to a dev VMS). */
+const NON_PROD_DB = /(^|[^a-z0-9])(dev|development|test|testing|local|staging|stage|sandbox|qa|demo)([^a-z0-9]|$)/i;
+const looksNonProd = (dbName) => NON_PROD_DB.test(String(dbName || ""));
+/* null when the copy may run, otherwise the reason it may not (used for the one-line startup message and the CLI). */
+function disabledReason(env = process.env) {
+  if (env.QC_TO_VMS_DPR !== "1") return "QC_TO_VMS_DPR is not 1";
+  if (!env.SOURCE_MONGO_URI) return "SOURCE_MONGO_URI is not set";
+  if (looksNonProd(env.MONGODB_DB) && env.QC_TO_VMS_ALLOW_NON_PROD !== "1") return 'the QC database "' + env.MONGODB_DB + '" looks like a dev/test database (set QC_TO_VMS_ALLOW_NON_PROD=1 only if the VMS database is a test one too)';
+  return null;
+}
+const isEnabled = (env = process.env) => disabledReason(env) === null;
 
 /* Same QC id -> same VMS _id, always (12 bytes of a hash). Makes the insert idempotent without any index on VMS. */
 function vmsIdFor(qcId) {
@@ -135,9 +147,10 @@ async function getVmsDb(env = process.env) {
   return vmsClient.db("vbp");
 }
 
-module.exports = { isEnabled, mapQcDprToVms, vmsIdFor, createPusher, getVmsDb };
+module.exports = { isEnabled, disabledReason, looksNonProd, mapQcDprToVms, vmsIdFor, createPusher, getVmsDb };
 
-/* CLI:  node qcToVmsDpr.js --since 2026-10-01 [--apply]
+/* CLI:  node qcToVmsDpr.js --since 2026-10-01                              (dry run)
+        node qcToVmsDpr.js --since 2026-10-01 --apply --confirm-write-to-vms   (writes; refused from a dev/test QC database)
    Default is a DRY RUN: prints how many QC DPRs would be copied (counts only, no content) and writes nothing. Needs
    MONGODB_URI (+MONGODB_DB) for QC and SOURCE_MONGO_URI for VMS in the environment (.env is loaded if present). */
 if (require.main === module) {
@@ -147,6 +160,13 @@ if (require.main === module) {
     const since = args.includes("--since") ? args[args.indexOf("--since") + 1] : process.env.QC_TO_VMS_DPR_SINCE;
     const apply = args.includes("--apply");
     if (!process.env.MONGODB_URI || !process.env.SOURCE_MONGO_URI) { console.error("MONGODB_URI and SOURCE_MONGO_URI must be set"); process.exit(2); }
+    console.log("QC database: " + (process.env.MONGODB_DB || "(default)") + "  ->  VMS database: vbp   [" + (apply ? "--apply: WILL WRITE to VMS" : "dry run: reads only") + "]");
+    if (apply) {
+      // Writing needs TWO deliberate things, and never from a dev/test QC database (it would put test data into the real VMS).
+      if (!args.includes("--confirm-write-to-vms")) { console.error("Refusing: --apply writes into the VMS database. Add --confirm-write-to-vms if you really mean it (run the dry run first)."); process.exit(2); }
+      if (looksNonProd(process.env.MONGODB_DB) && process.env.QC_TO_VMS_ALLOW_NON_PROD !== "1") { console.error('Refusing: the QC database "' + process.env.MONGODB_DB + '" looks like a dev/test database; its DPRs must not be written into VMS. (Set QC_TO_VMS_ALLOW_NON_PROD=1 only if the VMS database is a test one too.)'); process.exit(2); }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(since || ""))) { console.error("Refusing: --apply needs --since YYYY-MM-DD"); process.exit(2); }
+    }
     const qc = await new MongoClient(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 8000 }).connect();
     const qcDb = qc.db(process.env.MONGODB_DB || undefined);
     const pusher = createPusher({ getQcProjects: () => qcDb.collection("projects").find({}, { projection: { _id: 0, id: 1, code: 1, name: 1 } }).toArray(), getVmsDb: () => getVmsDb() });

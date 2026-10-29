@@ -114,6 +114,8 @@ const opsBatch = createOpsBatchStore(() => mongoDb); // /api/ops retry idempoten
 //                          QC_TO_VMS_DPR_SINCE=YYYY-MM-DD additionally lets the 30-minute pass copy older QC DPRs from that date
 //                          that VMS lacks. See qcToVmsDpr.js. Unset = nothing is ever written to VMS.
 const QC_TO_VMS_DPR = qcToVms.isEnabled();
+if (process.env.QC_TO_VMS_DPR === "1" && !QC_TO_VMS_DPR) console.warn("  ! QC_TO_VMS_DPR=1 but the QC -> VMS DPR copy is OFF: " + qcToVms.disabledReason());
+else if (QC_TO_VMS_DPR) console.log("  QC -> VMS DPR copy: ON (QC database \"" + process.env.MONGODB_DB + "\")");
 const OPS_ATOMIC = process.env.OPS_ATOMIC === "1";
 const PROGRESS_CELL_MERGE = process.env.PROGRESS_CELL_MERGE === "1";
 //  EVENTS_ARCHIVE_DAYS=N   when the audit log is trimmed to its 5000 newest events, the trimmed ones are MOVED to

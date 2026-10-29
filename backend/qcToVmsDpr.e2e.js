@@ -96,6 +96,21 @@ const save = (port, token, rec) => call(port, "POST", "/api/ops", token, { ops: 
   check("14. the real pass copies only DPRs dated from SINCE (the September one stays out) and a second pass copies nothing", real.pushed === 3 && (await vms.collection("dailyprogressreports").countDocuments({ qcId: { $in: ["DPR-OFF-1", "DPR-OLD-B", "DPR-OLD-C"] } })) === 3 && (await vms.collection("dailyprogressreports").countDocuments({ qcId: "DPR-OLD-A" })) === 0 && (await pusher.reconcile(qc, { since: "2026-10-01" })).pushed === 0, JSON.stringify(real));
   on.srv.kill();
 
+  console.log("--- a dev/test QC database never copies into VMS (it once put 5 test DPRs into the real VMS)");
+  const dev = client.db("t_dev");
+  await dev.collection("users").insertOne({ id: "U-B", name: "Member", role: "CIVIL", active: true });
+  await dev.collection("projects").insertOne({ id: "P1", code: "PRJ-1", name: "Tower One", active: true });
+  const vmsBefore = await vmsCount();
+  const devSrv = await start({ SOURCE_MONGO_URI: uri, QC_TO_VMS_DPR: "1", MONGODB_DB: "t_dev" });
+  r = await save(devSrv.port, MEM, dprRec("DPR-DEV-1")); await sleep(1800);
+  check("18. QC_TO_VMS_DPR=1 on a database named like dev/test: the QC save is fine (200) and NOTHING reaches VMS", r.status === 200 && (await dev.collection("dpr").countDocuments({ id: "DPR-DEV-1" })) === 1 && (await vmsCount()) === vmsBefore);
+  check("19. the startup log says why the copy is off", /QC_TO_VMS_DPR=1 but the QC -> VMS DPR copy is OFF: the QC database "t_dev" looks like a dev.test database/.test(devSrv.log()));
+  devSrv.srv.kill();
+  const devOk = await start({ SOURCE_MONGO_URI: uri, QC_TO_VMS_DPR: "1", MONGODB_DB: "t_dev", QC_TO_VMS_ALLOW_NON_PROD: "1" });
+  r = await save(devOk.port, MEM, dprRec("DPR-DEV-2")); await sleep(1800);
+  check("20. with the explicit QC_TO_VMS_ALLOW_NON_PROD=1 (dev QC + test VMS) it copies as usual", r.status === 200 && (await vmsCount()) === vmsBefore + 1);
+  devOk.srv.kill();
+
   console.log("--- VMS unreachable: QC submissions are unaffected");
   const dead = await start({ SOURCE_MONGO_URI: "mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=2000", QC_TO_VMS_DPR: "1" });
   const times = []; const statuses = [];

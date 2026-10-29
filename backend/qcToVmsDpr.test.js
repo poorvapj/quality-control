@@ -28,6 +28,20 @@ async function main() {
     assert.strictEqual(isEnabled({ QC_TO_VMS_DPR: "1", SOURCE_MONGO_URI: "mongodb://x" }), true);
   });
 
+  await test("guard: a dev/test QC database never copies into VMS (unless explicitly allowed); a production-looking name does", () => {
+    const { looksNonProd, disabledReason } = require("./qcToVmsDpr.js");
+    for (const n of ["project_quality_dev", "project-quality-dev", "dev", "quality_test", "Quality-Staging", "local", "qa_db", "demo", "sandbox", "pq-development"]) assert.strictEqual(looksNonProd(n), true, n);
+    for (const n of ["project_quality", "quality", "ProjectQuality", "prod", "production", "pq_main", "device_logs", "attest", "", undefined]) assert.strictEqual(looksNonProd(n), false, String(n));
+    const base = { QC_TO_VMS_DPR: "1", SOURCE_MONGO_URI: "mongodb://x" };
+    assert.strictEqual(isEnabled({ ...base, MONGODB_DB: "project_quality" }), true);
+    assert.strictEqual(isEnabled({ ...base, MONGODB_DB: "project_quality_dev" }), false);
+    assert.match(disabledReason({ ...base, MONGODB_DB: "project_quality_dev" }), /looks like a dev.test database/);
+    assert.strictEqual(isEnabled({ ...base, MONGODB_DB: "project_quality_dev", QC_TO_VMS_ALLOW_NON_PROD: "1" }), true);
+    assert.strictEqual(isEnabled({ ...base, MONGODB_DB: "project_quality_dev", QC_TO_VMS_ALLOW_NON_PROD: "true" }), false);
+    assert.strictEqual(disabledReason({ SOURCE_MONGO_URI: "x" }), "QC_TO_VMS_DPR is not 1");
+    assert.strictEqual(disabledReason({ QC_TO_VMS_DPR: "1" }), "SOURCE_MONGO_URI is not set");
+  });
+
   await test("vmsIdFor: the same QC id always gives the same ObjectId; different ids differ", () => {
     assert.strictEqual(String(vmsIdFor("DPR-ABC-1")), String(vmsIdFor("DPR-ABC-1")));
     assert.notStrictEqual(String(vmsIdFor("DPR-ABC-1")), String(vmsIdFor("DPR-ABC-2")));
