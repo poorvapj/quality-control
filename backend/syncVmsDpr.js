@@ -167,7 +167,7 @@ async function syncVmsDpr(mongoDb, sourceDbOverride) {
 async function syncVmsDprCycle(mongoDb, sourceDb) {
   const [vmsReports, vmsProjects, qcProjects, qcUsers, existingIds] = await Promise.all([
     sourceDb.collection("dailyprogressreports").find({}, {
-      projection: { projectId: 1, projectName: 1, date: 1, vendorCode: 1, vendorName: 1, shiftType: 1, labourCount: 1, workEntries: 1, driName: 1, isPublicSubmission: 1 }
+      projection: { projectId: 1, projectName: 1, date: 1, vendorCode: 1, vendorName: 1, shiftType: 1, labourCount: 1, workEntries: 1, driName: 1, isPublicSubmission: 1, qcId: 1 }
     }).toArray(),
     sourceDb.collection("projects").find({}, { projection: { id: 1, code: 1 } }).toArray(),
     mongoDb.collection("projects").find({}, { projection: { id: 1, name: 1, code: 1 } }).toArray(),
@@ -192,6 +192,7 @@ async function syncVmsDprCycle(mongoDb, sourceDb) {
   let unmatchedReports = 0;
   for (const r of vmsReports) {
     const id = "DPR-VMS-" + r._id;
+    if (r.qcId) continue; // a copy of a QC-made DPR (see qcToVmsDpr.js) — it is already in QC under its own id; never import it back
     if (existing.has(id)) continue;
     if (deletedInQc.has(id)) continue; // an admin deleted this one in QC on purpose
 

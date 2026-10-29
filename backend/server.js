@@ -72,6 +72,7 @@ const { deriveApprovalOnCreate, resolveApprovalOnUpdate, findPendingApprovals } 
 const approvalSlack = require("./approvalSlack.js");
 const { createOpsBatchStore, isValidBatchId } = require("./opsBatch.js");
 const { classifyError } = require("./errorMap.js");
+const qcToVms = require("./qcToVmsDpr.js");
 const backups = require("./backups.js");
 const { createStateBuilder } = require("./stateBuilder.js");
 const { createSaveDiagnostics, isEnabled: saveDiagnosticsEnabled } = require("./saveDiagnostics.js");
@@ -108,6 +109,11 @@ const opsBatch = createOpsBatchStore(() => mongoDb); // /api/ops retry idempoten
 //  PROGRESS_CELL_MERGE=1   an item-based stage's checklist (cells keyed by itemId) is MERGED cell by cell on the server
 //                          instead of the whole array being replaced, so two people working on different items of the
 //                          same unit/stage cannot overwrite each other.
+//  QC_TO_VMS_DPR=1        copy every NEW DPR filed on QC into VMS's dailyprogressreports (insert-only, fire-and-forget AFTER the
+//                          save, never blocks or fails it; needs SOURCE_MONGO_URI with WRITE access to the VMS database).
+//                          QC_TO_VMS_DPR_SINCE=YYYY-MM-DD additionally lets the 30-minute pass copy older QC DPRs from that date
+//                          that VMS lacks. See qcToVmsDpr.js. Unset = nothing is ever written to VMS.
+const QC_TO_VMS_DPR = qcToVms.isEnabled();
 const OPS_ATOMIC = process.env.OPS_ATOMIC === "1";
 const PROGRESS_CELL_MERGE = process.env.PROGRESS_CELL_MERGE === "1";
 //  EVENTS_ARCHIVE_DAYS=N   when the audit log is trimmed to its 5000 newest events, the trimmed ones are MOVED to
@@ -930,6 +936,26 @@ async function slackIdForUserId(userId) {
    project has its own (e.g. #proj-zen-garden), set per-project via
    Masters ▸ Project ▸ "Slack channel ID". Silently does nothing if that
    project has none set, same as every other best-effort Slack notify here. */
+/* QC -> VMS copy of a just-saved DPR (see qcToVmsDpr.js). Never awaited by the request, never throws, off unless QC_TO_VMS_DPR=1. */
+const dprPusher = QC_TO_VMS_DPR ? qcToVms.createPusher({
+  getQcProjects: () => mongoDb.collection("projects").find({}, { projection: { _id: 0, id: 1, code: 1, name: 1 } }).toArray(),
+  getVmsDb: () => qcToVms.getVmsDb()
+}) : null;
+function pushDprToVms(rec) {
+  if (!dprPusher) return;
+  dprPusher.push(rec).then((r) => {
+    if (r !== "pushed" && r !== "exists") console.warn("  [qc->vms] DPR " + (rec && rec.id) + ": " + r);
+  }).catch(() => {});
+}
+// the 30-minute pass: copy older QC DPRs (dated on/after QC_TO_VMS_DPR_SINCE) that VMS lacks. Counts only in the log.
+async function reconcileQcToVms() {
+  if (!dprPusher || !process.env.QC_TO_VMS_DPR_SINCE) return;
+  try {
+    const r = await dprPusher.reconcile(mongoDb, { since: process.env.QC_TO_VMS_DPR_SINCE });
+    if (r.pushed || r.errors) console.log("  [qc->vms] reconcile: " + JSON.stringify(r));
+  } catch {}
+}
+
 async function notifyDprSubmitted(rec) {
   if (!SLACK_BOT_TOKEN) return;
   try {
@@ -1621,7 +1647,7 @@ async function applyOps(ops, session, trace) {
 
       // Slack follow-ups for approvals — after the write, never blocking or failing it
       if (op._notifyApprovalRequest) after(() => notifyApprovalRequest(op._notifyApprovalRequest, op.rec));
-    if (op._notifyDprSubmit) after(() => notifyDprSubmitted(op.rec)); // (main's DPR Slack notice; after the commit under OPS_ATOMIC)
+    if (op._notifyDprSubmit) after(() => { notifyDprSubmitted(op.rec); pushDprToVms(op.rec); }); // (main's DPR Slack notice + the QC->VMS copy; after the commit under OPS_ATOMIC)
       if (op._notifyApprovalDecision) {
         const d = op._notifyApprovalDecision;
         after(() => {
@@ -2759,6 +2785,7 @@ connectMongo()
               return bumpRev();
             }
           })
+          .then(() => reconcileQcToVms())
           .catch((e) => console.error("  [vms-sync] failed:", e && e.message ? e.message : e))
           .finally(() => { syncInFlight = false; });
       };
