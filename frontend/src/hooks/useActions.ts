@@ -2,7 +2,6 @@ import { useApp, authHeaders, notifySessionExpired } from "../context/AppContext
 import { API_BASE, HOUR } from "../services/config";
 import type { Op, Track, ProgressPatch } from "../types";
 import { pkey, prog, trackStages, byId, coll, refLabel } from "../shared/rules";
-import { nextId } from "../shared/helpers";
 import { buildEventOp } from "../shared/eventLog";
 import { watermarkPhoto } from "../shared/watermark";
 
@@ -110,14 +109,21 @@ export function useActions() {
       progressOp(id, stageId, { status: "fail", at: now, by: currentUserId || "", checklistId, checklist: results, note: failed.length + " parameter(s) failed" }),
       logEvent("QC_FAIL", id, stageId, failed.length + " parameter(s) failed")
     ];
-    let n = 0;
     for (const f of failed) {
       const p = byId(coll(data, "qparams"), f.paramId);
       if (!p) continue;
       ops.push({
         op: "upsert", coll: "snags", create: true,
         rec: {
-          id: nextId("SNG", coll(data, "snags")).replace(/(\d+)$/, (m) => String(parseInt(m, 10) + n++).padStart(4, "0")),
+          // Was nextId("SNG", coll(data,"snags")) — same collision class as
+          // DprForm.tsx's old id (see QualityInspection.tsx's submit()):
+          // two inspectors failing a checklist around the same moment, on
+          // snapshots of `snags` that haven't yet seen each other's save,
+          // compute the SAME next id. The server's create:true path 409s on
+          // a duplicate rather than silently overwriting, but the snag
+          // simply never gets raised for the second inspector — "gate
+          // failed" with no snag to show for it.
+          id: "SNG-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase(),
           projectId: currentProjectId || "",
           unitId: kind === "unit" ? id : "",
           stageId, paramId: f.paramId,
@@ -140,7 +146,9 @@ export function useActions() {
   async function saveAssignment(input: { targetType: Track; targetId: string; stageId: string; itemId?: string; assignedTo: string; dueAt: number | null; note: string; projectId?: string }) {
     if (!input.targetId) { toast("Pick a target first"); return; }
     const rec = {
-      id: nextId("ASG", coll(data, "assignments")),
+      // Was nextId("ASG", coll(data,"assignments")) — same collision risk as
+      // snags/DPR when two people assign something around the same moment.
+      id: "ASG-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase(),
       projectId: input.projectId || currentProjectId || "",
       targetType: input.targetType,
       targetId: input.targetId,
@@ -178,7 +186,8 @@ export function useActions() {
   async function saveSnag(input: { unitId: string; stageId: string; itemId?: string; paramId: string; title: string; description: string; severity: "Critical" | "Major" | "Minor"; assignedTo: string; dueAt: number | null; projectId?: string }) {
     if (!input.title.trim()) { toast("Give the snag a title"); return; }
     const rec = {
-      id: nextId("SNG", coll(data, "snags")),
+      // Was nextId("SNG", coll(data,"snags")) — same collision risk as above.
+      id: "SNG-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase(),
       projectId: input.projectId || currentProjectId || "",
       unitId: input.unitId,
       stageId: input.stageId,
@@ -368,14 +377,14 @@ export function useActions() {
       { op: "progress", key: pkey(unitId, stageId), patch: { checklist: cells, checklistId } },
       logEvent("QC_FAIL", unitId, stageId, failed.length + " parameter(s) failed"),
     ];
-    let n = 0;
     for (const f of failed) {
       const p = byId(coll(data, "qparams"), f.paramId);
       if (!p) continue;
       ops.push({
         op: "upsert", coll: "snags", create: true,
         rec: {
-          id: nextId("SNG", coll(data, "snags")).replace(/(\d+)$/, (m) => String(parseInt(m, 10) + n++).padStart(4, "0")),
+          // Was nextId("SNG", coll(data,"snags")) — same collision risk as submitChecklist above.
+          id: "SNG-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase(),
           projectId: currentProjectId || "",
           unitId, stageId, itemId, paramId: f.paramId,
           title: p.name + " failed at " + (item?.name || ""),

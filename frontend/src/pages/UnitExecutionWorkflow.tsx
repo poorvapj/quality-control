@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useApp, authHeaders } from "../context/AppContext";
 import { API_BASE } from "../services/config";
 import { coll, myProjects, projectFloors, floorUnits } from "../shared/rules";
-import { nextId } from "../shared/helpers";
 import { buildEventOp } from "../shared/eventLog";
 import { hasModuleGrant } from "../shared/permissionMatrix";
 import NavIcon from "../components/NavIcon";
@@ -299,7 +298,10 @@ function MeasurementForm({
     if (ubQty < 0 || wQty < 0) { toast("Unused balance and wastage must be non-negative"); return; }
 
     setSaving(true);
-    const id = nextId("MM", existing);
+    // Was nextId("MM", existing) — same collision class as DPR/Drawing
+    // Request/Unit/WorkMeasurement. No MaterialMeasurement exists in
+    // production yet, but fixed before this flow sees real concurrent use.
+    const id = "MM-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
     const rec: MaterialMeasurement = {
       id,
       projectId: prefill.projectId, projectCode: prefill.projectCode, projectName: prefill.projectName,

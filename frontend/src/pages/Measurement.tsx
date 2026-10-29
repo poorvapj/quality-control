@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useApp, authHeaders } from "../context/AppContext";
 import { API_BASE } from "../services/config";
 import { coll, myProjects, projectFloors, projectUnits, floorUnits } from "../shared/rules";
-import { nextId } from "../shared/helpers";
 import { buildEventOp } from "../shared/eventLog";
 import { hasModuleGrant } from "../shared/permissionMatrix";
 import NavIcon from "../components/NavIcon";
@@ -454,7 +453,12 @@ function MeasurementPanel({ open, onClose, categories, categoriesNote, existing,
     if (match?.status === "ambiguous" && choice === null) { toast("Several VMS items fit — choose one, or 'Don't link now'"); return; }
 
     setSaving(true);
-    const id = nextId("WM", existing);
+    // Was nextId("WM", existing) — same collision class as DPR/Drawing
+    // Request/Unit (two engineers measuring around the same moment on
+    // snapshots that haven't yet seen each other's save would compute the
+    // same next id). No WorkMeasurement exists in production yet, but the
+    // bug is dormant, not absent — fixed before this flow sees real use.
+    const id = "WM-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
     const rec: WorkMeasurement = {
       id,
       projectId: project.id, projectCode: project.code, projectName: project.name,
