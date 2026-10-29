@@ -87,6 +87,7 @@ const saveDiag = saveDiagnosticsEnabled()
   : null;
 if (saveDiag) console.log("  save diagnostics: ON (log-only, bounded; see docs/save-diagnostics.md)");
 const { createPhotoGuard, clientIp, guardLogLine } = require("./photoGuard.js");
+const { createOpsGuard, guardLogLine: opsGuardLogLine } = require("./opsGuard.js");
 const { buildPublicState } = require("./publicState.js");
 // OFF by default. Turning it on makes GET /api/state and the /api/ops reply return only the allow-listed public
 // snapshot (publicState.js) to callers without a valid session. Older frontends fetch /api/state WITHOUT a token,
@@ -94,6 +95,9 @@ const { buildPublicState } = require("./publicState.js");
 // Order: deploy backend -> deploy frontend -> wait for old tabs to reload -> set PUBLIC_STATE_ENFORCE=1.
 const PUBLIC_STATE_ENFORCE = process.env.PUBLIC_STATE_ENFORCE === "1";
 const photoGuard = createPhotoGuard();
+const opsGuard = createOpsGuard();
+// Default ON (see opsGuard.js) — set to "0" only to go monitor-only while tuning limits.
+const OPS_GUARD_ENFORCE = process.env.OPS_GUARD_ENFORCE !== "0";
 // Which X-Forwarded-For entry is the real client (1 = last, added by the nearest trusted proxy). Unset = leftmost.
 // Check what Render sends for this service before setting it; the global upload cap protects either way.
 // Monitor-only until PHOTO_GUARD_ENFORCE=1: older frontends send no token on /api/photo, so a signed-in
@@ -1184,6 +1188,13 @@ async function assertOpAllowed(op, session) {
         submittedByUserId: null,
         isPublic: true
       });
+      // A raw anonymous POST (bypassing the React form entirely) could
+      // otherwise plant a ticket against a project that doesn't exist,
+      // polluting every report/filter that joins on projectId.
+      if (!op.rec.projectId || !(await mongoDb.collection("projects").findOne({ id: op.rec.projectId }, { projection: { _id: 1 } }))) {
+        const e = new Error("Unknown project"); e.status = 400; throw e;
+      }
+      if (!String(op.rec.description || "").trim()) { const e = new Error("Description is required"); e.status = 400; throw e; }
     }
     if (op.rec.reviewStatus) {
       const from = existing ? existing.reviewStatus : "stage-1-screen";
@@ -1233,6 +1244,17 @@ async function assertOpAllowed(op, session) {
       op.rec.submittedByUserId = null;
       op.rec.isPublic = true;
     }
+    // A raw anonymous POST (bypassing DprForm.tsx entirely) could otherwise
+    // plant a report against a nonexistent project, or with a nonsense
+    // labour count / date, polluting every report/dashboard that reads it.
+    if (!existing) {
+      if (!op.rec.projectId || !(await mongoDb.collection("projects").findOne({ id: op.rec.projectId }, { projection: { _id: 1 } }))) {
+        const e = new Error("Unknown project"); e.status = 400; throw e;
+      }
+      const labour = Number(op.rec.labourCount);
+      if (!Number.isFinite(labour) || labour < 0) { const e = new Error("Labour count must be a non-negative number"); e.status = 400; throw e; }
+      if (!/^\d{4}-\d{2}-\d{2}/.test(String(op.rec.date || ""))) { const e = new Error("A valid date is required"); e.status = 400; throw e; }
+    }
     // A genuinely new report filled on QC itself (never one VMS just synced
     // in — those already have their own "DPR-VMS-<id>" shape and VMS's own
     // notification path) — flagged here, acted on after the write actually
@@ -1247,6 +1269,26 @@ async function assertOpAllowed(op, session) {
     if (existing) { const e = new Error("Submissions can't be edited"); e.status = 403; throw e; }
     const form = await mongoDb.collection("forms").findOne({ id: op.rec.formId });
     if (!form || form.active === false) { const e = new Error("Form not found"); e.status = 404; throw e; }
+    // A raw POST (bypassing CustomFormFill.tsx) could otherwise attach
+    // arbitrary extra keys to `values`, or skip a field the form marks
+    // required — strip anything not actually defined on this form and
+    // require what it requires, the same checks the React form already
+    // makes, now also enforced server-side.
+    {
+      const allowedKeys = new Set();
+      for (const f of form.fields || []) {
+        allowedKeys.add(f.key);
+        if (f.type === "multiselect" && f.photoEvidence) allowedKeys.add(f.key + "__photos");
+      }
+      const values = (op.rec.values && typeof op.rec.values === "object") ? op.rec.values : {};
+      op.rec.values = Object.fromEntries(Object.entries(values).filter(([k]) => allowedKeys.has(k)));
+      for (const f of form.fields || []) {
+        if (!f.required) continue;
+        const v = op.rec.values[f.key];
+        const empty = f.type === "multiselect" ? !Array.isArray(v) || v.length === 0 : (v === undefined || v === "" || v == null);
+        if (empty) { const e = new Error(`"${f.label}" is required`); e.status = 400; throw e; }
+      }
+    }
     if (!session) {
       // Anonymous POST only ever legitimately comes from a form's own
       // public link — never allow it to silently write into an
@@ -2140,6 +2182,17 @@ async function handleApi(req, res, urlPath) {
       if (claim === "done") return sendStateResponse(req, res); // applied earlier; acknowledge, don't repeat
     }
     const opsSession = getSession(req);
+    // Anonymous (public-form) submissions only — a script could otherwise
+    // hammer /api/ops with unlimited fake DPRs/tickets/form submissions with
+    // no photos at all (photoGuard.js only throttles the photo endpoint).
+    const opsVerdict = opsGuard.check({ session: opsSession, ip: clientIp(req, CLIENT_IP_HOPS_FROM_RIGHT) });
+    if (!opsVerdict.ok) {
+      console.warn(opsGuardLogLine({ enforce: OPS_GUARD_ENFORCE, verdict: opsVerdict }));
+      if (OPS_GUARD_ENFORCE) {
+        if (opsVerdict.retryAfterSec) res.setHeader("Retry-After", String(opsVerdict.retryAfterSec));
+        return sendJson(res, opsVerdict.status, { error: opsVerdict.error });
+      }
+    }
     // LOG-ONLY diagnostics (null unless SAVE_DIAGNOSTICS=1): observes this batch, never alters it — no body,
     // write or ordering depends on it, and every call into it swallows its own errors.
     const probe = saveDiag ? saveDiag.begin(body.ops, { anonymous: !opsSession }) : null;
