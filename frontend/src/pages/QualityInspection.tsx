@@ -1080,27 +1080,24 @@ function InspectionForm({
     const pendingApproval = !!approvalFor(data, currentUserId);
     const raiseSnagNow = needsSnag && !pendingApproval;
 
-    // BUG FIX: was nextId("QI"/"SNG", []), which always returned id "0001"
-    // and silently overwrote the previous record on every submission. Must
-    // scan the FULL collection, not `allInspections` (scoped to the
-    // signed-in user's allowed projects) — a user restricted to a subset of
-    // projects would otherwise collide with a newer record in a project
-    // they can't see. One nextId() call per prefix up front, then bump a
-    // local counter per floor in the loop below — calling nextId() again
-    // inside the loop against the same stale array would hand every floor
-    // the same id (same pattern as RecordModal's multi-floor Unit save).
-    let nextQiId = nextId("QI", coll(data, "qualityInspections"));
-    let nextSnagId = raiseSnagNow ? nextId("SNG", coll(data, "snags")) : null;
-    const bumpId = (idv: string) => { const [prefix, n] = idv.split("-"); return `${prefix}-${String(parseInt(n, 10) + 1).padStart(4, "0")}`; };
+    // Was nextId("QI"/"SNG", coll(data,...)) — same collision class as the
+    // DPR bug that caused real production data loss: two inspectors
+    // submitting around the same moment, on snapshots that haven't yet seen
+    // each other's save, compute the SAME next id, and the server's
+    // create:true path 409s the second one away instead of silently
+    // overwriting — but either way the second inspector's record never
+    // actually gets created. A timestamp+random id per floor (same pattern
+    // as RecordModal's multi-floor Unit save) can't collide that way.
+    const batchStamp = Date.now().toString(36).toUpperCase();
+    let seq = 0;
+    const genId = (prefix: string) => `${prefix}-${batchStamp}-${String(++seq).padStart(2, "0")}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
 
     const ops: any[] = [];
     let lastId = "", lastSnagId: string | null = null;
     for (const fId of floorIds) {
       const f = byId(floors, fId);
-      const id = nextQiId;
-      nextQiId = bumpId(nextQiId);
-      const snagId = raiseSnagNow ? nextSnagId : null;
-      if (raiseSnagNow) nextSnagId = bumpId(nextSnagId!);
+      const id = genId("QI");
+      const snagId = raiseSnagNow ? genId("SNG") : null;
       lastId = id; lastSnagId = snagId;
 
       // With several floors picked, the flat chosen above belongs to the

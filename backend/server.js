@@ -1600,28 +1600,38 @@ async function applyOps(ops, session, trace) {
             const full = await db.collection("qualityInspections").findOne({ id: rec.id }, { projection: { _id: 0 } });
             if (full && !full.linkedSnagId) {
               const snagId = "SNG-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
-              const location = full.unitName ? `${full.floorName} / ${full.unitName}` : full.floorName;
-              const label = full.itemDescription ? `${location} · ${full.itemDescription}` : location;
-              await db.collection("snags").insertOne({
-                id: snagId,
-                projectId: full.projectId,
-                floorId: full.floorId,
-                ...(full.unitId ? { unitId: full.unitId } : {}),
-                stageId: QC_INSPECTION_STAGE_ID,
-                qualityInspectionId: full.id,
-                title: `Quality ${full.result} — ${label}`,
-                description: full.remarks || "",
-                severity: full.severity || "Major",
-                status: "Open",
-                raisedBy: full.inspectorUserId || "",
-                raisedAt: Date.now(),
-                assignedTo: full.correctiveAction ? full.correctiveAction.assignedToUserId : "",
-                dueAt: full.correctiveAction ? new Date(full.correctiveAction.targetDate).getTime() || null : null,
-                photos: full.photos || [],
-                comments: []
-              });
-              await db.collection("qualityInspections").updateOne({ id: full.id }, { $set: { linkedSnagId: snagId } });
-              rec.linkedSnagId = snagId;
+              // Atomically claim the right to raise this inspection's ONE
+              // snag before actually creating it — two near-simultaneous
+              // approval-decision calls on the same record both passing the
+              // findOne's !linkedSnagId check above could otherwise each
+              // insert their own snag. Only the request whose update
+              // actually matches (linkedSnagId still null right now) may
+              // proceed; the loser just skips, exactly as if it had arrived
+              // after the id was already set.
+              const claim = await db.collection("qualityInspections").updateOne({ id: full.id, linkedSnagId: null }, { $set: { linkedSnagId: snagId } });
+              if (claim.modifiedCount === 1) {
+                const location = full.unitName ? `${full.floorName} / ${full.unitName}` : full.floorName;
+                const label = full.itemDescription ? `${location} · ${full.itemDescription}` : location;
+                await db.collection("snags").insertOne({
+                  id: snagId,
+                  projectId: full.projectId,
+                  floorId: full.floorId,
+                  ...(full.unitId ? { unitId: full.unitId } : {}),
+                  stageId: QC_INSPECTION_STAGE_ID,
+                  qualityInspectionId: full.id,
+                  title: `Quality ${full.result} — ${label}`,
+                  description: full.remarks || "",
+                  severity: full.severity || "Major",
+                  status: "Open",
+                  raisedBy: full.inspectorUserId || "",
+                  raisedAt: Date.now(),
+                  assignedTo: full.correctiveAction ? full.correctiveAction.assignedToUserId : "",
+                  dueAt: full.correctiveAction ? new Date(full.correctiveAction.targetDate).getTime() || null : null,
+                  photos: full.photos || [],
+                  comments: []
+                });
+                rec.linkedSnagId = snagId;
+              }
             }
           }
           // A passing re-inspection closes the ORIGINAL failed inspection's
