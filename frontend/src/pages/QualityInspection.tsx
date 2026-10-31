@@ -67,7 +67,17 @@ const STANDALONE_CHECKLISTS: Record<string, string[]> = {
   ]
 };
 
-interface PhaseDef { label: string; items: string[] }
+interface PhaseDef {
+  label: string;
+  items: string[];
+  // Shows/stores this phase under a DIFFERENT name than its group's (e.g.
+  // the Plastering phases under "Brickwork" read as "Plaster — Before
+  // Plastering" instead of "Brickwork — Before Plastering") while the phase
+  // stays part of the SAME group for sequencing purposes (its "prior phase"
+  // gate still looks at the phase immediately before it in this same
+  // group's list, same as a phase with no override).
+  nameOverride?: string;
+}
 interface PhaseGroup { name: string; scope: "floor" | "unit" | "unit-area"; phases: PhaseDef[] }
 
 // The remaining checklists are split into the site's own timed phases
@@ -106,7 +116,16 @@ const PHASE_GROUPS: PhaseGroup[] = [
     ]
   },
   {
-    name: "Brickwork & Plaster",
+    // Was "Brickwork & Plaster" as the name of the whole group — still one
+    // group (all 5 phases below still gate each other in sequence, same as
+    // before), but the displayed/stored name per phase changed: the
+    // Brickwork-only phases now read under the group's own name,
+    // "Brickwork" (dropping the redundant "& Plaster"); the three
+    // Plastering phases below set their own nameOverride: "Plaster" so they
+    // read "Plaster — Before/During/After Plastering" instead. See
+    // LEGACY_PHASE_EQUIVALENT below for why existing inspections already
+    // saved under the old combined name still count.
+    name: "Brickwork",
     scope: "unit",
     phases: [
       {
@@ -124,20 +143,28 @@ const PHASE_GROUPS: PhaseGroup[] = [
       },
       {
         label: "Before Plastering",
+        nameOverride: "Plaster",
         items: [
           "Pre-plaster services: check plumbing pipes, electrical conduits/boxes, and A.C. pipe/fittings before plastering.",
-          "Surface preparation: ensure background is clean, sound, and prepared to the approved method; provide bonding treatment where specified."
+          "Surface preparation: ensure background is clean, sound, and prepared to the approved method; provide bonding treatment where specified.",
+          "Chicken mesh at concrete and brickwork joints.",
+          "Surface curing before plastering."
         ]
       },
       {
         label: "During Plastering",
+        nameOverride: "Plaster",
         items: [
           "Finish, level, and plumb: check thickness (12mm internal, verified with pin at 3 points per wall), flatness, corners, edges, line, level, and verticality."
         ]
       },
       {
         label: "After Plastering",
-        items: ["Tap test: 100% tap test after plastering — zero hollow plaster allowed; any hollow area broken out and redone."]
+        nameOverride: "Plaster",
+        items: [
+          "Tap test: 100% tap test after plastering — zero hollow plaster allowed; any hollow area broken out and redone.",
+          "Curing: plastered surface cured as required."
+        ]
       }
     ]
   },
@@ -179,13 +206,13 @@ const PHASE_GROUPS: PhaseGroup[] = [
   }
 ];
 
-const phaseWorkType = (groupName: string, label: string) => `${groupName} — ${label}`;
+const phaseWorkType = (group: PhaseGroup, phase: PhaseDef) => `${phase.nameOverride || group.name} — ${phase.label}`;
 
 // workType -> which group/phase it is, so the form can look up its scope
 // and what has to have passed before it unlocks.
 const PHASE_LOOKUP = new Map<string, { group: PhaseGroup; phaseIndex: number }>();
 for (const group of PHASE_GROUPS) {
-  group.phases.forEach((phase, phaseIndex) => PHASE_LOOKUP.set(phaseWorkType(group.name, phase.label), { group, phaseIndex }));
+  group.phases.forEach((phase, phaseIndex) => PHASE_LOOKUP.set(phaseWorkType(group, phase), { group, phaseIndex }));
 }
 
 // Flat map of every Work Type -> its checklist items, for the places that
@@ -195,7 +222,7 @@ for (const group of PHASE_GROUPS) {
 export const QC_CHECKLISTS: Record<string, string[]> = {
   ...STANDALONE_CHECKLISTS,
   ...Object.fromEntries(
-    PHASE_GROUPS.flatMap((group) => group.phases.map((phase) => [phaseWorkType(group.name, phase.label), phase.items]))
+    PHASE_GROUPS.flatMap((group) => group.phases.map((phase) => [phaseWorkType(group, phase), phase.items]))
   )
 };
 type ChecklistStatus = (typeof CHECKLIST_STATUSES)[number];
@@ -206,7 +233,7 @@ type ChecklistStatus = (typeof CHECKLIST_STATUSES)[number];
 const WORK_TYPES = [
   "Material Testing & Quality Checks",
   "Column Inspection",
-  ...PHASE_GROUPS.flatMap((group) => group.phases.map((phase) => phaseWorkType(group.name, phase.label))),
+  ...PHASE_GROUPS.flatMap((group) => group.phases.map((phase) => phaseWorkType(group, phase))),
   "Tile Work Inspection",
   "Finishing & Handover Inspection"
 ];
@@ -229,14 +256,14 @@ const requiresAreas = (wt: string) => !!wt && scopeOf(wt) === "unit-area";
 // picking more than one floor restricts the checklist to just these 4
 // phases, and the inspection is recorded floor-wise (no flat) for each
 // floor picked, instead of the usual single-flat scope.
-const BRICKWORK_PLASTER_GROUP = PHASE_GROUPS.find((g) => g.name === "Brickwork & Plaster")!;
-const MULTI_FLOOR_WORK_TYPES = BRICKWORK_PLASTER_GROUP.phases.map((p) => phaseWorkType(BRICKWORK_PLASTER_GROUP.name, p.label));
+const BRICKWORK_PLASTER_GROUP = PHASE_GROUPS.find((g) => g.name === "Brickwork")!;
+const MULTI_FLOOR_WORK_TYPES = BRICKWORK_PLASTER_GROUP.phases.map((p) => phaseWorkType(BRICKWORK_PLASTER_GROUP, p));
 
 // The unit-wise/unit-area-wise stages whose LAST phase (or, for a
 // standalone checklist, itself) must have a Pass on record before
 // Finishing & Handover — the final gate — can be filled for that flat.
 const UNIT_FINAL_STAGES = [
-  ...PHASE_GROUPS.filter((g) => g.scope !== "floor").map((g) => phaseWorkType(g.name, g.phases[g.phases.length - 1].label)),
+  ...PHASE_GROUPS.filter((g) => g.scope !== "floor").map((g) => phaseWorkType(g, g.phases[g.phases.length - 1])),
   "Tile Work Inspection"
 ];
 
@@ -248,18 +275,32 @@ const UNIT_FINAL_STAGES = [
 // "a Pass on this OLD workType counts as a Pass on this NEW phase" for
 // gating purposes — new inspections are never written under the old
 // names again, this only makes pre-existing history count.
-const LEGACY_PHASE_EQUIVALENT: Record<string, string> = {
-  "Brickwork & Plaster — During Brickwork": "Brickwork Inspection",
+// Each current phase can have MULTIPLE old names that should still count as
+// having cleared it — a flat passed under an EARLIER name of the same
+// phase was never re-inspected under the new name, so gating must still
+// recognize it, or already-finished real work would suddenly show as
+// blocking the next phase. List newest-old-name first; order doesn't
+// matter for correctness (latestResult merges all of them), just readability.
+const LEGACY_PHASE_EQUIVALENT: Record<string, string[]> = {
+  // The group used to be named "Brickwork & Plaster" as a whole — its
+  // Brickwork-only phases now read under the group's own "Brickwork" name
+  // (dropping the redundant "& Plaster"), and its Plastering phases now
+  // use nameOverride "Plaster" instead (so they read "Plaster — Before
+  // Plastering" rather than "Brickwork — Before Plastering"). Every
+  // inspection saved before this split still has the old combined group
+  // name in its workType, so it's listed here too.
+  "Brickwork — During Brickwork": ["Brickwork & Plaster — During Brickwork", "Brickwork Inspection"],
   // "Before Plastering" was split out of the old "During Plastering" phase
   // (its first 2 points) — a flat already Pass'd under either the old
   // pre-split "Plastering Inspection" name, or the old single "During
-  // Plastering" phase (before this split), should count as having cleared
+  // Plastering" phase (before that split), or the old "Brickwork & Plaster"
+  // group name (before the rename above), should count as having cleared
   // this too, not get newly gated on it.
-  "Brickwork & Plaster — Before Plastering": "Plastering Inspection",
-  "Brickwork & Plaster — During Plastering": "Plastering Inspection",
-  "R.C.C. Slab Inspection — After Pour": "R.C.C. Slab Inspection",
-  "Waterproofing Inspection — After 24 Hours": "Waterproofing Inspection",
-  "Plumbing & Electrical Inspection — Before Handover": "Plumbing & Electrical Inspection"
+  "Plaster — Before Plastering": ["Brickwork & Plaster — Before Plastering", "Plastering Inspection"],
+  "Plaster — During Plastering": ["Brickwork & Plaster — During Plastering", "Plastering Inspection"],
+  "R.C.C. Slab Inspection — After Pour": ["R.C.C. Slab Inspection"],
+  "Waterproofing Inspection — After 24 Hours": ["Waterproofing Inspection"],
+  "Plumbing & Electrical Inspection — Before Handover": ["Plumbing & Electrical Inspection"]
 };
 
 // Column/Slab option lists now come from Masters ▸ Column Master / Slab
@@ -975,11 +1016,11 @@ function InspectionForm({
   // Waterproofing's per-area phases). Only the latest attempt counts, so a
   // phase that failed and was later re-inspected to Pass still clears it.
   function latestResult(stageWorkType: string, forUnitId: string, area?: string): QualityInspectionResult | undefined {
-    const legacyWorkType = LEGACY_PHASE_EQUIVALENT[stageWorkType];
+    const legacyWorkTypes = LEGACY_PHASE_EQUIVALENT[stageWorkType] || [];
     const target = forUnitId || `floor:${floorId}`;
     const candidates = [
       ...(inspectionsByWorkTypeAndTarget.get(`${stageWorkType}::${target}`) || []),
-      ...(legacyWorkType ? inspectionsByWorkTypeAndTarget.get(`${legacyWorkType}::${target}`) || [] : [])
+      ...legacyWorkTypes.flatMap((lw) => inspectionsByWorkTypeAndTarget.get(`${lw}::${target}`) || [])
     ].filter((i) => !area || i.areas?.includes(area));
     if (!candidates.length) return undefined;
     // Each bucket is already sorted newest-first on its own, but merging two
@@ -1004,7 +1045,7 @@ function InspectionForm({
   // bathroom finishing its flood test doesn't mean the kitchen has.
   const phaseInfo = PHASE_LOOKUP.get(workType);
   const priorPhaseWorkType = phaseInfo && phaseInfo.phaseIndex > 0
-    ? phaseWorkType(phaseInfo.group.name, phaseInfo.group.phases[phaseInfo.phaseIndex - 1].label)
+    ? phaseWorkType(phaseInfo.group, phaseInfo.group.phases[phaseInfo.phaseIndex - 1])
     : null;
   const scopeKeyReady = phaseInfo?.group.scope === "floor" ? !!floorId : !!unitId;
   const pendingPriorAreas = phaseInfo?.group.scope === "unit-area" && priorPhaseWorkType && unitId
@@ -1023,7 +1064,7 @@ function InspectionForm({
   // flexibility here) — the inspector can still proceed, but sees which
   // earlier floor(s) haven't finished their own Structure stage yet.
   const structureGroup = PHASE_GROUPS.find((g) => g.name === "R.C.C. Slab Inspection")!;
-  const structureLastPhase = phaseWorkType(structureGroup.name, structureGroup.phases[structureGroup.phases.length - 1].label);
+  const structureLastPhase = phaseWorkType(structureGroup, structureGroup.phases[structureGroup.phases.length - 1]);
   function floorPassed(fId: string): boolean {
     const arr = inspectionsByWorkTypeAndTarget.get(`${structureLastPhase}::floor:${fId}`);
     return arr?.[0]?.result === "Pass";
