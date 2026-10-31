@@ -118,13 +118,13 @@ const PHASE_GROUPS: PhaseGroup[] = [
   {
     // Was "Brickwork & Plaster" as the name of the whole group — still one
     // group (all 5 phases below still gate each other in sequence, same as
-    // before), but the displayed/stored name per phase changed: the
-    // Brickwork-only phases now read under the group's own name,
-    // "Brickwork" (dropping the redundant "& Plaster"); the three
-    // Plastering phases below set their own nameOverride: "Plaster" so they
-    // read "Plaster — Before/During/After Plastering" instead. See
-    // LEGACY_PHASE_EQUIVALENT below for why existing inspections already
-    // saved under the old combined name still count.
+    // before). Only the Brickwork-only phases' displayed/stored name
+    // changed, to the group's own name, "Brickwork" (dropping the
+    // redundant "& Plaster" — it read oddly on a check that has nothing to
+    // do with plastering); the three Plastering phases below set their own
+    // nameOverride back to the original full "Brickwork & Plaster", so
+    // their ids/workType strings are unchanged from before this split and
+    // need no legacy-equivalent entry of their own.
     name: "Brickwork",
     scope: "unit",
     phases: [
@@ -143,7 +143,7 @@ const PHASE_GROUPS: PhaseGroup[] = [
       },
       {
         label: "Before Plastering",
-        nameOverride: "Plaster",
+        nameOverride: "Brickwork & Plaster",
         items: [
           "Pre-plaster services: check plumbing pipes, electrical conduits/boxes, and A.C. pipe/fittings before plastering.",
           "Surface preparation: ensure background is clean, sound, and prepared to the approved method; provide bonding treatment where specified.",
@@ -153,14 +153,14 @@ const PHASE_GROUPS: PhaseGroup[] = [
       },
       {
         label: "During Plastering",
-        nameOverride: "Plaster",
+        nameOverride: "Brickwork & Plaster",
         items: [
           "Finish, level, and plumb: check thickness (12mm internal, verified with pin at 3 points per wall), flatness, corners, edges, line, level, and verticality."
         ]
       },
       {
         label: "After Plastering",
-        nameOverride: "Plaster",
+        nameOverride: "Brickwork & Plaster",
         items: [
           "Tap test: 100% tap test after plastering — zero hollow plaster allowed; any hollow area broken out and redone.",
           "Curing: plastered surface cured as required."
@@ -282,22 +282,19 @@ const UNIT_FINAL_STAGES = [
 // blocking the next phase. List newest-old-name first; order doesn't
 // matter for correctness (latestResult merges all of them), just readability.
 const LEGACY_PHASE_EQUIVALENT: Record<string, string[]> = {
-  // The group used to be named "Brickwork & Plaster" as a whole — its
-  // Brickwork-only phases now read under the group's own "Brickwork" name
-  // (dropping the redundant "& Plaster"), and its Plastering phases now
-  // use nameOverride "Plaster" instead (so they read "Plaster — Before
-  // Plastering" rather than "Brickwork — Before Plastering"). Every
-  // inspection saved before this split still has the old combined group
-  // name in its workType, so it's listed here too.
+  // Only the Brickwork-only phases' name actually changed (the group's own
+  // name dropped the redundant "& Plaster" there); the Plastering phases
+  // kept the original "Brickwork & Plaster" via their own nameOverride, so
+  // only Brickwork needs an entry for THAT rename — every inspection saved
+  // before it still has the old combined group name in its workType.
   "Brickwork — During Brickwork": ["Brickwork & Plaster — During Brickwork", "Brickwork Inspection"],
   // "Before Plastering" was split out of the old "During Plastering" phase
-  // (its first 2 points) — a flat already Pass'd under either the old
-  // pre-split "Plastering Inspection" name, or the old single "During
-  // Plastering" phase (before that split), or the old "Brickwork & Plaster"
-  // group name (before the rename above), should count as having cleared
-  // this too, not get newly gated on it.
-  "Plaster — Before Plastering": ["Brickwork & Plaster — Before Plastering", "Plastering Inspection"],
-  "Plaster — During Plastering": ["Brickwork & Plaster — During Plastering", "Plastering Inspection"],
+  // (its first 2 points) — a flat already Pass'd under the old pre-split
+  // "Plastering Inspection" name, or the old single "During Plastering"
+  // phase (before that split), should count as having cleared this too,
+  // not get newly gated on it.
+  "Brickwork & Plaster — Before Plastering": ["Plastering Inspection"],
+  "Brickwork & Plaster — During Plastering": ["Plastering Inspection"],
   "R.C.C. Slab Inspection — After Pour": ["R.C.C. Slab Inspection"],
   "Waterproofing Inspection — After 24 Hours": ["Waterproofing Inspection"],
   "Plumbing & Electrical Inspection — Before Handover": ["Plumbing & Electrical Inspection"]
