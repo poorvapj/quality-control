@@ -52,6 +52,7 @@ export const ACTION_LABEL: Record<string, string> = {
   CASE_STUDY_DELETE: "Case study deleted",
   QUALITY_INSPECTION: "Quality inspection recorded",
   QUALITY_INSPECTION_DELETE: "Quality inspection deleted",
+  EXECUTION_RECORD: "Execution record logged",
   WORK_MEASUREMENT: "Work measurement recorded",
   WORK_MEASUREMENT_LINK: "Work measurement linked to a VMS item",
   MATERIAL_MEASUREMENT: "Material measurement recorded",
@@ -94,6 +95,7 @@ const MODULES: ModuleDef[] = [
   { key: "moduleAccess", label: "Module Access", desc: "Who opened which module — logged the first time each person opens it per browser session", icon: "eye", actions: ["MODULE_VIEW"] },
   { key: "caseStudies", label: "Case Studies", desc: "Case studies logged and deleted", icon: "award", actions: ["CASE_STUDY_CREATE", "CASE_STUDY_DELETE"] },
   { key: "qualityInspection", label: "Quality Inspection", desc: "Inspections recorded and deleted", icon: "eye", actions: ["QUALITY_INSPECTION", "QUALITY_INSPECTION_DELETE"] },
+  { key: "execution", label: "Execution", desc: "Execution team's own work-done records", icon: "execution", actions: ["EXECUTION_RECORD"] },
   { key: "measurements", label: "Measurements", desc: "Work and material measurements, and their VMS links", icon: "layers", actions: ["WORK_MEASUREMENT", "WORK_MEASUREMENT_LINK", "MATERIAL_MEASUREMENT"] },
   { key: "approvals", label: "Approvals", desc: "Team-leader approve/reject decisions on inspections and measurements", icon: "award", actions: ["APPROVAL_APPROVE", "APPROVAL_REJECT"] },
   { key: "system", label: "System", desc: "Board resets and scheduled jobs", icon: "database", actions: ["RESET_DB", "WEEKLY_QC_REPORT_SENT"] }

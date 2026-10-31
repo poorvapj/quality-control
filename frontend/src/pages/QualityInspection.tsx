@@ -27,7 +27,7 @@ type WorkItemsResponse = { available: false; reason: string } | { available: tru
 
 const RESULTS: QualityInspectionResult[] = ["Pass", "Fail", "Rework Required"];
 const SEVERITIES: Severity[] = ["Critical", "Major", "Minor"];
-const CHECKLIST_STATUSES = ["OK", "Not OK", "N/A"] as const;
+export const CHECKLIST_STATUSES = ["OK", "Not OK", "N/A"] as const;
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
 // Checklists that aren't split into timed phases — one flat list, same as
@@ -230,7 +230,7 @@ type ChecklistStatus = (typeof CHECKLIST_STATUSES)[number];
 // The Work Type picker: standalone checklists in their old order, then
 // each phase group's phases in sequence (so "R.C.C. Slab Inspection —
 // Before Pour" always precedes "— During Pour" in the list).
-const WORK_TYPES = [
+export const WORK_TYPES = [
   "Material Testing & Quality Checks",
   "Column Inspection",
   ...PHASE_GROUPS.flatMap((group) => group.phases.map((phase) => phaseWorkType(group, phase))),
@@ -243,13 +243,13 @@ const WORK_TYPES = [
 // groups handle their own scope via PHASE_LOOKUP) do.
 const STANDALONE_UNIT_SCOPED = new Set(["Tile Work Inspection", "Finishing & Handover Inspection"]);
 
-function scopeOf(wt: string): "floor" | "unit" | "unit-area" {
+export function scopeOf(wt: string): "floor" | "unit" | "unit-area" {
   const phase = PHASE_LOOKUP.get(wt);
   if (phase) return phase.group.scope;
   return STANDALONE_UNIT_SCOPED.has(wt) ? "unit" : "floor";
 }
-const isFlatWise = (wt: string) => !!wt && scopeOf(wt) !== "floor";
-const requiresAreas = (wt: string) => !!wt && scopeOf(wt) === "unit-area";
+export const isFlatWise = (wt: string) => !!wt && scopeOf(wt) !== "floor";
+export const requiresAreas = (wt: string) => !!wt && scopeOf(wt) === "unit-area";
 
 // Outer/exterior Brickwork & Plaster work is done from scaffolding and
 // genuinely covers several floors in one go, not one flat at a time —

@@ -18,6 +18,7 @@ export const MATRIX_MODULES: MatrixModule[] = [
   { key: "dpr", label: "Daily Progress Report", actions: ["view", "create"] },
   { key: "drawingRequests", label: "Drawing Requests", actions: ["view", "create", "edit"] },
   { key: "qualityInspection", label: "Quality Inspection", actions: ["view", "create", "edit"] },
+  { key: "execution", label: "Execution", actions: ["view", "create", "edit"] },
   { key: "unitExecution", label: "Measurement", actions: ["view", "create"] },
   { key: "caseStudies", label: "Case Studies", actions: ["view", "create"] },
   { key: "measurement", label: "Work-category Measurement (not in sidebar)", actions: ["view", "create"] },
@@ -65,7 +66,8 @@ export const DEFAULT_ROLE_GRANTS: Partial<Record<Role, Record<string, ModuleActi
     snags: ["view", "create", "edit", "delete"],
     team: ["view"],
     dpr: ["view", "create"],
-    qualityInspection: ["view", "create", "edit"]
+    qualityInspection: ["view", "create", "edit"],
+    execution: ["view", "create", "edit"]
   },
   SUPERVISOR: {
     dashboard: ["view"], myWork: ["view"], towerBoard: ["view"],
@@ -73,7 +75,8 @@ export const DEFAULT_ROLE_GRANTS: Partial<Record<Role, Record<string, ModuleActi
     snags: ["view", "create", "edit", "delete"],
     team: ["view"],
     dpr: ["view", "create"],
-    qualityInspection: ["view", "create", "edit"]
+    qualityInspection: ["view", "create", "edit"],
+    execution: ["view", "create", "edit"]
   },
   CRM: {
     handoverInternal: ["view"], handoverOwner: ["view"]
@@ -182,6 +185,7 @@ export const TAB_ACCESS: Record<string, TabAccess> = {
   dpr: { module: "dpr", mode: "grant" },
   drawingRequests: { module: "drawingRequests", mode: "grant" },
   qualityInspection: { module: "qualityInspection", mode: "grant" },
+  execution: { module: "execution", mode: "grant" },
   // Same module grant as Quality Inspection itself — this is just another,
   // register-style view of the exact same records (every Fail/Rework
   // Required), not a separately grantable module.

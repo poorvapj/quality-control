@@ -15,6 +15,7 @@ import UserMIS from "./pages/UserMIS";
 import Measurement from "./pages/Measurement";
 import ExecutionReconciliation from "./pages/ExecutionReconciliation";
 import QualityInspection from "./pages/QualityInspection";
+import Execution from "./pages/Execution";
 import FailRegister from "./pages/FailRegister";
 import CaseStudies from "./pages/CaseStudies";
 import UnitExecutionWorkflow from "./pages/UnitExecutionWorkflow";
@@ -48,6 +49,7 @@ export default function App() {
     userMis: <UserMIS />,
     executionReconciliation: <ExecutionReconciliation />,
     qualityInspection: <QualityInspection />,
+    execution: <Execution />,
     qualityFails: <FailRegister />,
     caseStudies: <CaseStudies />,
     unitExecutionWorkflow: <UnitExecutionWorkflow />,

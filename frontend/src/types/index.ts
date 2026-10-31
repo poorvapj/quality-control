@@ -605,6 +605,35 @@ export interface QualityInspection extends BaseRecord {
   createdAt: number;
 }
 
+/* The Execution team's own self-recorded "we did this work" entry — same
+ * Project/Floor/Flat + Work Type + checklist shape as a QualityInspection
+ * (reuses QualityInspection.tsx's QC_CHECKLISTS/WORK_TYPES so both pages
+ * stay in sync automatically), but no approval workflow and no Snag
+ * auto-raise: this is the execution crew certifying work is done and ready,
+ * not a quality verdict on it — the separate Quality Inspection is still
+ * what actually passes/fails it. */
+export interface ExecutionRecord extends BaseRecord {
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  floorId: string;
+  floorName: string;
+  unitId?: string;
+  unitCode?: string;
+  unitName?: string;
+  workType: string;
+  columns?: string[];
+  slabs?: string[];
+  areas?: string[];
+  checklistItems: { text: string; status: "OK" | "Not OK" | "N/A"; remarks?: string }[];
+  recordDate: string; // "YYYY-MM-DD"
+  remarks?: string;
+  photos: Photo[];
+  recordedByUserId: string;
+  recordedByName: string;
+  createdAt: number;
+}
+
 /* A quality issue written up for reference/training — root cause, what was
  * done about it, what to do differently next time. Standalone (its own
  * collection, own create/edit permission reusing qualityInspection's
@@ -854,7 +883,7 @@ export type Op =
   | { op: "progress"; key: string; patch: Partial<ProgressPatch>; items?: string[] }
   | { op: "event"; ev: EventLog };
 
-export type TabKey = "dash" | "misDashboard" | "userMis" | "executionReconciliation" | "qualityInspection" | "qualityFails" | "caseStudies" | "unitExecutionWorkflow" | "measurement" | "progressAnalysis" | "purchaseOrders" | "work" | "board" | "handoverChecklist" | "handoverInternal" | "handoverOwner" | "snags" | "team" | "masters" | "addUser" | "dpr" | "drawingRequests" | "backups" | "auditLog" | "permissionMatrix";
+export type TabKey = "dash" | "misDashboard" | "userMis" | "executionReconciliation" | "qualityInspection" | "execution" | "qualityFails" | "caseStudies" | "unitExecutionWorkflow" | "measurement" | "progressAnalysis" | "purchaseOrders" | "work" | "board" | "handoverChecklist" | "handoverInternal" | "handoverOwner" | "snags" | "team" | "masters" | "addUser" | "dpr" | "drawingRequests" | "backups" | "auditLog" | "permissionMatrix";
 export type MasterKey = "projects" | "floors" | "units" | "columnMaster" | "slabMaster" | "stages" | "qparams" | "checklists" | "stagemap" | "users" | "permissions" | "workTargets" | "teams" | "roles" | "forms";
 
 export type FieldType = "text" | "number" | "date" | "color" | "select" | "ref" | "bool" | "textarea" | "items" | "password" | "permissionGrid" | "formFields";

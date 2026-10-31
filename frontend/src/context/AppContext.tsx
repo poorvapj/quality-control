@@ -13,7 +13,7 @@ import { resolveIdsInPlace } from "../shared/helpers";
 // missing here just falls back to the bare key rather than breaking anything.
 const TAB_VIEW_LABEL: Partial<Record<TabKey, string>> = {
   dash: "Dashboard", misDashboard: "Quality MIS", userMis: "Users MIS",
-  executionReconciliation: "Execution Reconciliation", qualityInspection: "Quality Inspection",
+  executionReconciliation: "Execution Reconciliation", qualityInspection: "Quality Inspection", execution: "Execution",
   qualityFails: "Fail Register", caseStudies: "Case Studies", unitExecutionWorkflow: "Measurement (Unit)",
   measurement: "Measurement", progressAnalysis: "Progress Analysis", purchaseOrders: "Purchase Orders",
   work: "My Work", board: "Tower Board", handoverChecklist: "Handover Checklist",

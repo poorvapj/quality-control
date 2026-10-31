@@ -450,7 +450,7 @@ const PUBLIC_CREATE_ONLY = ["dpr", "drawingRequests"];
 // list below. Never actually triggered in production (every project so far
 // has only ever been bulk-seeded, never deleted), but qualityInspections
 // alone already has 89 real rows that would otherwise orphan silently.
-const PROJECT_SCOPED_COLLECTIONS = ["floors", "units", "snags", "assignments", "dpr", "drawingRequests", "stagemap", "workTargets", "qualityInspections", "workMeasurements", "materialMeasurements", "caseStudies"];
+const PROJECT_SCOPED_COLLECTIONS = ["floors", "units", "snags", "assignments", "dpr", "drawingRequests", "stagemap", "workTargets", "qualityInspections", "workMeasurements", "materialMeasurements", "caseStudies", "executionRecords"];
 
 // Every Masters collection except "users" (already admin-gated above) —
 // frontend/src/pages/Masters.tsx only shows its "+ New"/edit/delete
@@ -1272,6 +1272,22 @@ async function assertOpAllowed(op, session) {
     // lands (see op._notifyDprSubmit below), to the project's own Slack
     // channel if one's set (Masters ▸ Project ▸ "Slack channel ID").
     if (!existing && !String(op.rec.id).includes("VMS")) op._notifyDprSubmit = true;
+    return;
+  }
+
+  // The Execution team's own self-recorded "work done" entry — no public/
+  // anonymous path (unlike dpr/drawingRequests), no approval workflow, no
+  // Snag auto-raise. Always requires a session, and a new one needs a real
+  // project, same check as dpr/drawingRequests above.
+  if (op.op === "upsert" && op.coll === "executionRecords" && op.rec && op.rec.id) {
+    if (!session) { const e = new Error("Sign-in required"); e.status = 401; throw e; }
+    const existing = await mongoDb.collection("executionRecords").findOne({ id: op.rec.id });
+    if (!existing) {
+      if (!op.rec.projectId || !(await mongoDb.collection("projects").findOne({ id: op.rec.projectId }, { projection: { _id: 1 } }))) {
+        const e = new Error("Unknown project"); e.status = 400; throw e;
+      }
+      if (!String(op.rec.workType || "").trim()) { const e = new Error("Work type is required"); e.status = 400; throw e; }
+    }
     return;
   }
 
