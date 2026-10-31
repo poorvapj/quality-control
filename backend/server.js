@@ -88,6 +88,7 @@ const saveDiag = saveDiagnosticsEnabled()
 if (saveDiag) console.log("  save diagnostics: ON (log-only, bounded; see docs/save-diagnostics.md)");
 const { createPhotoGuard, clientIp, guardLogLine } = require("./photoGuard.js");
 const { createOpsGuard, guardLogLine: opsGuardLogLine } = require("./opsGuard.js");
+const { resolveTempIds } = require("./idSeq.js");
 const { buildPublicState } = require("./publicState.js");
 // OFF by default. Turning it on makes GET /api/state and the /api/ops reply return only the allow-listed public
 // snapshot (publicState.js) to callers without a valid session. Older frontends fetch /api/state WITHOUT a token,
@@ -1114,6 +1115,16 @@ async function applyApprovalRules(op, session) {
     && existing.result !== "Pass" && !existing.linkedSnagId) {
     op._raiseSnagOnApprove = true;
   }
+  // Mirror of the above, the other direction: a Pass re-inspection from
+  // someone whose team leader must sign off used to close the ORIGINAL
+  // snag immediately on submit, self-reported and unreviewed — the same
+  // gap the Fail-side fix above closed, just on the closing half instead
+  // of the raising half. Deferred the same way: closed here instead, the
+  // moment the leader actually approves this re-inspection.
+  if (op.coll === "qualityInspections" && r.approval && r.approval.status === "approved" && wasPending
+    && existing.result === "Pass" && existing.reInspectionOf) {
+    op._closeOriginalSnagOnApprove = true;
+  }
 }
 
 async function assertOpAllowed(op, session) {
@@ -1640,7 +1651,13 @@ async function applyOps(ops, session, trace) {
           // KPI everyone else sees. The corrective-action ASSIGNMENT
           // notification itself already happened via the "snags" upsert
           // branch above, in the same apply() batch that created this record.
-          if (shouldResolveOriginal(rec)) {
+          // Skipped when this re-inspection itself still needs the team
+          // leader's approval (op._closeOriginalSnagOnApprove, set above,
+          // closes it instead the moment that approval actually lands) — a
+          // self-reported, unreviewed Pass should never close someone's
+          // open issue by itself, any more than a bare Fail alone should
+          // raise one.
+          if (shouldResolveOriginal(rec) && (!rec.approval || rec.approval.status !== "pending")) {
             const original = await db.collection("qualityInspections").findOne(
               { id: rec.reInspectionOf },
               { projection: { linkedSnagId: 1 } }
@@ -1651,6 +1668,18 @@ async function applyOps(ops, session, trace) {
                 { $set: { status: "Closed", closedAt: Date.now(), closedBy: session ? session.userId : null } }
               );
               if (trace) trace.snagClosed = closedRes?.modifiedCount || 0; // (diagnostics only)
+            }
+          }
+          if (op._closeOriginalSnagOnApprove) {
+            const full = await db.collection("qualityInspections").findOne({ id: rec.id }, { projection: { reInspectionOf: 1 } });
+            const original = full?.reInspectionOf
+              ? await db.collection("qualityInspections").findOne({ id: full.reInspectionOf }, { projection: { linkedSnagId: 1 } })
+              : null;
+            if (original?.linkedSnagId) {
+              await db.collection("snags").updateOne(
+                { id: original.linkedSnagId, status: { $ne: "Closed" } },
+                { $set: { status: "Closed", closedAt: Date.now(), closedBy: session ? session.userId : null } }
+              );
             }
           }
         } else {
@@ -2066,6 +2095,22 @@ async function sendStateResponse(req, res) {
   return sendJson(res, 200, state);
 }
 
+// Only for POST /api/ops, and only when resolveTempIds() actually resolved
+// something — GET /api/state and every ops call with no temp id keep using
+// the cached-gzip sendStateResponse(). `resolvedIds` ({placeholder: realId})
+// rides alongside the normal {rev, data} body; AppContext.tsx's apply() uses
+// it to fix up the SAME rec objects the caller already built, so a toast
+// like "Ticket ${rec.ticketNo} created" shown right after a successful
+// save shows the real id, not the placeholder the browser never learns was
+// replaced any other way.
+async function sendStateResponseWithResolvedIds(req, res, resolvedIds) {
+  if (PUBLIC_STATE_ENFORCE && !getSession(req)) {
+    return sendJson(res, 200, await buildPublicState(mongoDb, COLLECTIONS, await getRev()));
+  }
+  const state = await getState();
+  return sendJson(res, 200, { ...state, resolvedIds });
+}
+
 function sendText(res, code, msg) {
   res.writeHead(code, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
   res.end(msg);
@@ -2189,8 +2234,24 @@ async function handleApi(req, res, urlPath) {
       const claim = await opsBatch.claim(batchId);
       // 503 (not a 4xx) so the client keeps the batch and retries shortly
       if (claim === "busy") return sendJson(res, 503, { error: "This change is already being saved — retrying shortly" });
-      if (claim === "done") return sendStateResponse(req, res); // applied earlier; acknowledge, don't repeat
+      if (claim && claim.status === "done") {
+        // applied earlier; acknowledge, don't repeat — but still tell the
+        // browser what any placeholder id resolved to back then (see
+        // opsBatch.js), or a retried-but-already-applied batch would show
+        // it forever in a toast/returned value.
+        const resolved = claim.resolvedIds || {};
+        return Object.keys(resolved).length ? sendStateResponseWithResolvedIds(req, res, resolved) : sendStateResponse(req, res);
+      }
     }
+    // Exchange any client-sent placeholder id (see idSeq.js) for a real,
+    // atomically-issued sequential one — BEFORE anything else reads op.rec.id,
+    // so every downstream check (assertOpAllowed, duplicate-id 409s) sees the
+    // real id, never the placeholder. Done AFTER the retry short-circuit
+    // above so a retried (already-applied) batch never burns another
+    // sequence number — gaps from a genuinely failed/abandoned submission
+    // are only cosmetic, but there is no reason to create one on a retry.
+    const idRes = await resolveTempIds(mongoDb, body.ops);
+    body.ops = idRes.ops;
     const opsSession = getSession(req);
     // Anonymous (public-form) submissions only — a script could otherwise
     // hammer /api/ops with unlimited fake DPRs/tickets/form submissions with
@@ -2209,14 +2270,14 @@ async function handleApi(req, res, urlPath) {
     try {
       await applyOps(body.ops, opsSession, probe ? probe.trace : undefined);
       if (probe) probe.finish();
-      if (batchId !== null) await opsBatch.complete(batchId);
+      if (batchId !== null) await opsBatch.complete(batchId, idRes.resolved);
     } catch (e) {
       if (probe) probe.abort();
       if (batchId !== null) await opsBatch.release(batchId);
       if (e.status) return sendJson(res, e.status, { error: e.message });
       throw e;
     }
-    return sendStateResponse(req, res);
+    return Object.keys(idRes.resolved).length ? sendStateResponseWithResolvedIds(req, res, idRes.resolved) : sendStateResponse(req, res);
   }
   const automationDecisionMatch = /^\/api\/automation\/drawing-requests\/([^/]+)\/decision$/.exec(urlPath);
   if (req.method === "POST" && automationDecisionMatch) {

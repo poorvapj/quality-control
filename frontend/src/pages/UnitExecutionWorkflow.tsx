@@ -4,6 +4,7 @@ import { API_BASE } from "../services/config";
 import { coll, myProjects, projectFloors, floorUnits } from "../shared/rules";
 import { buildEventOp } from "../shared/eventLog";
 import { hasModuleGrant } from "../shared/permissionMatrix";
+import { makeTempId } from "../shared/helpers";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
 import { approvalFor, effectiveApproval } from "../shared/approval";
@@ -301,7 +302,7 @@ function MeasurementForm({
     // Was nextId("MM", existing) — same collision class as DPR/Drawing
     // Request/Unit/WorkMeasurement. No MaterialMeasurement exists in
     // production yet, but fixed before this flow sees real concurrent use.
-    const id = "MM-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
+    const id = makeTempId("MM");
     const rec: MaterialMeasurement = {
       id,
       projectId: prefill.projectId, projectCode: prefill.projectCode, projectName: prefill.projectName,

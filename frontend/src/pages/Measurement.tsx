@@ -3,6 +3,7 @@ import { useApp, authHeaders } from "../context/AppContext";
 import { API_BASE } from "../services/config";
 import { coll, myProjects, projectFloors, projectUnits, floorUnits } from "../shared/rules";
 import { buildEventOp } from "../shared/eventLog";
+import { makeTempId } from "../shared/helpers";
 import { hasModuleGrant } from "../shared/permissionMatrix";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
@@ -458,7 +459,7 @@ function MeasurementPanel({ open, onClose, categories, categoriesNote, existing,
     // snapshots that haven't yet seen each other's save would compute the
     // same next id). No WorkMeasurement exists in production yet, but the
     // bug is dormant, not absent — fixed before this flow sees real use.
-    const id = "WM-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
+    const id = makeTempId("WM");
     const rec: WorkMeasurement = {
       id,
       projectId: project.id, projectCode: project.code, projectName: project.name,

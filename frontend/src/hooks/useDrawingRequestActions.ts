@@ -14,6 +14,7 @@
 import { useApp } from "../context/AppContext";
 import { byId, coll } from "../shared/rules";
 import { buildEventOp } from "../shared/eventLog";
+import { makeTempId, displayId } from "../shared/helpers";
 import type { DrawingRequest, ReviewHistoryEntry, DrawingPriority, DrawingFile, Op } from "../types";
 
 export function useDrawingRequestActions() {
@@ -140,8 +141,9 @@ export function useDrawingRequestActions() {
     // "DR-VMS-<id>" ones VMS sync writes (all 11 production drawingRequests
     // docs today) — so it always counted from 0 and handed out "DR-0001" to
     // every first manual ticket, silently overwriting one another on a race.
-    // A timestamp+random id can't collide that way.
-    const ticketNo = "DR-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
+    // makeTempId()'s placeholder is exchanged for a real sequential id by
+    // the server (idSeq.js) before anything is written, so it can't collide.
+    const ticketNo = makeTempId("DR");
     const rec: DrawingRequest = {
       id: ticketNo,
       ticketNo,
@@ -174,7 +176,7 @@ export function useDrawingRequestActions() {
     // same "created" toast regardless, so a request that only got as far as
     // the local queue looked identical to a real save to whoever raised it.
     const synced = await apply(ops);
-    toast(synced ? "Ticket " + rec.ticketNo + " created" : "Saved on this device — will finish submitting once you're back online");
+    toast(synced ? "Ticket " + displayId(rec.ticketNo) + " created" : "Saved on this device — will finish submitting once you're back online");
     return rec.ticketNo;
   }
 

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, myProjects } from "../shared/rules";
 import { buildEventOp } from "../shared/eventLog";
+import { makeTempId } from "../shared/helpers";
 import { WORK_CATEGORIES } from "../services/config";
 import type { DailyProgressReport, DprWorkEntry, ShiftType, Photo, WorkTarget, Op } from "../types";
 import PhotoGroupUploader from "./PhotoGroupUploader";
@@ -193,10 +194,11 @@ export default function DprForm({ isPublic, onDone, onDirtyChange }: { isPublic:
       // board whose only dpr rows happened to be VMS ones. Two DRIs
       // submitting around the same time (neither had yet re-synced to see
       // the other's save) both computed "DPR-0001" — same id, so the
-      // second one's upsert silently overwrote the first one's report
-      // with no error to either DRI. A timestamp+random id can't collide
-      // this way, since it doesn't depend on counting what's already there.
-      id: "DPR-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase(),
+      // second one's upsert silently overwrote the first one's report with
+      // no error to either DRI. makeTempId() can't collide this way — the
+      // server exchanges it for a real sequential id (idSeq.js) before
+      // writing anything, never by counting what the client can see.
+      id: makeTempId("DPR"),
       projectId,
       projectName: coll(data, "projects").find((p) => p.id === projectId)?.name || "",
       submittedByUserId: isPublic ? null : currentUserId,

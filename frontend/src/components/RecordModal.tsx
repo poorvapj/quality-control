@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { MASTERS, ROLES } from "../services/config";
 import { byId, coll, refLabel } from "../shared/rules";
-import { nextId } from "../shared/helpers";
+import { makeTempId } from "../shared/helpers";
 import { diffRecord } from "../shared/recordDiff";
 import { buildEventOp } from "../shared/eventLog";
 import Modal from "./Modal";
@@ -237,12 +237,12 @@ export default function RecordModal() {
         // adding a unit around the same time (neither had re-synced to see
         // the other's save) could both land on "UNT-0001" and silently
         // overwrite one another — same bug class as the DPR/Drawing
-        // Request fixes. A timestamp+random id per floor can't collide.
-        const batchStamp = Date.now().toString(36).toUpperCase();
-        let seq = 0;
+        // Request fixes. makeTempId()'s placeholder is exchanged for a real
+        // sequential id by the server (idSeq.js) before anything is
+        // written, so it can't collide.
         const ops: any[] = [];
         for (const floorId of multiFloorIds) {
-          const out: any = { id: "UNT-" + batchStamp + "-" + String(++seq).padStart(2, "0") + "-" + Math.random().toString(36).slice(2, 5).toUpperCase() };
+          const out: any = { id: makeTempId("UNT") };
           for (const f of master!.fields) {
             if (f.k === "floorId") { out.floorId = floorId; continue; }
             let v = values[f.k];
@@ -260,7 +260,11 @@ export default function RecordModal() {
         return;
       }
 
-      const out: any = recordModal!.id ? Object.assign({}, rec) : { id: nextId(master!.prefix, coll(data, recordModal!.master)) };
+      // Was nextId(master.prefix, ...) — low-traffic admin screens (Projects,
+      // Vendors, Teams, …), but still theoretically racy if two admins add
+      // one at the same moment; makeTempId() removes that risk the same way
+      // as everywhere else, with no cost to this already-rare path.
+      const out: any = recordModal!.id ? Object.assign({}, rec) : { id: makeTempId(master!.prefix) };
       for (const f of master!.fields) {
         if (f.type === "items") { out.items = items; continue; }
         if (f.type === "formFields") { out.fields = formFields; continue; }

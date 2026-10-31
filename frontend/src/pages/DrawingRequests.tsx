@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, byId } from "../shared/rules";
-import { fmtDate } from "../shared/helpers";
+import { fmtDate, displayId } from "../shared/helpers";
 import SidePanel from "../components/SidePanel";
 import DrawingRequestForm from "../components/DrawingRequestForm";
 import DrawingRequestDetailModal from "../components/DrawingRequestDetailModal";
@@ -279,7 +279,7 @@ export default function DrawingRequestsPage() {
                     style={{ transition: "background-color .15s ease", cursor: "pointer" }}
                   >
                     {/* Matches "font-mono font-bold text-purple-600" on the ticket number. */}
-                    <td style={td}><strong style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontWeight: 700, color: "#9333EA" }}>{r.ticketNo}</strong></td>
+                    <td style={td}><strong style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontWeight: 700, color: "#9333EA" }}>{displayId(r.ticketNo)}</strong></td>
                     <td style={ellipsis(160)} title={r.projectName}><strong style={{ fontWeight: 600, color: "#1A1A2E" }}>{r.projectName}</strong></td>
                     <td style={ellipsis(180)} title={r.description}>{r.description}</td>
                     <td style={td}>{r.drawingType}</td>

@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, myProjects } from "../shared/rules";
 import type { Snag } from "../types";
-import { dueLabel, ago } from "../shared/helpers";
+import { dueLabel, ago, displayId } from "../shared/helpers";
 import { ESCALATION_DAYS, HOUR } from "../services/config";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
@@ -120,7 +120,7 @@ export default function Snags() {
               onClick={() => openDrawer({ kind: "snag", id: s.id })}
             >
               <div className="min-w-0 flex-1">
-                <div className="text-[13px] font-bold">{s.id} · {s.title}</div>
+                <div className="text-[13px] font-bold">{displayId(s.id)} · {s.title}</div>
                 <div className="text-[11px] text-[var(--text-muted)] mt-0.5 leading-normal">{fastSnagTarget(s)} · assigned to {fastLabel("users", s.assignedTo)} · {dueLabel(s.dueAt).text}</div>
               </div>
               <Badge color={SEVERITY_BADGE_COLOR[s.severity] || "gray"}>{s.severity}</Badge>
@@ -198,7 +198,7 @@ export default function Snags() {
                 onClick={() => openDrawer({ kind: "snag", id: s.id })}
               >
                 <div className="min-w-0 flex-1">
-                  <div className="text-[13px] font-bold">{s.id} · {s.title}</div>
+                  <div className="text-[13px] font-bold">{displayId(s.id)} · {s.title}</div>
                   <div className="text-[11px] text-[var(--text-muted)] mt-0.5 leading-normal">
                     {fp === ALL_PROJECTS ? fastLabel("projects", s.projectId) + " · " : ""}
                     {fastSnagTarget(s)} · {fastLabel("stages", s.stageId)} ·{" "}

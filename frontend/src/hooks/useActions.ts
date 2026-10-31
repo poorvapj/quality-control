@@ -4,6 +4,7 @@ import type { Op, Track, ProgressPatch } from "../types";
 import { pkey, prog, trackStages, byId, coll, refLabel } from "../shared/rules";
 import { buildEventOp } from "../shared/eventLog";
 import { watermarkPhoto } from "../shared/watermark";
+import { makeTempId, displayId } from "../shared/helpers";
 
 export function useActions() {
   const { data, apply, toast, currentUserId, currentProjectId, drawer, openDrawer, openSnagModal } = useApp();
@@ -123,7 +124,7 @@ export function useActions() {
           // a duplicate rather than silently overwriting, but the snag
           // simply never gets raised for the second inspector — "gate
           // failed" with no snag to show for it.
-          id: "SNG-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase(),
+          id: makeTempId("SNG"),
           projectId: currentProjectId || "",
           unitId: kind === "unit" ? id : "",
           stageId, paramId: f.paramId,
@@ -148,7 +149,7 @@ export function useActions() {
     const rec = {
       // Was nextId("ASG", coll(data,"assignments")) — same collision risk as
       // snags/DPR when two people assign something around the same moment.
-      id: "ASG-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase(),
+      id: makeTempId("ASG"),
       projectId: input.projectId || currentProjectId || "",
       targetType: input.targetType,
       targetId: input.targetId,
@@ -187,7 +188,7 @@ export function useActions() {
     if (!input.title.trim()) { toast("Give the snag a title"); return; }
     const rec = {
       // Was nextId("SNG", coll(data,"snags")) — same collision risk as above.
-      id: "SNG-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase(),
+      id: makeTempId("SNG"),
       projectId: input.projectId || currentProjectId || "",
       unitId: input.unitId,
       stageId: input.stageId,
@@ -207,7 +208,7 @@ export function useActions() {
       { op: "upsert", coll: "snags", create: true, rec },
       logEvent("SNAG_RAISE", rec.unitId, rec.stageId, rec.title)
     ]);
-    toast(synced ? "Snag " + rec.id + " raised" : OFFLINE_TOAST);
+    toast(synced ? "Snag " + displayId(rec.id) + " raised" : OFFLINE_TOAST);
   }
 
   async function setSnagStatus(id: string, status: "Open" | "In Progress" | "Closed") {
@@ -384,7 +385,7 @@ export function useActions() {
         op: "upsert", coll: "snags", create: true,
         rec: {
           // Was nextId("SNG", coll(data,"snags")) — same collision risk as submitChecklist above.
-          id: "SNG-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase(),
+          id: makeTempId("SNG"),
           projectId: currentProjectId || "",
           unitId, stageId, itemId, paramId: f.paramId,
           title: p.name + " failed at " + (item?.name || ""),

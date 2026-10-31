@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import DrawingRequestForm from "../../components/DrawingRequestForm";
 import Toast from "../../components/Toast";
+import { displayId } from "../../shared/helpers";
 
 /** Standalone, no-login page. Reachable at /drawing-requests/new. */
 export default function PublicDrawingRequestPage() {
@@ -18,7 +19,7 @@ export default function PublicDrawingRequestPage() {
         </div>
         {ticketNo ? (
           <div style={{ marginTop: 20, textAlign: "center" }}>
-            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>✅ Ticket {ticketNo} created</div>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>✅ Ticket {displayId(ticketNo)} created</div>
             <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Your drawing request has been raised and will go through the review chain. You can close this page.</div>
           </div>
         ) : (

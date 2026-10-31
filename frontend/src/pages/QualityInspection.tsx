@@ -4,7 +4,7 @@ import CalendarRangePicker from "../components/CalendarRangePicker";
 import { useApp, authHeaders } from "../context/AppContext";
 import { API_BASE } from "../services/config";
 import { coll, myProjects, projectFloors, floorUnits, byId } from "../shared/rules";
-import { nextId } from "../shared/helpers";
+import { nextId, makeTempId, displayId } from "../shared/helpers";
 import { buildEventOp } from "../shared/eventLog";
 import { hasModuleGrant } from "../shared/permissionMatrix";
 import NavIcon from "../components/NavIcon";
@@ -742,7 +742,7 @@ function FloorHistoryPanel({
                 )}
                 {snag && (
                   <div className="text-[11px] text-[var(--text-muted)] mt-2 border-t border-[var(--border)] pt-1.5">
-                    Snag {snag.id} · {snag.status} · assigned to {insp.correctiveAction?.assignedToName} · due {insp.correctiveAction?.targetDate}
+                    Snag {displayId(snag.id)} · {snag.status} · assigned to {insp.correctiveAction?.assignedToName} · due {insp.correctiveAction?.targetDate}
                   </div>
                 )}
               </Card>
@@ -1086,11 +1086,11 @@ function InspectionForm({
     // each other's save, compute the SAME next id, and the server's
     // create:true path 409s the second one away instead of silently
     // overwriting — but either way the second inspector's record never
-    // actually gets created. A timestamp+random id per floor (same pattern
-    // as RecordModal's multi-floor Unit save) can't collide that way.
-    const batchStamp = Date.now().toString(36).toUpperCase();
-    let seq = 0;
-    const genId = (prefix: string) => `${prefix}-${batchStamp}-${String(++seq).padStart(2, "0")}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+    // actually gets created. makeTempId()'s placeholder is exchanged for a
+    // real sequential id by the server (idSeq.js) before anything is
+    // written, so it can't collide, and still ends up readable ("QI-0097")
+    // once it syncs rather than a raw timestamp.
+    const genId = (prefix: string) => makeTempId(prefix);
 
     const ops: any[] = [];
     let lastId = "", lastSnagId: string | null = null;
@@ -1187,7 +1187,7 @@ function InspectionForm({
         ? "Saved on this device — will finish submitting once you're back online"
         : floorIds.length > 1
           ? `Inspection recorded for ${floorIds.length} floors`
-          : raiseSnagNow ? `Inspection recorded · Snag ${lastSnagId} raised`
+          : raiseSnagNow ? `Inspection recorded · Snag ${displayId(lastSnagId)} raised`
           : needsSnag ? "Inspection recorded · awaiting your team leader's approval before a snag is raised"
           : "Inspection recorded"
     );

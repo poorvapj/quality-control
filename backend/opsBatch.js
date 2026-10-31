@@ -20,7 +20,7 @@ function createOpsBatchStore(getMongoDb) {
   const meta = () => getMongoDb().collection("meta");
   const idOf = (batchId) => "opb:" + batchId;
 
-  // -> "new" (caller applies the batch) | "done" (already applied) | "busy" (another request is applying it now)
+  // -> "new" (caller applies the batch) | {status:"done", resolvedIds} (already applied) | "busy" (another request is applying it now)
   async function claim(batchId, now = Date.now()) {
     const _id = idOf(batchId);
     try {
@@ -31,15 +31,20 @@ function createOpsBatchStore(getMongoDb) {
     }
     const existing = await meta().findOne({ _id });
     if (!existing) return claim(batchId, now); // released between our insert and read — try again
-    if (existing.status === "done") return "done";
+    // A retry (the client never saw the first reply) must still tell the
+    // browser what any makeTempId() placeholder in the batch resolved to
+    // (idSeq.js) — otherwise a caller's own toast/returned value would show
+    // the placeholder forever on a retried-but-actually-already-applied
+    // batch, even though the record itself saved under its real id just fine.
+    if (existing.status === "done") return { status: "done", resolvedIds: existing.resolvedIds || {} };
     if (now - existing.at > STALE_MS) {
       const r = await meta().updateOne({ _id, status: "pending", at: existing.at }, { $set: { at: now } });
       return r.matchedCount === 1 ? "new" : "busy";
     }
     return "busy";
   }
-  async function complete(batchId) {
-    await meta().updateOne({ _id: idOf(batchId) }, { $set: { status: "done", at: Date.now() } });
+  async function complete(batchId, resolvedIds) {
+    await meta().updateOne({ _id: idOf(batchId) }, { $set: { status: "done", at: Date.now(), resolvedIds: resolvedIds || {} } });
   }
   async function release(batchId) {
     await meta().deleteOne({ _id: idOf(batchId), status: "pending" }).catch(() => {});

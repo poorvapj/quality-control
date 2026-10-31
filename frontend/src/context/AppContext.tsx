@@ -6,6 +6,7 @@ import { classifyStatus, flushQueue, newBatchId, normalizeQueue, tokenUserId, ty
 import { judgeStateResponse, needsFullBoardAfterLogin } from "../shared/stateSync";
 import { applyOpsLocal, scrubLocalBoard } from "../shared/applyOpsLocal";
 import { buildEventOp } from "../shared/eventLog";
+import { resolveIdsInPlace } from "../shared/helpers";
 
 // Human label for the MODULE_VIEW audit event's detail text — purely
 // cosmetic (Audit Logs still groups by the raw TabKey), so an entry
@@ -477,6 +478,12 @@ export function AppProvider({ children, publicRoute = false }: { children: React
         return false;
       }
       if (j.data && acceptState(j)) { setData(j.data); dataRef.current = j.data; setRev(j.rev); }
+      // A record created with makeTempId() (shared/helpers.ts) got its real
+      // id from the server just now — fix up the SAME ops/rec objects the
+      // caller built so its own closure (a toast, a returned ticket number)
+      // shows that real id instead of the placeholder it would otherwise
+      // never learn was replaced.
+      if (j.resolvedIds) resolveIdsInPlace(ops, j.resolvedIds);
       return true;
     } catch {
       // A network failure, NOT a rejection — e.g. the signal dropped, or a

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
+import { makeTempId } from "../shared/helpers";
 import Card from "../ui/tw/Card";
 import PhotoGroupUploader from "./PhotoGroupUploader";
 import SearchDropdown from "./SearchDropdown";
@@ -50,7 +51,7 @@ export default function CustomFormFill({ form, onDone }: { form: CustomFormDef; 
     // as the DPR bug that caused real data loss: this is a PUBLIC form link
     // that can be shared to many people at once, each on a snapshot that
     // hasn't seen anyone else's submission yet, computing the same next id.
-    const id = "SUB-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
+    const id = makeTempId("SUB");
     const synced = await apply([
       {
         op: "upsert", coll: "formSubmissions", create: true,

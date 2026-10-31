@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, refLabel } from "../shared/rules";
-import { fmtDT } from "../shared/helpers";
+import { fmtDT, displayId } from "../shared/helpers";
 import { canActOnStage } from "../shared/permissions";
 import { useDrawingRequestActions } from "../hooks/useDrawingRequestActions";
 import SearchDropdown from "./SearchDropdown";
@@ -366,7 +366,7 @@ export default function DrawingRequestDetailModal({ dr, onClose }: { dr: Drawing
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: 40, rowGap: 20, paddingBottom: 24 }}>
             <Field full>
               <div style={label}>Ticket No</div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: "#7C3AED" }}>{dr.ticketNo}</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#7C3AED" }}>{displayId(dr.ticketNo)}</div>
             </Field>
 
             <Field><div style={label}>Project</div><div style={value}>{dr.projectName || refLabel(data, "projects", dr.projectId)}</div></Field>
