@@ -57,20 +57,20 @@ export default function Execution() {
       </Card>
 
       <Card className="!p-0">
-        <Table columns={["Date", "Project", "Floor", "Flat", "Work Type", "Recorded By", "Photos", ""]}>
-          {filtered.length === 0 && (
-            <TableRow><TableCell colSpan={8}><div className="py-6 text-center text-[13px] text-[var(--text-muted)]">No execution records yet.</div></TableCell></TableRow>
-          )}
+        <Table
+          columns={["Date", "Project", "Floor", "Flat", "Work Type", "Recorded By", "Photos"]}
+          colWidths={["11%", "22%", "14%", "11%", "26%", "16%", "10%"]}
+          empty="No execution records yet."
+        >
           {filtered.map((r) => (
             <TableRow key={r.id}>
               <TableCell>{fmtDate(r.createdAt)}</TableCell>
-              <TableCell>{r.projectName}</TableCell>
+              <TableCell title={displayId(r.id)}>{r.projectName}</TableCell>
               <TableCell>{r.floorName}</TableCell>
               <TableCell>{r.unitName || "—"}</TableCell>
               <TableCell>{r.workType}</TableCell>
               <TableCell>{r.recordedByName}</TableCell>
               <TableCell>{r.photos?.length || 0}</TableCell>
-              <TableCell>{displayId(r.id)}</TableCell>
             </TableRow>
           ))}
         </Table>
