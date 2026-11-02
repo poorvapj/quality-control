@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useApp } from "./context/AppContext";
 import MainLayout from "./layouts/MainLayout/MainLayout";
 import LoginScreen from "./components/LoginScreen";
@@ -36,10 +36,30 @@ import AddUser from "./pages/AddUser";
 import { canAccessTab } from "./shared/permissionMatrix";
 import { coll } from "./shared/rules";
 
-export default function App() {
-  const { loggedIn, currentUserId, activeTab, data, myRole } = useApp();
+/* A page reload (e.g. coming back to the app on a phone after looking at something else) starts with loggedIn=false until the
+   board has loaded and the saved session is recognised. Showing the SIGN-IN screen for those seconds looked like being logged
+   out. If a saved session exists we show this instead, and fall back to the sign-in screen only if the board still has not loaded
+   after RESTORE_WAIT_MS (or the session turns out to be expired, which the app then reports itself). */
+const RESTORE_WAIT_MS = 15000;
+function hasSavedSession(): boolean {
+  try { return localStorage.getItem("neoteric_session") === "1" && !!localStorage.getItem("neoteric_token"); } catch { return false; }
+}
 
-  if (!loggedIn) return <><LoginScreen /><Toast /><PendingSyncBadge /></>;
+export default function App() {
+  const { loggedIn, currentUserId, activeTab, data, myRole, mode } = useApp();
+  const [gaveUpWaiting, setGaveUpWaiting] = useState(false);
+  useEffect(() => { const t = window.setTimeout(() => setGaveUpWaiting(true), RESTORE_WAIT_MS); return () => window.clearTimeout(t); }, []);
+
+  if (!loggedIn) {
+    if (hasSavedSession() && !data && mode === "connecting" && !gaveUpWaiting) {
+      return (
+        <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: 14 }}>
+          Restoring your session…
+        </div>
+      );
+    }
+    return <><LoginScreen /><Toast /><PendingSyncBadge /></>;
+  }
 
   const isAdmin = currentUserId === "U-ADMIN";
 

@@ -1,4 +1,5 @@
 import React, { useRef, useState } from "react";
+import { viewPhoto } from "../shared/photoViewer";
 import { uploadPhoto } from "../shared/uploadPhoto";
 import { useApp } from "../context/AppContext";
 import type { Photo } from "../types";
@@ -74,7 +75,7 @@ function PhotoGroupUploader({ label, photos, onChange, optional }: { label: stri
             <img
               className="photo-thumb"
               src={p.url}
-              onClick={() => window.open(p.url, "_blank")}
+              onClick={() => viewPhoto(p.url, photos.map((x) => x.url))}
               style={{ width: 56, height: 56, borderRadius: 10, objectFit: "cover", cursor: "pointer", border: "1px solid var(--border)" }}
             />
             <button

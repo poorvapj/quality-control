@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { viewPhoto } from "../shared/photoViewer";
 import { useApp } from "../context/AppContext";
 import { coll, myProjects, projectFloors } from "../shared/rules";
 import { nextId } from "../shared/helpers";
@@ -129,7 +130,7 @@ export default function CaseStudies() {
               <div>
                 <div className="micro-label mb-1">Before</div>
                 <div className="photo-strip">{openCase.photosBefore.map((p: Photo, i: number) => (
-                  <img key={i} className="photo-thumb" src={p.url} onClick={() => window.open(p.url, "_blank")} />
+                  <img key={i} className="photo-thumb" src={p.url} onClick={() => viewPhoto(p.url, openCase.photosBefore.map((x: Photo) => x.url))} />
                 ))}</div>
               </div>
             )}
@@ -137,7 +138,7 @@ export default function CaseStudies() {
               <div>
                 <div className="micro-label mb-1">After</div>
                 <div className="photo-strip">{openCase.photosAfter.map((p: Photo, i: number) => (
-                  <img key={i} className="photo-thumb" src={p.url} onClick={() => window.open(p.url, "_blank")} />
+                  <img key={i} className="photo-thumb" src={p.url} onClick={() => viewPhoto(p.url, openCase.photosAfter.map((x: Photo) => x.url))} />
                 ))}</div>
               </div>
             )}

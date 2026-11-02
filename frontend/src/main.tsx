@@ -5,6 +5,7 @@ import "./theme/tailwind.css";
 import App from "./App";
 import { AppProvider } from "./context/AppContext";
 import { matchPublicRoute } from "./routes/publicRoutes";
+import PhotoViewerHost from "./components/PhotoViewerHost";
 
 const PublicPage = matchPublicRoute(window.location.pathname);
 
@@ -13,5 +14,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <AppProvider publicRoute={!!PublicPage}>
       {PublicPage ? <PublicPage /> : <App />}
     </AppProvider>
+    <PhotoViewerHost />
   </React.StrictMode>
 );

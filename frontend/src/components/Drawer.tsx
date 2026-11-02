@@ -1,4 +1,5 @@
 import React, { useRef, useState } from "react";
+import { viewPhoto } from "../shared/photoViewer";
 import { useApp } from "../context/AppContext";
 import { ROLES } from "../services/config";
 import { byId, coll, canAct, blockReason, openSnagsFor, prog, refLabel, trackStages, snagTarget, unitSummary, rccChecklistItems, rccItemBlockReason, rccItemLabel, myProjects, isCivilLikeRole } from "../shared/rules";
@@ -635,7 +636,7 @@ function SnagDrawer({ id }: { id: string }) {
             <div style={label}>Photos</div>
             <div className="photo-strip" style={{ marginBottom: 20 }}>
               {(s.photos || []).map((p, i) => (
-                <img key={i} className="photo-thumb" src={p.url} onClick={() => window.open(p.url, "_blank")} />
+                <img key={i} className="photo-thumb" src={p.url} onClick={() => viewPhoto(p.url, (s.photos || []).map((x) => x.url))} />
               ))}
             </div>
           </>
