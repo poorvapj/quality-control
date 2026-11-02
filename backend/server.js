@@ -733,8 +733,13 @@ if (!process.env.CLOUDINARY_URL) {
 }
 
 // Every Project Quality asset lives under this root, segregated by type, so it
-// never collides with — or needs to touch — existing VMS assets in the same account.
-const CLOUDINARY_ROOT = "ProjectQuality";
+// never collides with — or needs to touch — existing VMS assets in the same
+// account. Local/dev/staging databases (same looksNonProd() dev-name check
+// idSeq.js uses for the QC->VMS copy) upload under their own root instead of
+// the real one — local testing was landing real-looking photos in the exact
+// same Cloudinary folder production uses, with nothing to tell them apart
+// except manually cross-checking against every database's own records.
+const CLOUDINARY_ROOT = qcToVms.looksNonProd(process.env.MONGODB_DB) ? "ProjectQuality-DEV" : "ProjectQuality";
 const PHOTO_TYPES = ["snags", "qc", "progress", "drawings", "dpr", "caseStudies"];
 
 /* ---------------------------------------------------------------- storage */
