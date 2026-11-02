@@ -162,7 +162,6 @@ const PHASE_GROUPS: PhaseGroup[] = [
         label: "After Plastering",
         nameOverride: "Brickwork & Plaster",
         items: [
-          "Tap test: 100% tap test after plastering — zero hollow plaster allowed; any hollow area broken out and redone.",
           "Curing: plastered surface cured as required."
         ]
       }
