@@ -66,12 +66,17 @@ async function buildWeeklyQcReportData(mongoDb) {
     const overdueRow = !!snag && snag.status !== "Closed" && !!snag.dueAt && snag.dueAt < Date.now();
     return {
       date: i.inspectionDate,
-      projectCode: i.projectCode,
+      projectName: i.projectName || i.projectCode,
       floor: i.floorName + (i.unitName ? ` / ${i.unitName}` : ""),
       workType: i.workType || "—",
       result: i.result,
       inspector: i.inspectorName,
-      snagStatus: !snag ? "—" : snag.status === "Closed" ? "Resolved" : overdueRow ? "Overdue" : snag.status
+      snagStatus: !snag ? "—" : snag.status === "Closed" ? "Resolved" : overdueRow ? "Overdue" : snag.status,
+      // The record's own last-decided status — not recomputed against the
+      // author's CURRENT team leader (effectiveApproval() on the frontend
+      // does that for the live app's own display), good enough for a
+      // point-in-time weekly snapshot.
+      approvalStatus: !i.approval ? "—" : i.approval.status === "approved" ? "Approved" : i.approval.status === "rejected" ? "Rejected" : "Pending"
     };
   });
 

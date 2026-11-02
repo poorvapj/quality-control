@@ -496,14 +496,16 @@ This cannot be undone.`)) return;
         rows: filtered.map((i) => {
           const snag = linkedSnag(i);
           const overdueRow = !!snag && snag.status !== "Closed" && !!snag.dueAt && snag.dueAt < Date.now();
+          const approval = effectiveApproval(data, i);
           return {
             date: i.inspectionDate,
-            projectCode: i.projectCode,
+            projectName: i.projectName || i.projectCode,
             floor: i.floorName + (i.unitName ? ` / ${i.unitName}` : ""),
             workType: i.workType || "—",
             result: i.result,
             inspector: i.inspectorName,
-            snagStatus: !snag ? "—" : snag.status === "Closed" ? "Resolved" : overdueRow ? "Overdue" : snag.status
+            snagStatus: !snag ? "—" : snag.status === "Closed" ? "Resolved" : overdueRow ? "Overdue" : snag.status,
+            approvalStatus: !approval ? "—" : approval.status === "approved" ? "Approved" : approval.status === "rejected" ? "Rejected" : "Pending"
           };
         })
       });

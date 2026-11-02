@@ -81,24 +81,26 @@ function QcDocument({ data: s }) {
       h(View, { style: S.table },
         h(View, { style: S.secHeader }, h(Text, { style: S.secTitle }, `Inspections (${s.rows.length})`)),
         h(View, { style: S.hdr, wrap: false },
-          h(Text, { style: [S.col, S.hdrText, { flex: 0.7 }] }, "Date"),
-          h(Text, { style: [S.col, S.hdrText, { flex: 0.7 }] }, "Project"),
-          h(Text, { style: [S.col, S.hdrText, { flex: 1.3 }] }, "Floor"),
-          h(Text, { style: [S.col, S.hdrText, { flex: 1.3 }] }, "Checklist"),
-          h(Text, { style: [S.col, S.hdrText, { flex: 0.9 }] }, "Result"),
-          h(Text, { style: [S.col, S.hdrText, { flex: 1 }] }, "Inspector"),
-          h(Text, { style: [S.col, S.hdrText, { flex: 0.8 }] }, "Snag")
+          h(Text, { style: [S.col, S.hdrText, { flex: 0.6 }] }, "Date"),
+          h(Text, { style: [S.col, S.hdrText, { flex: 1.1 }] }, "Project"),
+          h(Text, { style: [S.col, S.hdrText, { flex: 1.2 }] }, "Floor"),
+          h(Text, { style: [S.col, S.hdrText, { flex: 1.1 }] }, "Checklist"),
+          h(Text, { style: [S.col, S.hdrText, { flex: 0.8 }] }, "Result"),
+          h(Text, { style: [S.col, S.hdrText, { flex: 0.9 }] }, "Inspector"),
+          h(Text, { style: [S.col, S.hdrText, { flex: 0.7 }] }, "Snag"),
+          h(Text, { style: [S.col, S.hdrText, { flex: 0.7 }] }, "Approval")
         ),
         s.rows.length === 0
-          ? h(View, { style: S.row }, h(Text, { style: [S.col, { padding: "6px 10px", color: GRAY, flex: 7 }] }, "No inspections match these filters."))
+          ? h(View, { style: S.row }, h(Text, { style: [S.col, { padding: "6px 10px", color: GRAY, flex: 8 }] }, "No inspections match these filters."))
           : s.rows.map((r, i) => h(View, { key: i, style: i % 2 === 0 ? S.row : S.rowAlt, wrap: false },
-              h(Text, { style: [S.col, { flex: 0.7 }] }, r.date),
-              h(Text, { style: [S.col, { flex: 0.7 }] }, r.projectCode),
-              h(Text, { style: [S.col, { flex: 1.3 }] }, r.floor),
-              h(Text, { style: [S.col, { flex: 1.3 }] }, r.workType),
-              h(Text, { style: [S.col, { flex: 0.9, color: RESULT_COLOR[r.result] || DARK, fontFamily: "Helvetica-Bold" }] }, r.result),
-              h(Text, { style: [S.col, { flex: 1 }] }, r.inspector),
-              h(Text, { style: [S.col, { flex: 0.8 }] }, r.snagStatus)
+              h(Text, { style: [S.col, { flex: 0.6 }] }, r.date),
+              h(Text, { style: [S.col, { flex: 1.1 }] }, r.projectName),
+              h(Text, { style: [S.col, { flex: 1.2 }] }, r.floor),
+              h(Text, { style: [S.col, { flex: 1.1 }] }, r.workType),
+              h(Text, { style: [S.col, { flex: 0.8, color: RESULT_COLOR[r.result] || DARK, fontFamily: "Helvetica-Bold" }] }, r.result),
+              h(Text, { style: [S.col, { flex: 0.9 }] }, r.inspector),
+              h(Text, { style: [S.col, { flex: 0.7 }] }, r.snagStatus),
+              h(Text, { style: [S.col, { flex: 0.7, color: r.approvalStatus === "Approved" ? GREEN : r.approvalStatus === "Rejected" ? RED : r.approvalStatus === "Pending" ? AMBER : DARK }] }, r.approvalStatus)
             ))
       )
     )

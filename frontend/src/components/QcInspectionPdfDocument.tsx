@@ -49,7 +49,7 @@ function KpiTable({ title, rows }: { title: string; rows: { label: string; value
 }
 
 export interface QcInspectionPdfRow {
-  date: string; projectCode: string; floor: string; workType: string; result: string; inspector: string; snagStatus: string;
+  date: string; projectName: string; floor: string; workType: string; result: string; inspector: string; snagStatus: string; approvalStatus: string;
 }
 
 export interface QcInspectionPdfData {
@@ -90,25 +90,27 @@ function QcDocument({ data: s }: { data: QcInspectionPdfData }) {
         <View style={S.table}>
           <View style={S.secHeader}><Text style={S.secTitle}>Inspections ({s.rows.length})</Text></View>
           <View style={S.hdr} wrap={false}>
-            <Text style={[S.col, S.hdrText, { flex: 0.7 }]}>Date</Text>
-            <Text style={[S.col, S.hdrText, { flex: 0.7 }]}>Project</Text>
-            <Text style={[S.col, S.hdrText, { flex: 1.3 }]}>Floor</Text>
-            <Text style={[S.col, S.hdrText, { flex: 1.3 }]}>Checklist</Text>
-            <Text style={[S.col, S.hdrText, { flex: 0.9 }]}>Result</Text>
-            <Text style={[S.col, S.hdrText, { flex: 1 }]}>Inspector</Text>
-            <Text style={[S.col, S.hdrText, { flex: 0.8 }]}>Snag</Text>
+            <Text style={[S.col, S.hdrText, { flex: 0.6 }]}>Date</Text>
+            <Text style={[S.col, S.hdrText, { flex: 1.1 }]}>Project</Text>
+            <Text style={[S.col, S.hdrText, { flex: 1.2 }]}>Floor</Text>
+            <Text style={[S.col, S.hdrText, { flex: 1.1 }]}>Checklist</Text>
+            <Text style={[S.col, S.hdrText, { flex: 0.8 }]}>Result</Text>
+            <Text style={[S.col, S.hdrText, { flex: 0.9 }]}>Inspector</Text>
+            <Text style={[S.col, S.hdrText, { flex: 0.7 }]}>Snag</Text>
+            <Text style={[S.col, S.hdrText, { flex: 0.7 }]}>Approval</Text>
           </View>
           {s.rows.length === 0 ? (
-            <View style={S.row}><Text style={[S.col, { padding: "6px 10px", color: GRAY, flex: 7 }]}>No inspections match these filters.</Text></View>
+            <View style={S.row}><Text style={[S.col, { padding: "6px 10px", color: GRAY, flex: 8 }]}>No inspections match these filters.</Text></View>
           ) : s.rows.map((r, i) => (
             <View key={i} style={i % 2 === 0 ? S.row : S.rowAlt} wrap={false}>
-              <Text style={[S.col, { flex: 0.7 }]}>{r.date}</Text>
-              <Text style={[S.col, { flex: 0.7 }]}>{r.projectCode}</Text>
-              <Text style={[S.col, { flex: 1.3 }]}>{r.floor}</Text>
-              <Text style={[S.col, { flex: 1.3 }]}>{r.workType}</Text>
-              <Text style={[S.col, { flex: 0.9, color: RESULT_COLOR[r.result] || DARK, fontFamily: "Helvetica-Bold" }]}>{r.result}</Text>
-              <Text style={[S.col, { flex: 1 }]}>{r.inspector}</Text>
-              <Text style={[S.col, { flex: 0.8 }]}>{r.snagStatus}</Text>
+              <Text style={[S.col, { flex: 0.6 }]}>{r.date}</Text>
+              <Text style={[S.col, { flex: 1.1 }]}>{r.projectName}</Text>
+              <Text style={[S.col, { flex: 1.2 }]}>{r.floor}</Text>
+              <Text style={[S.col, { flex: 1.1 }]}>{r.workType}</Text>
+              <Text style={[S.col, { flex: 0.8, color: RESULT_COLOR[r.result] || DARK, fontFamily: "Helvetica-Bold" }]}>{r.result}</Text>
+              <Text style={[S.col, { flex: 0.9 }]}>{r.inspector}</Text>
+              <Text style={[S.col, { flex: 0.7 }]}>{r.snagStatus}</Text>
+              <Text style={[S.col, { flex: 0.7, color: r.approvalStatus === "Approved" ? GREEN : r.approvalStatus === "Rejected" ? RED : r.approvalStatus === "Pending" ? AMBER : DARK }]}>{r.approvalStatus}</Text>
             </View>
           ))}
         </View>
