@@ -59,7 +59,7 @@ export default function Execution() {
       <Card className="!p-0">
         <Table
           columns={["Date", "Project", "Floor", "Flat", "Work Type", "Recorded By", "Photos"]}
-          colWidths={["10%", "20%", "12%", "8%", "26%", "16%", "8%"]}
+          colWidths={["100px", "160px", "120px", "90px", "220px", "140px", "90px"]}
           empty="No execution records yet."
         >
           {filtered.map((r) => (
