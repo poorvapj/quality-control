@@ -9,6 +9,7 @@ import PhotoGroupUploader from "../components/PhotoGroupUploader";
 import SidePanel from "../components/SidePanel";
 import Card from "../ui/tw/Card";
 import Btn from "../ui/tw/Btn";
+import Badge from "../ui/tw/Badge";
 import Table, { TableRow, TableCell } from "../ui/tw/Table";
 import { WORK_TYPES, QC_CHECKLISTS, CHECKLIST_STATUSES, isFlatWise } from "./QualityInspection";
 import type { ExecutionRecord, Photo, Op } from "../types";
@@ -25,6 +26,7 @@ export default function Execution() {
   const { data, currentUserId } = useApp();
   const [panelOpen, setPanelOpen] = useState(false);
   const [fProjectId, setFProjectId] = useState("");
+  const [viewingId, setViewingId] = useState<string | null>(null); // a clicked row: shows that record's full details
 
   const allProjects = myProjects(data, currentUserId);
   const records = coll(data, "executionRecords") as ExecutionRecord[];
@@ -56,20 +58,22 @@ export default function Execution() {
         </div>
       </Card>
 
-      <Card className="!p-0">
+      {/* Same card padding as every other list page (Quality Inspection, Measurement, Fail Register...): 12px / 18px on md+.
+          It was !p-0, which left the first column and the header glued to the card's border. */}
+      <Card padded={false} className="p-3 md:p-[18px]">
         <Table
           columns={["Date", "Project", "Floor", "Flat", "Work Type", "Recorded By", "Photos"]}
           colWidths={["100px", "160px", "120px", "90px", "220px", "140px", "90px"]}
           empty="No execution records yet."
         >
           {filtered.map((r) => (
-            <TableRow key={r.id}>
-              <TableCell>{fmtDate(r.createdAt)}</TableCell>
-              <TableCell title={displayId(r.id)}>{r.projectName}</TableCell>
+            <TableRow key={r.id} onClick={() => setViewingId(r.id)}>
+              <TableCell muted className="whitespace-nowrap">{fmtDate(r.createdAt)}</TableCell>
+              <TableCell muted className="whitespace-nowrap" title={displayId(r.id)}>{r.projectName}</TableCell>
               <TableCell>{r.floorName}</TableCell>
-              <TableCell>{r.unitName || "—"}</TableCell>
-              <TableCell>{r.workType}</TableCell>
-              <TableCell>{r.recordedByName}</TableCell>
+              <TableCell muted>{r.unitName || "—"}</TableCell>
+              <TableCell muted className="truncate max-w-0" title={r.workType}>{r.workType}</TableCell>
+              <TableCell muted className="truncate max-w-0" title={r.recordedByName}>{r.recordedByName}</TableCell>
               <TableCell>{r.photos?.length || 0}</TableCell>
             </TableRow>
           ))}
@@ -77,7 +81,76 @@ export default function Execution() {
       </Card>
 
       <ExecutionForm open={panelOpen} onClose={() => setPanelOpen(false)} />
+      <ExecutionDetail record={viewingId ? records.find((x) => x.id === viewingId) || null : null} onClose={() => setViewingId(null)} />
     </div>
+  );
+}
+
+/* Read-only view of one execution record (opened by clicking its row): everything the list can't fit — the checklist with each
+   point's status/remarks, remarks, and the evidence photos (click one to open it full size in a new tab). */
+const DETAIL_LABEL = "text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1";
+function ExecutionDetail({ record: r, onClose }: { record: ExecutionRecord | null; onClose: () => void }) {
+  const fields: [string, string][] = r ? [
+    ["Project", (r.projectCode ? r.projectCode + " — " : "") + (r.projectName || "—")],
+    ["Floor", r.floorName || "—"],
+    ["Flat", r.unitName || "—"],
+    ["Work Type", r.workType || "—"],
+    ["Recorded By", r.recordedByName || "—"],
+    ["Date", r.recordDate || fmtDate(r.createdAt)]
+  ] : [];
+  const extra = r ? ([["Columns", r.columns], ["Slabs", r.slabs], ["Areas", r.areas]] as [string, string[] | undefined][]).filter(([, v]) => v && v.length) : [];
+  return (
+    <SidePanel
+      open={!!r}
+      wide
+      icon={<NavIcon name="execution" size={18} />}
+      title={r ? `${r.floorName}${r.unitName ? " / " + r.unitName : ""} · ${r.workType}` : ""}
+      desc={r ? `by ${r.recordedByName || "—"} · ${fmtDate(r.createdAt)}` : ""}
+      onClose={onClose}
+      footer={<button className="btn btn-secondary" onClick={onClose}>Close</button>}
+    >
+      {r && (
+        <div className="flex flex-col gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5">
+            {fields.map(([label, value]) => (
+              <div key={label}><div className={DETAIL_LABEL}>{label}</div><div className="text-[13px]">{value}</div></div>
+            ))}
+            {extra.map(([label, value]) => (
+              <div key={label} className="sm:col-span-2"><div className={DETAIL_LABEL}>{label}</div><div className="text-[13px]">{(value as string[]).join(", ")}</div></div>
+            ))}
+          </div>
+
+          <div>
+            <div className={DETAIL_LABEL}>Checklist</div>
+            {r.checklistItems && r.checklistItems.length > 0 ? (
+              <div className="flex flex-col">
+                {r.checklistItems.map((c, idx) => (
+                  <div key={idx} className="flex items-start gap-2.5 py-2 border-t border-[var(--border)] first:border-t-0 text-[12.5px]">
+                    <Badge color={c.status === "OK" ? "green" : c.status === "Not OK" ? "red" : "gray"}><span className="whitespace-nowrap">{c.status}</span></Badge>
+                    <div className="flex-1 min-w-0">{c.text}{c.remarks && <div className="text-[11.5px] text-[var(--text-muted)] mt-0.5">{c.remarks}</div>}</div>
+                  </div>
+                ))}
+              </div>
+            ) : <div className="text-[12.5px] text-[var(--text-muted)]">No checklist recorded.</div>}
+          </div>
+
+          {r.remarks && <div><div className={DETAIL_LABEL}>Remarks</div><div className="text-[13px] whitespace-pre-wrap">{r.remarks}</div></div>}
+
+          <div>
+            <div className={DETAIL_LABEL}>Photos ({r.photos?.length || 0})</div>
+            {r.photos && r.photos.length > 0 ? (
+              <div className="flex gap-2 flex-wrap">
+                {r.photos.map((p, idx) => (
+                  <a key={idx} href={p.url} target="_blank" rel="noreferrer" title="Open full size">
+                    <img src={p.url} alt={`Evidence photo ${idx + 1}`} className="w-24 h-24 object-cover rounded-radius-sm border border-[var(--border)]" />
+                  </a>
+                ))}
+              </div>
+            ) : <div className="text-[12.5px] text-[var(--text-muted)]">No photos.</div>}
+          </div>
+        </div>
+      )}
+    </SidePanel>
   );
 }
 
