@@ -414,6 +414,7 @@ This cannot be undone.`)) return;
   const [fResult, setFResult] = useState("");
   const [fDri, setFDri] = useState("");
   const [fSnagStatus, setFSnagStatus] = useState(""); // "", "open", "overdue", "closed"
+  const [fApproval, setFApproval] = useState(""); // "", "pending", "approved", "rejected", "none"
   const [fRange, setFRange] = useState<DateRange>("all");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -447,16 +448,20 @@ This cannot be undone.`)) return;
         if (fSnagStatus === "overdue" && !overdue) return false;
         if (fSnagStatus === "closed" && (!snag || snag.status !== "Closed")) return false;
       }
+      if (fApproval) {
+        const approval = effectiveApproval(data, i);
+        if (fApproval === "none" ? !!approval : approval?.status !== fApproval) return false;
+      }
       return true;
     }).sort((a, b) => b.createdAt - a.createdAt);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inspections, fProjectId, fFloorId, fResult, fDri, fSnagStatus, dateBounds, snags]);
+  }, [inspections, fProjectId, fFloorId, fResult, fDri, fSnagStatus, fApproval, dateBounds, snags, data]);
 
-  // Off `filtered` (Project/Floor/Date/DRI/Result/Snag Status all applied),
-  // not the page's full unfiltered `inspections` — so the tiles track
-  // whatever's currently selected above instead of always showing the
+  // Off `filtered` (Project/Floor/Date/DRI/Result/Snag Status/Approval all
+  // applied), not the page's full unfiltered `inspections` — so the tiles
+  // track whatever's currently selected above instead of always showing the
   // global total regardless of filters.
-  const filtersActive = !!(fProjectId || fFloorId || fResult || fDri || fSnagStatus || fRange !== "all");
+  const filtersActive = !!(fProjectId || fFloorId || fResult || fDri || fSnagStatus || fApproval || fRange !== "all");
 
   const openIssues = filtered.filter((i) => { const s = linkedSnag(i); return s && s.status !== "Closed"; }).length;
   const failedCount = filtered.filter((i) => i.result === "Fail").length;
@@ -480,6 +485,7 @@ This cannot be undone.`)) return;
       if (fResult) filterLabels.push(`Result: ${fResult}`);
       if (fDri) filterLabels.push(`DRI: ${byId(users, fDri)?.name || fDri}`);
       if (fSnagStatus) filterLabels.push(`Snag: ${fSnagStatus}`);
+      if (fApproval) filterLabels.push(`Approval: ${fApproval}`);
       const total = filtered.length;
       const pass = filtered.filter((i) => i.result === "Pass").length;
       const fail = filtered.filter((i) => i.result === "Fail").length;
@@ -578,6 +584,13 @@ This cannot be undone.`)) return;
             { value: "", label: "All" }, { value: "open", label: "Open" }, { value: "overdue", label: "Overdue" }, { value: "closed", label: "Closed" }
           ]} neutralActive />
         </div>
+        <div className="max-w-[170px]">
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Approval</div>
+          <SearchDropdown value={fApproval} onChange={setFApproval} options={[
+            { value: "", label: "All" }, { value: "none", label: "Not needed" }, { value: "pending", label: "Pending" },
+            { value: "approved", label: "Approved" }, { value: "rejected", label: "Rejected" }
+          ]} neutralActive />
+        </div>
         <Btn label={generating ? "Generating…" : "Generate Report"} color="secondary" icon="download" onClick={generateReport} disabled={generating} />
         <Btn label="Fail Register" color="secondary" icon="bug" onClick={() => setActiveTab("qualityFails" as TabKey)} />
         {filtersActive && (
@@ -585,7 +598,7 @@ This cannot be undone.`)) return;
             label="Clear filters"
             color="secondary"
             onClick={() => {
-              setFProjectId(""); setFFloorId(""); setFResult(""); setFDri(""); setFSnagStatus("");
+              setFProjectId(""); setFFloorId(""); setFResult(""); setFDri(""); setFSnagStatus(""); setFApproval("");
               setFRange("all"); setCustomFrom(""); setCustomTo(""); setCalendarOpen(false);
             }}
           />
