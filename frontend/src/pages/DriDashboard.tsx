@@ -10,7 +10,7 @@ import Badge from "../ui/tw/Badge";
 import StatTile from "../components/StatTile";
 import QualityFailures from "../components/QualityFailures";
 import { ApprovalQueue, SentBackList } from "../components/ApprovalControls";
-import type { TabKey, TeamDailyReport } from "../types";
+import type { TabKey, TeamDailyReport, QualityInspection } from "../types";
 
 /* One Team's Daily Report, pending or already-signed-off — the leader
    taps Approve, which is a sign-off record only (doesn't gate anything
@@ -63,6 +63,47 @@ function TeamReportCard({ report, canApprove }: { report: TeamDailyReport; canAp
         </div>
       )}
     </Card>
+  );
+}
+
+/* One Fail/Rework inspection on this DRI's own project, waiting for them to
+ * agree it genuinely failed here — separate from whatever team-leader
+ * approval the inspector's own finding needed (that's about trusting the
+ * inspector; this is the site's responsible person accepting it). Remarks
+ * are optional. Drives Tower Board's unacknowledged (purple) -> acknowledged
+ * (orange) Fail color for this unit/floor (see TowerBoard.tsx). */
+function AckRow({ insp }: { insp: QualityInspection }) {
+  const { apply, toast } = useApp();
+  const [remarks, setRemarks] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function acknowledge() {
+    setBusy(true);
+    const synced = await apply([{
+      op: "upsert", coll: "qualityInspections",
+      rec: { id: insp.id, driAcknowledged: true, driAcknowledgedRemarks: remarks.trim() || undefined }
+    } as any]);
+    setBusy(false);
+    toast(synced ? "Acknowledged" : "Saved on this device — will finish submitting once you're back online");
+  }
+
+  return (
+    <div className="py-3 px-4 border-b border-[var(--border)] last:border-b-0">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <div className="text-[13px] font-bold">{insp.projectName} · {insp.floorName}{insp.unitName ? ` / ${insp.unitName}` : ""}</div>
+          <div className="text-[11.5px] text-[var(--text-muted)] mt-0.5">{insp.workType} · {insp.result}{insp.remarks ? ` — ${insp.remarks}` : ""}</div>
+        </div>
+        <Badge color="red">Not acknowledged</Badge>
+      </div>
+      <div className="flex gap-2 mt-2.5 flex-wrap items-center">
+        <input
+          className="input" style={{ fontSize: 12, flex: "1 1 220px" }} placeholder="Remarks (optional)"
+          value={remarks} onChange={(e) => setRemarks(e.target.value)}
+        />
+        <Btn label={busy ? "Saving…" : "I agree — acknowledge"} size="sm" onClick={acknowledge} disabled={busy} />
+      </div>
+    </div>
   );
 }
 
@@ -128,6 +169,23 @@ export default function DriDashboard() {
   const sng = projectIds.flatMap((pid) => mySnags(data, pid, currentUserId));
   const myOpen = asg.length + sng.length;
 
+  // Fail/Rework inspections on THIS DRI's own project(s) that they haven't
+  // yet agreed genuinely failed here — regardless of who the corrective
+  // action happens to be assigned to (QualityFailures below only ever shows
+  // the person the SNAG is assigned to, which is almost never the site DRI
+  // themself).
+  const needsAck = coll(data, "qualityInspections")
+    .filter((i) => projectIds.includes(i.projectId) && i.result !== "Pass" && !i.driAcknowledged)
+    .sort((a, b) => b.createdAt - a.createdAt);
+
+  // Every OPEN snag on this DRI's own project(s), not just the ones
+  // assigned specifically to them (mySnags/sng above) — the site's DRI is
+  // responsible for knowing what's open on their own site even when the
+  // corrective action itself sits with someone else.
+  const projectSnags = projectIds.length
+    ? coll(data, "snags").filter((s) => projectIds.includes(s.projectId) && s.status !== "Closed").sort((a, b) => (b.raisedAt || 0) - (a.raisedAt || 0))
+    : [];
+
   const stats = [
     { label: "MY DRAWING REQUESTS", val: myTickets.length, icon: "drawing", foot: pending.length + " awaiting review", onClick: () => setActiveTab("drawingRequests" as TabKey) },
     { label: "APPROVED", val: approved, icon: "award", foot: "Cleared through all 4 stages" },
@@ -163,6 +221,32 @@ export default function DriDashboard() {
         {myOpen === 0
           ? <div className="py-6 px-5 text-center text-[var(--text-muted)] text-[13px]">🎉 Nothing assigned to you right now.</div>
           : <>{asg.slice(0, 5).map((a) => <AssignRow key={a.id} a={a} />)}{sng.slice(0, 5).map((s) => <SnagRow key={s.id} s={s} />)}</>}
+      </Card>
+
+      {needsAck.length > 0 && (
+        <>
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-2.5">
+            <div className="text-[13px] font-bold tracking-tight text-[var(--text-sub)] uppercase flex items-center gap-2">
+              <NavIcon name="bug" size={13} /> Quality Failures Needing Your Acknowledgment
+            </div>
+            <div className="text-[11px] text-[var(--text-muted)] font-medium">{needsAck.length} waiting</div>
+          </div>
+          <Card padded={false} className="mb-6">
+            {needsAck.slice(0, 10).map((insp) => <AckRow key={insp.id} insp={insp} />)}
+          </Card>
+        </>
+      )}
+
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-2.5">
+        <div className="text-[13px] font-bold tracking-tight text-[var(--text-sub)] uppercase flex items-center gap-2">
+          <NavIcon name="snags" size={13} /> Open Snags On My Project{projectIds.length === 1 ? "" : "s"}
+        </div>
+        <div className="text-[11px] text-[var(--text-muted)] font-medium">{projectSnags.length} open</div>
+      </div>
+      <Card padded={false} className="mb-6">
+        {projectSnags.length === 0
+          ? <div className="py-6 px-5 text-center text-[var(--text-muted)] text-[13px]">No open snags on your project(s) right now.</div>
+          : projectSnags.slice(0, 8).map((s) => <SnagRow key={s.id} s={s} showAssignee />)}
       </Card>
 
       <ApprovalQueue />

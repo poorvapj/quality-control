@@ -219,6 +219,16 @@ export const MASTERS: Record<MasterKey, MasterDef> = {
       { k: "canFinalApproveStage4", label: "Can give final approval at Stage 4", type: "bool", default: false }
     ]
   },
+  ackTimelines: {
+    label: "Acknowledgment Timeline", icon: "⏱️", prefix: "ACKT",
+    desc: "How many hours the site's own DRI gets to acknowledge a Fail/Rework before it counts as overdue — one row per Work Type (Quality Inspection's own checklist names). A Work Type with no row here never shows as overdue.",
+    cols: ["workType", "hours", "active"],
+    fields: [
+      { k: "workType", label: "Work Type", type: "text", required: true, hint: "Exact text as it appears in Quality Inspection's Work Type picker, e.g. \"Brickwork — During Brickwork\"" },
+      { k: "hours", label: "Hours to acknowledge", type: "number", required: true },
+      { k: "active", label: "Active", type: "bool" }
+    ]
+  },
   workTargets: {
     label: "Work Target", icon: "🎯", prefix: "WTG",
     desc: "One planned quantity per project + work category — Daily Progress Report qty entries roll up against this on the report page's Planned vs Completed table.",

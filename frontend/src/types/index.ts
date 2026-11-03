@@ -602,6 +602,17 @@ export interface QualityInspection extends BaseRecord {
   // the issue is actually fixed.
   reInspectionOf?: string | null;
   approval?: Approval;
+  // The project's own DRI acknowledging "yes, I agree this failed here" —
+  // separate from the team-leader approval above (that's whether the
+  // INSPECTOR's own finding is trusted; this is whether the site's
+  // responsible DRI has seen and accepted it). Only meaningful on a
+  // Fail/Rework result; remarks are optional. Drives Tower Board's
+  // unacknowledged-vs-acknowledged Fail color (TowerBoard.tsx).
+  driAcknowledged?: boolean;
+  driAcknowledgedAt?: number | null;
+  driAcknowledgedByUserId?: string | null;
+  driAcknowledgedByName?: string | null;
+  driAcknowledgedRemarks?: string;
   createdAt: number;
 }
 
@@ -817,6 +828,8 @@ export interface BoardData {
   customAreaNames: CustomAreaName[];
   columnMaster: ColumnMaster[];
   slabMaster: SlabMaster[];
+  ackTimelines: AckTimeline[];
+  executionRecords: ExecutionRecord[];
   progress: Record<string, ProgressPatch>;
   events: EventLog[];
   [key: string]: unknown;
@@ -872,6 +885,15 @@ export interface SlabMaster extends BaseRecord {
   seq?: number;
 }
 
+/* Masters ▸ Acknowledgment Timeline — how many hours the site's own DRI
+ * gets to acknowledge a Fail/Rework (QualityInspection.driAcknowledged)
+ * before it counts as overdue, one row per Work Type. */
+export interface AckTimeline extends BaseRecord {
+  workType: string;
+  hours: number;
+  active?: boolean;
+}
+
 export type CollectionName = keyof Omit<BoardData, "progress" | "events">;
 
 export type Op =
@@ -884,7 +906,7 @@ export type Op =
   | { op: "event"; ev: EventLog };
 
 export type TabKey = "dash" | "misDashboard" | "userMis" | "executionReconciliation" | "qualityInspection" | "execution" | "qualityFails" | "caseStudies" | "unitExecutionWorkflow" | "measurement" | "progressAnalysis" | "purchaseOrders" | "work" | "board" | "handoverChecklist" | "handoverInternal" | "handoverOwner" | "snags" | "team" | "masters" | "addUser" | "dpr" | "drawingRequests" | "backups" | "auditLog" | "permissionMatrix";
-export type MasterKey = "projects" | "floors" | "units" | "columnMaster" | "slabMaster" | "stages" | "qparams" | "checklists" | "stagemap" | "users" | "permissions" | "workTargets" | "teams" | "roles" | "forms";
+export type MasterKey = "projects" | "floors" | "units" | "columnMaster" | "slabMaster" | "stages" | "qparams" | "checklists" | "stagemap" | "users" | "permissions" | "workTargets" | "teams" | "roles" | "forms" | "ackTimelines";
 
 export type FieldType = "text" | "number" | "date" | "color" | "select" | "ref" | "bool" | "textarea" | "items" | "password" | "permissionGrid" | "formFields";
 

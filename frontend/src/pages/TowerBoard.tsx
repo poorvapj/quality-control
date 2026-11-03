@@ -20,6 +20,14 @@ type StatusFilter = "" | "open-snag" | "qc-fail" | "locked" | "handed-over" | "n
 const LENSES: BoardLens[] = ["all", "execution", "quality", "measurement"];
 const AMBER = "#f59e0b";
 const IN_PROGRESS_BLUE = "#3b82f6";
+// A Fail/Rework the site's own DRI hasn't acknowledged yet ("yes, I agree
+// this failed here" — separate from the team-leader approval, which is
+// about trusting the inspector's finding, not the DRI's own acceptance of
+// it) stays this distinct purple instead of the ordinary Fail red, so it
+// reads differently at a glance from a ready-to-fix/already-being-worked
+// failure. Turns this orange the moment the DRI acknowledges it.
+const UNACKNOWLEDGED_FAIL = "#9333EA";
+const ACKNOWLEDGED_FAIL = "#EA580C";
 
 export default function TowerBoard() {
   const { data, currentProjectId, setCurrentProjectId, currentUserId, openDrawer, myRole } = useApp();
@@ -231,11 +239,13 @@ export default function TowerBoard() {
                   let textColor: string | undefined;
                   let tip = `${u.name} · ${u.type || ""}`;
                   if (lens === "quality") {
-                    bg = qs === "checked" ? "var(--color-pass)" : qs === "failed" ? "var(--color-fail)" : qs === "pending" ? AMBER : qs === "in-progress" ? IN_PROGRESS_BLUE : "var(--bg-subtle)";
-                    if (qs === "none") textColor = "var(--text-sub)";
                     const failing = (qualityMap.get(u.id) ?? qualityByFloorMap.get(f.id))?.latest;
+                    bg = qs === "checked" ? "var(--color-pass)"
+                      : qs === "failed" ? (failing?.driAcknowledged ? ACKNOWLEDGED_FAIL : UNACKNOWLEDGED_FAIL)
+                      : qs === "pending" ? AMBER : qs === "in-progress" ? IN_PROGRESS_BLUE : "var(--bg-subtle)";
+                    if (qs === "none") textColor = "var(--text-sub)";
                     tip += qs === "checked" ? " · quality check passed — Finishing & Handover cleared"
-                      : qs === "failed" ? ` · quality check ${(failing?.result || "failed").toLowerCase()}${failing?.workType ? " — " + failing.workType : ""}${failing && !failing.unitId ? " (whole floor)" : ""}`
+                      : qs === "failed" ? ` · quality check ${(failing?.result || "failed").toLowerCase()}${failing?.workType ? " — " + failing.workType : ""}${failing && !failing.unitId ? " (whole floor)" : ""}${failing?.driAcknowledged ? " · DRI acknowledged" : " · awaiting DRI acknowledgment"}`
                       : qs === "pending" ? " · quality check passed — awaiting leader approval"
                       : qs === "in-progress" ? " · quality checks in progress — Finishing & Handover not cleared yet"
                       : " · not inspected yet";
@@ -257,7 +267,11 @@ export default function TowerBoard() {
                     // colour here too, so the two lenses never disagree on
                     // the same unit.
                     if (s.locked) bg = "var(--color-locked)";
-                    else if (s.fail || qs === "failed") bg = "var(--color-fail)";
+                    else if (s.fail) bg = "var(--color-fail)";
+                    else if (qs === "failed") {
+                      const failing = (qualityMap.get(u.id) ?? qualityByFloorMap.get(f.id))?.latest;
+                      bg = failing?.driAcknowledged ? ACKNOWLEDGED_FAIL : UNACKNOWLEDGED_FAIL;
+                    }
                     else if (qs === "pending") bg = AMBER;
                     else if (exDone) bg = "var(--color-pass)";
                     else if (s.complete) bg = "#64748b";
@@ -302,14 +316,16 @@ export default function TowerBoard() {
           {(lens === "quality" ? [
             { c: "var(--color-pass)", t: "Quality check passed (Finishing & Handover cleared)" },
             { c: IN_PROGRESS_BLUE, t: "In progress — earlier stages passed, Finishing & Handover not yet cleared" },
-            { c: "var(--color-fail)", t: "Failed / rework" },
+            { c: UNACKNOWLEDGED_FAIL, t: "Failed / rework — DRI hasn't acknowledged yet" },
+            { c: ACKNOWLEDGED_FAIL, t: "Failed / rework — DRI acknowledged" },
             { c: AMBER, t: "Passed — awaiting approval" },
             { c: "var(--bg-subtle)", t: "Not inspected", border: true }
           ] : lens === "execution" ? [
             { c: "var(--color-pass)", t: "Work completed (all trades done)" },
             { c: "var(--color-mep)", t: "Trades in progress" },
             { c: AMBER, t: "Quality check awaiting approval" },
-            { c: "var(--color-fail)", t: "QC fail / rework" },
+            { c: UNACKNOWLEDGED_FAIL, t: "QC fail / rework — DRI hasn't acknowledged yet" },
+            { c: ACKNOWLEDGED_FAIL, t: "QC fail / rework — DRI acknowledged" },
             { c: "var(--bg-subtle)", t: "Not started", border: true },
             { c: "var(--color-locked)", t: "Structure not released" },
             { c: "var(--theme-primary)", t: "Open snag" },
@@ -322,7 +338,8 @@ export default function TowerBoard() {
             { c: "#64748b", t: "Handed over" },
             { c: "var(--color-mep)", t: "Trades in progress" },
             { c: AMBER, t: "Quality check awaiting approval" },
-            { c: "var(--color-fail)", t: "QC fail / rework" },
+            { c: UNACKNOWLEDGED_FAIL, t: "QC fail / rework — DRI hasn't acknowledged yet" },
+            { c: ACKNOWLEDGED_FAIL, t: "QC fail / rework — DRI acknowledged" },
             { c: "var(--bg-subtle)", t: "Not started", border: true },
             { c: "var(--color-locked)", t: "Structure not released" },
             { c: "var(--theme-primary)", t: "Open snag" },

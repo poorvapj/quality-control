@@ -457,7 +457,7 @@ const PROJECT_SCOPED_COLLECTIONS = ["floors", "units", "snags", "assignments", "
 // controls when `myRole() === "ADMIN"`, but that was UI-only: any other
 // signed-in session could still upsert/delete these directly via
 // /api/ops. Mirrored here server-side (see assertOpAllowed).
-const MASTER_ROLE_GATED_COLLECTIONS = ["projects", "floors", "units", "stages", "qparams", "checklists", "stagemap", "permissions", "workTargets", "teams", "roles", "forms"];
+const MASTER_ROLE_GATED_COLLECTIONS = ["projects", "floors", "units", "stages", "qparams", "checklists", "stagemap", "permissions", "workTargets", "teams", "roles", "forms", "ackTimelines"];
 
 const roleCache = new Map(); // userId -> role, cleared per request is overkill; a stale role for a few seconds is an acceptable tradeoff for not hitting Mongo on every single op in a batch
 async function getUserRole(userId) {
@@ -1134,6 +1134,26 @@ async function applyApprovalRules(op, session) {
 
 async function assertOpAllowed(op, session) {
   if (op.op === "upsert" && op.coll === "qualityInspections" && op.rec) enforceResultFromChecklist(op.rec);
+  // The site's own DRI acknowledging a Fail/Rework ("yes, I agree this
+  // failed here") — a separate thing from the team-leader approval above
+  // (that's trust in the INSPECTOR's finding; this is the responsible DRI
+  // having seen and accepted it). Only that project's DRI, or an admin, may
+  // set it — never the inspector themself or anyone else.
+  if (op.op === "upsert" && op.coll === "qualityInspections" && op.rec && Object.prototype.hasOwnProperty.call(op.rec, "driAcknowledged")) {
+    if (!session) { const e = new Error("Sign-in required"); e.status = 401; throw e; }
+    const existing = await mongoDb.collection("qualityInspections").findOne({ id: op.rec.id }, { projection: { projectId: 1, result: 1 } });
+    if (!existing) { const e = new Error("Inspection not found"); e.status = 404; throw e; }
+    if (existing.result === "Pass") { const e = new Error("Only a Fail/Rework inspection can be acknowledged"); e.status = 400; throw e; }
+    if (!session.isAdmin) {
+      const user = await mongoDb.collection("users").findOne({ id: session.userId }, { projection: { role: 1, projectIds: 1 } });
+      const isProjectDri = user && user.role === "DRI" && Array.isArray(user.projectIds) && user.projectIds.includes(existing.projectId);
+      if (!isProjectDri) { const e = new Error("Only this project's DRI can acknowledge it"); e.status = 403; throw e; }
+    }
+    op.rec.driAcknowledgedAt = Date.now();
+    op.rec.driAcknowledgedByUserId = session.userId;
+    const approver = await mongoDb.collection("users").findOne({ id: session.userId }, { projection: { name: 1 } });
+    op.rec.driAcknowledgedByName = approver ? approver.name : null;
+  }
   await applyApprovalRules(op, session);
   const needsAdmin = op.op === "delete" || (op.op === "upsert" && (op.coll === "users" || op.coll === "moduleGrants"));
   if (needsAdmin) {
