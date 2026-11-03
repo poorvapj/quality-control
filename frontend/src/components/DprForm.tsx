@@ -177,7 +177,7 @@ export default function DprForm({ isPublic, onDone, onDirtyChange }: { isPublic:
     if (!submittedByName.trim()) { toast("DRI name is required"); return; }
     if (!shift) { toast("Pick a shift type"); return; }
     const labour = Number(labourCount);
-    if (!Number.isFinite(labour) || labour < 0) { toast("Number of labourers must be a non-negative number"); return; }
+    if (!Number.isFinite(labour) || labour < 1) { toast("Number of labourers must be at least 1"); return; }
 
     const workEntries = Object.keys(checked).filter((c) => checked[c]).map((c) => entries[c]);
     if (workEntries.length === 0) { toast("Check at least one work type"); return; }
@@ -287,7 +287,7 @@ export default function DprForm({ isPublic, onDone, onDirtyChange }: { isPublic:
         </div>
         <div className="field">
           <label>Number of labourers *</label>
-          <input className="input" type="number" min={0} placeholder="e.g. 12" value={labourCount} onChange={(e) => setLabourCount(e.target.value)} />
+          <input className="input" type="number" min={1} placeholder="e.g. 12" value={labourCount} onChange={(e) => setLabourCount(e.target.value)} />
         </div>
       </div>
 

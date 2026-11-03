@@ -1331,7 +1331,7 @@ async function assertOpAllowed(op, session) {
         const e = new Error("Unknown project"); e.status = 400; throw e;
       }
       const labour = Number(op.rec.labourCount);
-      if (!Number.isFinite(labour) || labour < 0) { const e = new Error("Labour count must be a non-negative number"); e.status = 400; throw e; }
+      if (!Number.isFinite(labour) || labour < 1) { const e = new Error("Labour count must be at least 1"); e.status = 400; throw e; }
       if (!/^\d{4}-\d{2}-\d{2}/.test(String(op.rec.date || ""))) { const e = new Error("A valid date is required"); e.status = 400; throw e; }
     }
     // A genuinely new report filled on QC itself (never one VMS just synced

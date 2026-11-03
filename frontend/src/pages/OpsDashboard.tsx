@@ -198,6 +198,28 @@ export default function OpsDashboard() {
     }
     return out;
   })();
+  // "All Projects" view: one row per project (overall % across every floor's
+  // units) instead of listing all 290+ individual floors — that's what was
+  // actually asked for; the floor-by-floor breakdown still shows as before
+  // once a single project is picked.
+  const projectProgressRows = viewAllProjects
+    ? allProjects.filter((p) => projectIds.includes(p.id)).map((p) => {
+        const entries = unitEntries.filter((e) => e.pid === p.id);
+        const d = entries.reduce((a, e) => a + e.s.done, 0);
+        const t = entries.reduce((a, e) => a + e.s.total, 0) || 1;
+        const pct = Math.round((d / t) * 100);
+        const pFloors = projectFloors(data, p.id);
+        const anyNotReleased = pFloors.some((f) => !floorReleased(data, p.id, f.id));
+        return { project: p, pct, unitCount: entries.length, floorCount: pFloors.length, anyNotReleased };
+      }).sort((a, b) => {
+        // Actively being worked on (started but not finished) floats to the
+        // top — that's where attention is actually needed right now, ahead
+        // of not-yet-started and already-100%-done projects.
+        const activeRank = (x: typeof a) => (x.pct > 0 && x.pct < 100 ? 0 : x.pct === 0 ? 1 : 2);
+        const r = activeRank(a) - activeRank(b);
+        return r !== 0 ? r : b.pct - a.pct;
+      })
+    : [];
   const floorPageCount = Math.max(1, Math.ceil(orderedFloors.length / FLOOR_LIST_CAP));
   const floorRows: Floor[] = orderedFloors.slice(floorPage * FLOOR_LIST_CAP, (floorPage + 1) * FLOOR_LIST_CAP);
 
@@ -348,13 +370,12 @@ export default function OpsDashboard() {
 
       <div className="flex items-center justify-between gap-3 flex-wrap mb-2.5">
         <div className="text-[13px] font-bold tracking-tight text-[var(--text-sub)] uppercase flex items-center gap-2">
-          <NavIcon name="trend" size={13} /> Floor Progress
+          <NavIcon name="trend" size={13} /> {viewAllProjects ? "Project Progress" : "Floor Progress"}
         </div>
-        {orderedFloors.length > FLOOR_LIST_CAP && (
+        {!viewAllProjects && orderedFloors.length > FLOOR_LIST_CAP && (
           <div className="flex items-center gap-2.5">
             <div className="text-[11px] text-[var(--text-muted)] font-medium">
               Floors {floorPage * FLOOR_LIST_CAP + 1}–{Math.min(orderedFloors.length, (floorPage + 1) * FLOOR_LIST_CAP)} of {orderedFloors.length}
-              {viewAllProjects ? " — a spread across every project, not just one" : ""}
             </div>
             <div className="flex gap-1">
               <Btn color="secondary" size="sm" label="‹ Prev" disabled={floorPage === 0} onClick={() => setFloorPage((p) => Math.max(0, p - 1))} />
@@ -364,7 +385,20 @@ export default function OpsDashboard() {
         )}
       </div>
       <Card padded={false} className="px-4 py-1">
-        {floorRows.map((f) => {
+        {viewAllProjects ? projectProgressRows.map(({ project, pct, unitCount, floorCount, anyNotReleased }) => (
+          <div key={project.id} className="py-2.5 border-b border-[var(--border)] last:border-b-0">
+            <div className="flex justify-between items-baseline gap-3">
+              <span className="text-[12.5px] font-bold truncate">{project.name}</span>
+              <span className="text-[11px] text-[var(--text-muted)] font-bold shrink-0">{pct}%</span>
+            </div>
+            <div className="text-[10.5px] text-[var(--text-sub)] font-semibold mt-0.5">
+              {floorCount} floor{floorCount === 1 ? "" : "s"} · {unitCount} units{anyNotReleased ? " · Structure in progress" : ""}
+            </div>
+            <div className="h-1.5 rounded-full bg-[var(--bg-subtle)] overflow-hidden mt-1.5">
+              <div className="h-full rounded-full" style={{ width: pct + "%", background: pct === 0 ? "var(--bg-subtle)" : pct === 100 ? "var(--color-pass)" : "var(--theme-primary)" }} />
+            </div>
+          </div>
+        )) : floorRows.map((f) => {
           const us = floorUnits(data, f.projectId, f.id);
           const s = us.map((u) => unitSummary(data, f.projectId, u.id));
           const d = s.reduce((a, x) => a + x.done, 0);
