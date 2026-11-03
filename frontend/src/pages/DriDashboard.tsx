@@ -2,13 +2,14 @@ import React, { useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, myProjects, myAssignments, mySnags } from "../shared/rules";
 import NavIcon from "../components/NavIcon";
+import SidePanel from "../components/SidePanel";
+import { viewPhoto } from "../shared/photoViewer";
 import AssignRow from "../components/AssignRow";
 import SnagRow from "../components/SnagRow";
 import Card from "../ui/tw/Card";
 import Btn from "../ui/tw/Btn";
 import Badge from "../ui/tw/Badge";
 import StatTile from "../components/StatTile";
-import QualityFailures from "../components/QualityFailures";
 import { ApprovalQueue, SentBackList } from "../components/ApprovalControls";
 import type { TabKey, TeamDailyReport, QualityInspection } from "../types";
 
@@ -76,6 +77,7 @@ function AckRow({ insp }: { insp: QualityInspection }) {
   const { apply, toast } = useApp();
   const [remarks, setRemarks] = useState("");
   const [busy, setBusy] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   async function acknowledge() {
     setBusy(true);
@@ -87,22 +89,70 @@ function AckRow({ insp }: { insp: QualityInspection }) {
     toast(synced ? "Acknowledged" : "Saved on this device — will finish submitting once you're back online");
   }
 
+  async function disagree() {
+    if (!remarks.trim()) { toast("Add a remark explaining why you disagree"); return; }
+    setBusy(true);
+    const synced = await apply([{
+      op: "upsert", coll: "qualityInspections",
+      rec: { id: insp.id, driDisputed: true, driAcknowledgedRemarks: remarks.trim() }
+    } as any]);
+    setBusy(false);
+    toast(synced ? "Marked as disputed" : "Saved on this device — will finish submitting once you're back online");
+  }
+
   return (
     <div className="py-3 px-4 border-b border-[var(--border)] last:border-b-0">
-      <div className="flex items-start justify-between gap-3 flex-wrap">
+      <div className="flex items-start justify-between gap-3 flex-wrap cursor-pointer" onClick={() => setExpanded(true)}>
         <div className="min-w-0">
           <div className="text-[13px] font-bold">{insp.projectName} · {insp.floorName}{insp.unitName ? ` / ${insp.unitName}` : ""}</div>
           <div className="text-[11.5px] text-[var(--text-muted)] mt-0.5">{insp.workType} · {insp.result}{insp.remarks ? ` — ${insp.remarks}` : ""}</div>
         </div>
         <Badge color="red">Not acknowledged</Badge>
       </div>
-      <div className="flex gap-2 mt-2.5 flex-wrap items-center">
-        <input
-          className="input" style={{ fontSize: 12, flex: "1 1 220px" }} placeholder="Remarks (optional)"
-          value={remarks} onChange={(e) => setRemarks(e.target.value)}
-        />
-        <Btn label={busy ? "Saving…" : "I agree — acknowledge"} size="sm" onClick={acknowledge} disabled={busy} />
-      </div>
+
+      <SidePanel
+        open={expanded} wide icon={<NavIcon name="alert-triangle" size={18} />}
+        title={insp.workType || "Quality Inspection"} desc={`${insp.projectName} · ${insp.floorName}${insp.unitName ? ` / ${insp.unitName}` : ""}`}
+        onClose={() => setExpanded(false)}
+        footer={<button className="btn btn-secondary" onClick={() => setExpanded(false)}>Close</button>}
+      >
+        <div className="flex items-center gap-2 mb-3">
+          <Badge color={insp.result === "Pass" ? "green" : insp.result === "Fail" ? "red" : "amber"}>{insp.result}</Badge>
+          {insp.inspectionDate && <span className="text-[11.5px] text-[var(--text-muted)]">{insp.inspectionDate}</span>}
+        </div>
+        {insp.checklistItems && insp.checklistItems.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            {insp.checklistItems.map((c, idx) => (
+              <div key={idx} className="text-[11.5px] flex gap-1.5">
+                <Badge color={c.status === "OK" ? "green" : c.status === "Not OK" ? "red" : "gray"}>{c.status}</Badge>
+                <span className="flex-1">{c.text}{c.remarks ? ` — ${c.remarks}` : ""}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {insp.remarks && <div className="text-[12px] mt-2.5">{insp.remarks}</div>}
+        {insp.photos?.length > 0 && (
+          <div className="flex gap-1.5 mt-3 flex-wrap">
+            {insp.photos.map((p, idx) => (
+              <img
+                key={idx} src={p.url} className="w-20 h-20 object-cover rounded-radius-sm border border-[var(--border)] cursor-pointer"
+                onClick={() => viewPhoto(p.url, insp.photos!.map((x) => x.url))}
+              />
+            ))}
+          </div>
+        )}
+
+        <div className="mt-4 pt-3 border-t border-[var(--border)]">
+          <input
+            className="input w-full" style={{ fontSize: 12.5 }} placeholder="Remarks — required if you disagree, optional if you agree"
+            value={remarks} onChange={(e) => setRemarks(e.target.value)}
+          />
+          <div className="flex gap-2 mt-2.5 flex-wrap">
+            <Btn label={busy ? "Saving…" : "I disagree"} color="secondary" size="sm" onClick={disagree} disabled={busy} />
+            <Btn label={busy ? "Saving…" : "I agree — acknowledge"} size="sm" onClick={acknowledge} disabled={busy} />
+          </div>
+        </div>
+      </SidePanel>
     </div>
   );
 }
@@ -175,17 +225,13 @@ export default function DriDashboard() {
   // the person the SNAG is assigned to, which is almost never the site DRI
   // themself).
   const needsAck = coll(data, "qualityInspections")
-    .filter((i) => projectIds.includes(i.projectId) && i.result !== "Pass" && !i.driAcknowledged)
+    .filter((i) => projectIds.includes(i.projectId) && i.result !== "Pass" && !i.driAcknowledged && !i.driDisputed)
     .sort((a, b) => b.createdAt - a.createdAt);
 
   // Every OPEN snag on this DRI's own project(s), not just the ones
   // assigned specifically to them (mySnags/sng above) — the site's DRI is
   // responsible for knowing what's open on their own site even when the
   // corrective action itself sits with someone else.
-  const projectSnags = projectIds.length
-    ? coll(data, "snags").filter((s) => projectIds.includes(s.projectId) && s.status !== "Closed").sort((a, b) => (b.raisedAt || 0) - (a.raisedAt || 0))
-    : [];
-
   const stats = [
     { label: "MY DRAWING REQUESTS", val: myTickets.length, icon: "drawing", foot: pending.length + " awaiting review", onClick: () => setActiveTab("drawingRequests" as TabKey) },
     { label: "APPROVED", val: approved, icon: "award", foot: "Cleared through all 4 stages" },
@@ -237,21 +283,11 @@ export default function DriDashboard() {
         </>
       )}
 
-      <div className="flex items-center justify-between gap-3 flex-wrap mb-2.5">
-        <div className="text-[13px] font-bold tracking-tight text-[var(--text-sub)] uppercase flex items-center gap-2">
-          <NavIcon name="snags" size={13} /> Open Snags On My Project{projectIds.length === 1 ? "" : "s"}
-        </div>
-        <div className="text-[11px] text-[var(--text-muted)] font-medium">{projectSnags.length} open</div>
-      </div>
-      <Card padded={false} className="mb-6">
-        {projectSnags.length === 0
-          ? <div className="py-6 px-5 text-center text-[var(--text-muted)] text-[13px]">No open snags on your project(s) right now.</div>
-          : projectSnags.slice(0, 8).map((s) => <SnagRow key={s.id} s={s} showAssignee />)}
-      </Card>
-
       <ApprovalQueue />
       <SentBackList />
-      <QualityFailures />
+      {/* "My Quality Failures" is dropped here — it's the same snags "What
+          Needs Me" above already shows (both key off snags assigned to this
+          user), so showing it again was pure duplication/confusion. */}
 
       {myTeam && (
         <>

@@ -26,6 +26,8 @@ export const ACTION_LABEL: Record<string, string> = {
   SNAG_OPEN: "Snag reopened as Open",
   SNAG_IN_PROGRESS: "Snag marked In Progress",
   SNAG_CLOSED: "Snag closed",
+  SNAG_NOT_APPLICABLE: "Snag marked Not Applicable",
+  SNAG_RESOLVED: "Snag marked resolved by Execution",
   DPR_SUBMIT: "Daily Progress Report submitted",
   DR_CREATE: "Drawing request created",
   DR_FORWARD_STAGE2: "Forwarded to production (Stage 2)",
@@ -78,7 +80,7 @@ interface ModuleDef { key: string; label: string; desc: string; icon: string; ac
 const MODULES: ModuleDef[] = [
   { key: "workProgress", label: "Work Progress", desc: "Stage acknowledgements, starts, completions, QC gates, and hidden-work measurements", icon: "board", actions: ["ACK", "START", "COMPLETE", "QC_FAIL", "QC_PASS", "MEASURE"] },
   { key: "assignments", label: "Assignments", desc: "Work handed off, accepted, reassigned, and marked done", icon: "work", actions: ["ASSIGN", "ASSIGN_ASSIGNED", "ASSIGN_ACCEPTED", "ASSIGN_DONE"] },
-  { key: "snags", label: "Snags", desc: "Quality defects raised, reassigned, reopened, and status changes", icon: "snags", actions: ["SNAG_RAISE", "SNAG_REOPEN", "SNAG_REASSIGN", "SNAG_OPEN", "SNAG_IN_PROGRESS", "SNAG_CLOSED"] },
+  { key: "snags", label: "Snags", desc: "Quality defects raised, reassigned, reopened, and status changes", icon: "snags", actions: ["SNAG_RAISE", "SNAG_REOPEN", "SNAG_REASSIGN", "SNAG_OPEN", "SNAG_IN_PROGRESS", "SNAG_CLOSED", "SNAG_NOT_APPLICABLE", "SNAG_RESOLVED"] },
   {
     key: "drawingRequests", label: "Drawing Requests", desc: "Drawing request review chain", icon: "drawing",
     actions: ["DR_CREATE", "DR_FORWARD_STAGE2", "DR_RETURN_STAGE1", "DR_SUBMIT_STAGE2", "DR_STAGE3_APPROVE", "DR_STAGE3_REJECT", "DR_STAGE4_APPROVE", "DR_STAGE4_REJECT", "DR_RESUBMIT", "DR_TRACKING_UPDATE"]

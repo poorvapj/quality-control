@@ -544,9 +544,10 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
 }
 
 function SnagDrawer({ id }: { id: string }) {
-  const { data, closeDrawer, toast } = useApp();
-  const { setSnagStatus, saveSnagAssignee, capturePhoto } = useActions();
+  const { data, closeDrawer, toast, myRole, currentUserId } = useApp();
+  const { setSnagStatus, markSnagNotApplicable, markSnagResolved, saveSnagAssignee, capturePhoto } = useActions();
   const fileRef = useRef<HTMLInputElement>(null);
+  const resolveFileRef = useRef<HTMLInputElement>(null);
   const s = byId(coll(data, "snags"), id);
   // Starts neutral ("Choose") rather than pre-filled with the current
   // assignee — who it's presently assigned to already shows separately
@@ -624,7 +625,10 @@ function SnagDrawer({ id }: { id: string }) {
           <Field><div style={label}>Raised By</div><div style={value}>{refLabel(data, "users", s.raisedBy)}<div style={{ fontSize: 11.5, color: "var(--text-sub)", marginTop: 2 }}>{ago(s.raisedAt)}</div></div></Field>
           <Field><div style={label}>Assigned DRI</div><div style={value}>{refLabel(data, "users", s.assignedTo)}</div></Field>
           {s.closedAt && (
-            <Field full><div style={label}>Closed</div><div style={value}>{fmtDT(s.closedAt)} by {refLabel(data, "users", s.closedBy)}</div></Field>
+            <Field full><div style={label}>Closed</div><div style={value}>{fmtDT(s.closedAt)} by {refLabel(data, "users", s.closedBy)}{s.closeReason === "Not Applicable" ? " — Not Applicable" : ""}</div></Field>
+          )}
+          {s.resolvedAt && !closed && (
+            <Field full><div style={label}>Marked Resolved (awaiting re-inspection)</div><div style={value}>{fmtDT(s.resolvedAt)} by {refLabel(data, "users", s.resolvedBy)}</div></Field>
           )}
           {!!s.reopenCount && (
             <Field full><div style={label}>Reopened</div><div style={value}>{s.reopenCount}× · last {fmtDT(s.reopenedAt)} by {refLabel(data, "users", s.reopenedBy)}</div></Field>
@@ -657,13 +661,32 @@ function SnagDrawer({ id }: { id: string }) {
           className="btn btn-secondary btn-sm"
           onClick={() => { if (!assignee) { toast("Choose someone first"); return; } saveSnagAssignee(s.id, assignee); setAssignee(""); }}
         >Save assignee</button>
+        {!closed && isQualityFailSnag && (myRole() === "DRI" || myRole() === "ADMIN") && (
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => { if (confirm("Mark this snag Not Applicable and close it without a re-inspection?")) markSnagNotApplicable(s.id); }}
+          >Not Applicable</button>
+        )}
+        {!closed && isQualityFailSnag && myRole() === "Execution" && s.assignedTo === currentUserId && (
+          <button className="btn btn-secondary btn-sm" onClick={() => resolveFileRef.current?.click()}>✅ Resolve (add photo)</button>
+        )}
         {closed ? (
           <button className="btn btn-secondary btn-sm" onClick={() => setSnagStatus(s.id, "Open")}>Reopen</button>
+        ) : isQualityFailSnag ? (
+          // Closes automatically once re-inspected and passed (see
+          // QualityInspection.tsx) — but the DRI can also close it directly
+          // here, as long as there's a photo on record as evidence.
+          (myRole() === "DRI" || myRole() === "ADMIN") && (
+            <button
+              className="btn btn-success btn-sm"
+              onClick={() => {
+                if (!(s.photos || []).length) { toast("Add a photo before closing this snag"); return; }
+                setSnagStatus(s.id, "Closed");
+              }}
+            >Close snag</button>
+          )
         ) : (
-          <>
-            <button className="btn btn-secondary btn-sm" onClick={() => setSnagStatus(s.id, "In Progress")}>In progress</button>
-            <button className="btn btn-success btn-sm" onClick={() => setSnagStatus(s.id, "Closed")}>Close snag</button>
-          </>
+          <button className="btn btn-success btn-sm" onClick={() => setSnagStatus(s.id, "Closed")}>Close snag</button>
         )}
       </div>
       <input
@@ -672,6 +695,14 @@ function SnagDrawer({ id }: { id: string }) {
           const file = e.target.files?.[0];
           e.target.value = "";
           if (file) capturePhoto("snag", s.id, "", file);
+        }}
+      />
+      <input
+        type="file" accept="image/*" capture="environment" ref={resolveFileRef} style={{ display: "none" }}
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (file) { await capturePhoto("snag", s.id, "", file); await markSnagResolved(s.id); }
         }}
       />
     </>

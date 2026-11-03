@@ -232,6 +232,30 @@ export function useActions() {
     toast(!synced ? OFFLINE_TOAST : reopening ? "Snag reopened" : "Snag " + status.toLowerCase());
   }
 
+  async function markSnagNotApplicable(id: string) {
+    const s = byId(coll(data, "snags"), id);
+    if (!s) return;
+    const synced = await apply([
+      { op: "upsert", coll: "snags", rec: { id: s.id, status: "Closed", closeReason: "Not Applicable", closedAt: Date.now(), closedBy: currentUserId } },
+      logEvent("SNAG_NOT_APPLICABLE", s.unitId || "", s.stageId, s.title)
+    ]);
+    reopenDrawer();
+    toast(synced ? "Marked Not Applicable" : OFFLINE_TOAST);
+  }
+
+  // The assigned Execution person flagging their corrective work as done —
+  // doesn't close the snag (only a passing re-inspection does that), just
+  // records that it's ready to be checked.
+  async function markSnagResolved(id: string) {
+    const s = byId(coll(data, "snags"), id);
+    if (!s) return;
+    const synced = await apply([
+      { op: "upsert", coll: "snags", rec: { id: s.id, resolvedAt: Date.now(), resolvedBy: currentUserId } },
+      logEvent("SNAG_RESOLVED", s.unitId || "", s.stageId, s.title)
+    ]);
+    toast(synced ? "Marked resolved — awaiting re-inspection" : OFFLINE_TOAST);
+  }
+
   async function saveSnagAssignee(id: string, to: string) {
     const s = byId(coll(data, "snags"), id);
     if (!s) return;
@@ -433,7 +457,7 @@ export function useActions() {
 
   return {
     ackStage, startStage, completeStage, failStage, submitChecklist,
-    saveAssignment, setAssignStatus, saveSnag, setSnagStatus, saveSnagAssignee, capturePhoto,
+    saveAssignment, setAssignStatus, saveSnag, setSnagStatus, markSnagNotApplicable, markSnagResolved, saveSnagAssignee, capturePhoto,
     ackStageItem, startStageItem, completeStageItem, failStageItem, submitStageItemChecklist, captureStageItemPhoto,
     releaseNextOps, logEvent
   };

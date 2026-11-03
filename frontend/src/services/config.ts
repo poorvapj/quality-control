@@ -219,12 +219,48 @@ export const MASTERS: Record<MasterKey, MasterDef> = {
       { k: "canFinalApproveStage4", label: "Can give final approval at Stage 4", type: "bool", default: false }
     ]
   },
+  checklistGroups: {
+    label: "Checklist Groups (Work Types)", icon: "📋", prefix: "CKG",
+    desc: "Top-level Quality Inspection Work Types. \"Standalone\" = one flat checklist (e.g. Column Inspection). \"Phased\" = split into timed phases you add separately below (e.g. Brickwork — Before/During Brickwork…), each phase gated on the one before it passing.",
+    cols: ["name", "kind", "scope", "order", "active"],
+    fields: [
+      { k: "name", label: "Name", type: "text", required: true, hint: "Shown as the Work Type itself (standalone) or as the \"<name> — \" prefix on each phase." },
+      { k: "kind", label: "Kind", type: "select", options: ["standalone", "phased"], required: true },
+      { k: "scope", label: "Scope", type: "select", options: ["floor", "unit", "unit-area"], hint: "Phased groups only. floor = whole floor (e.g. RCC); unit = one flat; unit-area = per wet area within a flat (e.g. Waterproofing)." },
+      { k: "order", label: "Order", type: "number" },
+      { k: "active", label: "Active", type: "bool" }
+    ]
+  },
+  checklistPhases: {
+    label: "Checklist Phases", icon: "🧱", prefix: "CKP",
+    desc: "Ordered phases within a \"phased\" Checklist Group — order decides the pass-before-next-unlocks gating sequence. Add the checklist items for each phase in Checklist Items below.",
+    cols: ["groupId", "label", "nameOverride", "order", "active"],
+    fields: [
+      { k: "groupId", label: "Checklist Group", type: "ref", coll: "checklistGroups", required: true },
+      { k: "label", label: "Phase label", type: "text", required: true, hint: "e.g. \"Before Pour\", \"During Brickwork\"" },
+      { k: "nameOverride", label: "Show/store under a different group name", type: "text", hint: "Optional — leave blank unless this phase should read as \"<other name> — <label>\" instead of its own group's name (used for the 3 Plastering phases under Brickwork, which read as \"Brickwork & Plaster — …\")." },
+      { k: "order", label: "Order", type: "number", required: true },
+      { k: "active", label: "Active", type: "bool" }
+    ]
+  },
+  checklistItems: {
+    label: "Checklist Items", icon: "✅", prefix: "CKI",
+    desc: "The individual checklist points shown/filled on a Quality Inspection or Execution form. Pick the Checklist Group; for a \"phased\" group also pick which Phase this item belongs to (leave Phase blank for a \"standalone\" group).",
+    cols: ["groupId", "phaseId", "text", "order", "active"],
+    fields: [
+      { k: "groupId", label: "Checklist Group", type: "ref", coll: "checklistGroups", required: true },
+      { k: "phaseId", label: "Phase", type: "ref", coll: "checklistPhases", hint: "Leave blank for a standalone group's items." },
+      { k: "text", label: "Checklist point", type: "textarea", required: true },
+      { k: "order", label: "Order", type: "number", required: true },
+      { k: "active", label: "Active", type: "bool" }
+    ]
+  },
   ackTimelines: {
     label: "Acknowledgment Timeline", icon: "⏱️", prefix: "ACKT",
-    desc: "How many hours the site's own DRI gets to acknowledge a Fail/Rework before it counts as overdue — one row per Work Type (Quality Inspection's own checklist names). A Work Type with no row here never shows as overdue.",
+    desc: "How many hours the site's own DRI gets to acknowledge a Fail/Rework before it counts as overdue — one row per checklist GROUP (the part of a Quality Inspection Work Type before the \" — \", e.g. \"Brickwork\", \"Brickwork & Plaster\", \"R.C.C. Slab Inspection\", \"Plumbing & Electrical Inspection\" — covers every phase under that group). A group with no row here never shows as overdue.",
     cols: ["workType", "hours", "active"],
     fields: [
-      { k: "workType", label: "Work Type", type: "text", required: true, hint: "Exact text as it appears in Quality Inspection's Work Type picker, e.g. \"Brickwork — During Brickwork\"" },
+      { k: "workType", label: "Checklist group", type: "text", required: true, hint: "Exact group name as it appears before \" — \" in Quality Inspection's Work Type picker, e.g. \"Brickwork\" (covers Before/During Brickwork) or \"Brickwork & Plaster\" (covers the 3 Plastering phases) — not the full phase name." },
       { k: "hours", label: "Hours to acknowledge", type: "number", required: true },
       { k: "active", label: "Active", type: "bool" }
     ]

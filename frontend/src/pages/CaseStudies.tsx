@@ -11,11 +11,9 @@ import PhotoGroupUploader from "../components/PhotoGroupUploader";
 import SidePanel from "../components/SidePanel";
 import Card from "../ui/tw/Card";
 import Btn from "../ui/tw/Btn";
-import { QC_CHECKLISTS } from "./QualityInspection";
+import { useChecklistDefs } from "../shared/checklistDefs";
 import { uploadPhoto } from "../shared/uploadPhoto";
 import type { CaseStudy, Photo, Op } from "../types";
-
-const CATEGORY_OPTIONS = Object.keys(QC_CHECKLISTS);
 
 /* A quality issue written up for reference/training — not a day-to-day
  * operational record like Quality Inspection, so this is its own simple
@@ -209,6 +207,8 @@ function CaseStudyForm({
   toast: (msg: string) => void;
   draft?: { projectId?: string; floorId?: string; category?: string; linkedInspectionId: string } | null;
 }) {
+  const { QC_CHECKLISTS } = useChecklistDefs();
+  const CATEGORY_OPTIONS = Object.keys(QC_CHECKLISTS);
   const [title, setTitle] = useState("");
   const [projectId, setProjectId] = useState("");
   const [floorId, setFloorId] = useState("");

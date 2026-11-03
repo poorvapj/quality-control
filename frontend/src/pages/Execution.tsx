@@ -12,7 +12,7 @@ import Card from "../ui/tw/Card";
 import Btn from "../ui/tw/Btn";
 import Badge from "../ui/tw/Badge";
 import Table, { TableRow, TableCell } from "../ui/tw/Table";
-import { WORK_TYPES, QC_CHECKLISTS, CHECKLIST_STATUSES, isFlatWise } from "./QualityInspection";
+import { useChecklistDefs, CHECKLIST_STATUSES } from "../shared/checklistDefs";
 import type { ExecutionRecord, Photo, Op } from "../types";
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -25,6 +25,7 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
    Snag auto-raise. The actual Quality Inspection still decides pass/fail. */
 export default function Execution() {
   const { data, currentUserId } = useApp();
+  const { WORK_TYPES, QC_CHECKLISTS, isFlatWise } = useChecklistDefs();
   const [panelOpen, setPanelOpen] = useState(false);
   const [fProjectId, setFProjectId] = useState("");
   const [viewingId, setViewingId] = useState<string | null>(null); // a clicked row: shows that record's full details
@@ -157,6 +158,7 @@ function ExecutionDetail({ record: r, onClose }: { record: ExecutionRecord | nul
 
 function ExecutionForm({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { data, apply, toast, currentUserId, me } = useApp();
+  const { WORK_TYPES, QC_CHECKLISTS, isFlatWise } = useChecklistDefs();
   const allProjects = myProjects(data, currentUserId);
   const [projectId, setProjectId] = useState("");
   const [floorId, setFloorId] = useState("");
@@ -194,7 +196,7 @@ function ExecutionForm({ open, onClose }: { open: boolean; onClose: () => void }
     if (!workType) { toast("Select a Work Type first"); return; }
     if (flatWise && !unitId) { toast("Pick the flat"); return; }
     if (checklist.some((row) => !row.status)) { toast("Mark every checklist point as OK / Not OK / N/A"); return; }
-    if (photos.length === 0) { toast("Add at least one photo as evidence"); return; }
+    if (photos.length === 0 && !import.meta.env.DEV) { toast("Add at least one photo as evidence"); return; }
 
     setSaving(true);
     const floor = byId(floors, floorId);

@@ -27,7 +27,25 @@ const IN_PROGRESS_BLUE = "#3b82f6";
 // reads differently at a glance from a ready-to-fix/already-being-worked
 // failure. Turns this orange the moment the DRI acknowledges it.
 const UNACKNOWLEDGED_FAIL = "#9333EA";
-const ACKNOWLEDGED_FAIL = "#EA580C";
+// Acknowledged but the corrective-action due date hasn't passed yet — still
+// being worked on, on time.
+const ACKNOWLEDGED_ON_TIME = "#EA580C";
+// Acknowledged, snag still open, and its own due date has passed — the open
+// Fail/Rework color (var(--color-fail), set below) doubles for this.
+const ACKNOWLEDGED_OVERDUE = "var(--color-fail)";
+
+/* Fail/Rework tile color for an open (unresolved) quality failure:
+   purple until the DRI acknowledges it, then orange while the corrective
+   action is still within its due date, then red once that date passes.
+   A RESOLVED failure (re-inspected and passed) isn't handled here — it's
+   simply no longer "failed", so it already gets the normal Pass green
+   elsewhere. */
+function failTileColor(failing: { driAcknowledged?: boolean; linkedSnagId?: string | null } | undefined, snagById: Map<string, { dueAt?: number | null }>): string {
+  if (!failing?.driAcknowledged) return UNACKNOWLEDGED_FAIL;
+  const snag = failing.linkedSnagId ? snagById.get(failing.linkedSnagId) : null;
+  const overdue = !!snag?.dueAt && Date.now() > snag.dueAt;
+  return overdue ? ACKNOWLEDGED_OVERDUE : ACKNOWLEDGED_ON_TIME;
+}
 
 export default function TowerBoard() {
   const { data, currentProjectId, setCurrentProjectId, currentUserId, openDrawer, myRole } = useApp();
@@ -58,6 +76,8 @@ export default function TowerBoard() {
   const stageLens = lens === "all" || lens === "execution"; // the original stage-progress colouring
   const inspectionsColl = coll(data, "qualityInspections");
   const measurementsColl = coll(data, "materialMeasurements");
+  const snagsColl = coll(data, "snags");
+  const snagById = useMemo(() => new Map(snagsColl.map((s) => [s.id, s])), [snagsColl]);
   const qualityMap = useMemo(() => qualityByUnit(inspectionsColl), [inspectionsColl]);
   const qualityByFloorMap = useMemo(() => qualityByFloor(inspectionsColl), [inspectionsColl]);
   const measureMap = useMemo(() => measurementByUnit(measurementsColl), [measurementsColl]);
@@ -241,7 +261,7 @@ export default function TowerBoard() {
                   if (lens === "quality") {
                     const failing = (qualityMap.get(u.id) ?? qualityByFloorMap.get(f.id))?.latest;
                     bg = qs === "checked" ? "var(--color-pass)"
-                      : qs === "failed" ? (failing?.driAcknowledged ? ACKNOWLEDGED_FAIL : UNACKNOWLEDGED_FAIL)
+                      : qs === "failed" ? failTileColor(failing, snagById)
                       : qs === "pending" ? AMBER : qs === "in-progress" ? IN_PROGRESS_BLUE : "var(--bg-subtle)";
                     if (qs === "none") textColor = "var(--text-sub)";
                     tip += qs === "checked" ? " · quality check passed — Finishing & Handover cleared"
@@ -270,7 +290,7 @@ export default function TowerBoard() {
                     else if (s.fail) bg = "var(--color-fail)";
                     else if (qs === "failed") {
                       const failing = (qualityMap.get(u.id) ?? qualityByFloorMap.get(f.id))?.latest;
-                      bg = failing?.driAcknowledged ? ACKNOWLEDGED_FAIL : UNACKNOWLEDGED_FAIL;
+                      bg = failTileColor(failing, snagById);
                     }
                     else if (qs === "pending") bg = AMBER;
                     else if (exDone) bg = "var(--color-pass)";
@@ -317,7 +337,8 @@ export default function TowerBoard() {
             { c: "var(--color-pass)", t: "Quality check passed (Finishing & Handover cleared)" },
             { c: IN_PROGRESS_BLUE, t: "In progress — earlier stages passed, Finishing & Handover not yet cleared" },
             { c: UNACKNOWLEDGED_FAIL, t: "Failed / rework — DRI hasn't acknowledged yet" },
-            { c: ACKNOWLEDGED_FAIL, t: "Failed / rework — DRI acknowledged" },
+            { c: ACKNOWLEDGED_ON_TIME, t: "DRI acknowledged — within time" },
+            { c: ACKNOWLEDGED_OVERDUE, t: "DRI acknowledged — overdue" },
             { c: AMBER, t: "Passed — awaiting approval" },
             { c: "var(--bg-subtle)", t: "Not inspected", border: true }
           ] : lens === "execution" ? [
@@ -325,7 +346,8 @@ export default function TowerBoard() {
             { c: "var(--color-mep)", t: "Trades in progress" },
             { c: AMBER, t: "Quality check awaiting approval" },
             { c: UNACKNOWLEDGED_FAIL, t: "QC fail / rework — DRI hasn't acknowledged yet" },
-            { c: ACKNOWLEDGED_FAIL, t: "QC fail / rework — DRI acknowledged" },
+            { c: ACKNOWLEDGED_ON_TIME, t: "DRI acknowledged — within time" },
+            { c: ACKNOWLEDGED_OVERDUE, t: "DRI acknowledged — overdue" },
             { c: "var(--bg-subtle)", t: "Not started", border: true },
             { c: "var(--color-locked)", t: "Structure not released" },
             { c: "var(--theme-primary)", t: "Open snag" },
@@ -339,7 +361,8 @@ export default function TowerBoard() {
             { c: "var(--color-mep)", t: "Trades in progress" },
             { c: AMBER, t: "Quality check awaiting approval" },
             { c: UNACKNOWLEDGED_FAIL, t: "QC fail / rework — DRI hasn't acknowledged yet" },
-            { c: ACKNOWLEDGED_FAIL, t: "QC fail / rework — DRI acknowledged" },
+            { c: ACKNOWLEDGED_ON_TIME, t: "DRI acknowledged — within time" },
+            { c: ACKNOWLEDGED_OVERDUE, t: "DRI acknowledged — overdue" },
             { c: "var(--bg-subtle)", t: "Not started", border: true },
             { c: "var(--color-locked)", t: "Structure not released" },
             { c: "var(--theme-primary)", t: "Open snag" },

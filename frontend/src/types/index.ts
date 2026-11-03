@@ -225,6 +225,16 @@ export interface Snag extends BaseRecord {
   // (see QualityInspection.linkedSnagId, the reverse pointer) — omitted for
   // every other snag source (QC gate checklist failures, manually raised).
   qualityInspectionId?: string | null;
+  // The assigned Execution person flagging their corrective work done (with
+  // photo proof) — does NOT close the snag itself; it's still only closed
+  // by a passing re-inspection. Just lets everyone see work is ready to be
+  // checked, instead of it looking untouched.
+  resolvedAt?: number | null;
+  resolvedBy?: string | null;
+  // DRI closing a quality-fail snag as not actually applicable here, instead
+  // of through the normal fix-then-re-inspect path. "Resolved" (the
+  // default/implicit value) means it closed the normal way.
+  closeReason?: "Resolved" | "Not Applicable";
 }
 
 export interface Assignment extends BaseRecord {
@@ -613,6 +623,14 @@ export interface QualityInspection extends BaseRecord {
   driAcknowledgedByUserId?: string | null;
   driAcknowledgedByName?: string | null;
   driAcknowledgedRemarks?: string;
+  // The DRI disputing the fail instead of acknowledging it ("I disagree —
+  // this isn't actually failing here"). Remarks are required so there's
+  // always a reason on record. Mutually exclusive with driAcknowledged;
+  // either one settles the "needs acknowledgment" state on DriDashboard.
+  driDisputed?: boolean;
+  driDisputedAt?: number | null;
+  driDisputedByUserId?: string | null;
+  driDisputedByName?: string | null;
   createdAt: number;
 }
 
@@ -830,6 +848,9 @@ export interface BoardData {
   slabMaster: SlabMaster[];
   ackTimelines: AckTimeline[];
   executionRecords: ExecutionRecord[];
+  checklistGroups: ChecklistGroup[];
+  checklistPhases: ChecklistPhase[];
+  checklistItems: ChecklistItemDef[];
   progress: Record<string, ProgressPatch>;
   events: EventLog[];
   [key: string]: unknown;
@@ -894,6 +915,30 @@ export interface AckTimeline extends BaseRecord {
   active?: boolean;
 }
 
+export interface ChecklistGroup extends BaseRecord {
+  name: string;
+  kind: "standalone" | "phased";
+  scope?: "floor" | "unit" | "unit-area";
+  order?: number;
+  active?: boolean;
+}
+
+export interface ChecklistPhase extends BaseRecord {
+  groupId: string;
+  label: string;
+  nameOverride?: string;
+  order?: number;
+  active?: boolean;
+}
+
+export interface ChecklistItemDef extends BaseRecord {
+  groupId: string;
+  phaseId?: string | null;
+  text: string;
+  order?: number;
+  active?: boolean;
+}
+
 export type CollectionName = keyof Omit<BoardData, "progress" | "events">;
 
 export type Op =
@@ -906,7 +951,7 @@ export type Op =
   | { op: "event"; ev: EventLog };
 
 export type TabKey = "dash" | "misDashboard" | "userMis" | "executionReconciliation" | "qualityInspection" | "execution" | "qualityFails" | "caseStudies" | "unitExecutionWorkflow" | "measurement" | "progressAnalysis" | "purchaseOrders" | "work" | "board" | "handoverChecklist" | "handoverInternal" | "handoverOwner" | "snags" | "team" | "masters" | "addUser" | "dpr" | "drawingRequests" | "backups" | "auditLog" | "permissionMatrix";
-export type MasterKey = "projects" | "floors" | "units" | "columnMaster" | "slabMaster" | "stages" | "qparams" | "checklists" | "stagemap" | "users" | "permissions" | "workTargets" | "teams" | "roles" | "forms" | "ackTimelines";
+export type MasterKey = "projects" | "floors" | "units" | "columnMaster" | "slabMaster" | "stages" | "qparams" | "checklists" | "stagemap" | "users" | "permissions" | "workTargets" | "teams" | "roles" | "forms" | "ackTimelines" | "checklistGroups" | "checklistPhases" | "checklistItems";
 
 export type FieldType = "text" | "number" | "date" | "color" | "select" | "ref" | "bool" | "textarea" | "items" | "password" | "permissionGrid" | "formFields";
 

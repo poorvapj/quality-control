@@ -40,7 +40,10 @@ const COLLECTIONS = [
   "slabMaster", // Masters ▸ Slab Master — R.C.C. Slab Inspection's "Select Slabs" option list (replaces the old fixed Slab 1-10 + customSlabNames)
   "caseStudies", // Quality issue writeups (root cause / corrective action / lessons learned) — standalone, optionally linked to a QualityInspection
   "executionRecords", // Execution team's own self-recorded "work done" entries — same Project/Floor/Flat + Work Type + checklist shape as qualityInspections, no approval/Snag workflow
-  "ackTimelines" // Masters ▸ Acknowledgment Timeline — hours the site DRI gets to acknowledge a Fail/Rework, per Work Type
+  "ackTimelines", // Masters ▸ Acknowledgment Timeline — hours the site DRI gets to acknowledge a Fail/Rework, per Work Type
+  "checklistGroups", // Masters ▸ Checklist Groups — the Work Types shown in Quality Inspection/Execution (standalone or phased)
+  "checklistPhases", // Masters ▸ Checklist Phases — ordered phases within a phased Checklist Group (gating sequence)
+  "checklistItems" // Masters ▸ Checklist Items — the actual checklist points for a group (standalone) or phase
 ];
 
 function blankData() {

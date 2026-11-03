@@ -25,279 +25,19 @@ interface VmsWorkOrderEntry { workOrderNo: string; items: VmsWorkItem[] }
 interface VmsProjectEntry { projectCode: string; projectName: string; workOrders: VmsWorkOrderEntry[] }
 type WorkItemsResponse = { available: false; reason: string } | { available: true; projects: VmsProjectEntry[] };
 
+import { useChecklistDefs, CHECKLIST_STATUSES as _CHECKLIST_STATUSES } from "../shared/checklistDefs";
+
 const RESULTS: QualityInspectionResult[] = ["Pass", "Fail", "Rework Required"];
 const SEVERITIES: Severity[] = ["Critical", "Major", "Minor"];
-export const CHECKLIST_STATUSES = ["OK", "Not OK", "N/A"] as const;
+export const CHECKLIST_STATUSES = _CHECKLIST_STATUSES;
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
-// Checklists that aren't split into timed phases — one flat list, same as
-// always. Keyed by the checklist's own title, used as both the "Work Type"
-// picker's value and the record's `workType`.
-const STANDALONE_CHECKLISTS: Record<string, string[]> = {
-  "Material Testing & Quality Checks": [
-    "Concrete strength: verify approved mix design, sampling, cube/cylinder casting, identification, curing, and compressive-strength test reports.",
-    "Sand: check grading/particle size, silt content, cleanliness, and compliance with approved specifications.",
-    "Coarse aggregate (metal): check nominal size, grading, shape/flakiness, cleanliness, and approved test results.",
-    "Bricks — strength: verify compressive-strength test results and compliance with specifications.",
-    "Bricks — water absorption: check water absorption test results as per applicable standards.",
-    "Other required material tests: verify test certificates and approvals before use."
-  ],
-  "Column Inspection": [
-    "Location and dimensions: confirm column position, size, and orientation against approved structural drawings.",
-    "Reinforcement steel: verify bar diameter, number, spacing, lap/development length, anchorage, and stirrup spacing.",
-    "Concrete cover: check specified cover blocks and required clear cover on all sides.",
-    "Shuttering/formwork: verify dimensions, line, level, verticality, rigidity, joints, cleanliness, and application of release agent.",
-    "Plumb: check column verticality before concreting and recheck as required."
-  ],
-  "Tile Work Inspection": [
-    "Floor level and slope: verify finished levels and required slope toward floor traps/drains in wet areas.",
-    "Tile condition: check tiles for cracks, chips, scratches, stains, and other visible defects before laying.",
-    "Base surface: confirm the substrate is sound, clean, level/appropriately sloped, and free of loose material.",
-    "Joints and gaps: check uniform joint width, alignment, spacers, and approved grout/filler.",
-    "Hollow tiles and finish: tap-test for hollow areas where appropriate; check lippage, cutting, edge finish, and skirting alignment.",
-    "Protection and cleaning: clean grout residue and protect finished tiles from damage until handover."
-  ],
-  "Finishing & Handover Inspection": [
-    "All punch list items from earlier stages closed: zero open NCRs, verified by Quality Inspector.",
-    "Doors & windows: smooth operation, gaps under 5mm on all sides, locks functional.",
-    "All fixtures working: taps, switches, fans, geysers tested — no snag.",
-    "Flooring: no hollow tiles, clean grout — 100% tap test on all floor tiles, uniform grout joints.",
-    "Paint: no peeling, uniform finish, no patches — visual check in daylight; touch-up not acceptable over peeling.",
-    "Customer walkthrough checklist signed: customer signs, any observation noted and resolved before possession."
-  ]
-};
-
-interface PhaseDef {
-  label: string;
-  items: string[];
-  // Shows/stores this phase under a DIFFERENT name than its group's (e.g.
-  // the Plastering phases under "Brickwork" read as "Plaster — Before
-  // Plastering" instead of "Brickwork — Before Plastering") while the phase
-  // stays part of the SAME group for sequencing purposes (its "prior phase"
-  // gate still looks at the phase immediately before it in this same
-  // group's list, same as a phase with no override).
-  nameOverride?: string;
-}
-interface PhaseGroup { name: string; scope: "floor" | "unit" | "unit-area"; phases: PhaseDef[] }
-
-// The remaining checklists are split into the site's own timed phases
-// (before/during/after a physical event — a pour, brickwork, plastering,
-// waterproofing application, panel installation…), each its own entry in
-// the Work Type picker ("<group> — <phase>"), and each phase can only be
-// filled once the one before it has a Pass on record for the same
-// floor/flat (see phaseInfo/pendingPriorPhase below) — all the existing
-// checkpoints are kept, just grouped under whichever phase they belong to.
-const PHASE_GROUPS: PhaseGroup[] = [
-  {
-    name: "R.C.C. Slab Inspection",
-    scope: "floor",
-    phases: [
-      {
-        label: "Before Pour",
-        items: [
-          "Shuttering check: verify slab level, thickness, dimensions, support/props, stability, tight joints, and cleanliness.",
-          "Reinforcement steel: check bar diameter, spacing, top and bottom reinforcement, extra bars, laps, anchorage, and openings as per drawings.",
-          "Cover and embedded services: verify cover blocks, electrical conduits, sleeves, and other inserts do not displace reinforcement.",
-          "Pre-pour approval: confirm inspection clearance, concrete grade, pour sequence, access, and curing arrangements."
-        ]
-      },
-      {
-        label: "During Pour",
-        items: [
-          "Slump test at pour point: record the value and reject the batch if it falls outside the design mix range.",
-          "Cube samples taken: minimum 3 cubes per 5 cum, labelled with floor and date.",
-          "Vibration done correctly: poker at max 500mm centres, no cold joints — no gap over 30 minutes between layers."
-        ]
-      },
-      {
-        label: "After Pour",
-        items: ["Curing started within 24 hours of pour: wet gunny or curing compound, minimum 7 days."]
-      }
-    ]
-  },
-  {
-    // Was "Brickwork & Plaster" as the name of the whole group — still one
-    // group (all 5 phases below still gate each other in sequence, same as
-    // before). Only the Brickwork-only phases' displayed/stored name
-    // changed, to the group's own name, "Brickwork" (dropping the
-    // redundant "& Plaster" — it read oddly on a check that has nothing to
-    // do with plastering); the three Plastering phases below set their own
-    // nameOverride back to the original full "Brickwork & Plaster", so
-    // their ids/workType strings are unchanged from before this split and
-    // need no legacy-equivalent entry of their own.
-    name: "Brickwork",
-    scope: "unit",
-    phases: [
-      {
-        label: "Before Brickwork",
-        items: ["Brickwork layout: check wall location, thickness, openings, and alignment against approved drawings."]
-      },
-      {
-        label: "During Brickwork",
-        items: [
-          "Line, level, and plumb: check courses and wall faces regularly using suitable instruments — plumb check every 3 courses, max deviation 3mm per 3m.",
-          "Bond and joints: ensure proper bond, staggered vertical joints, uniform joint thickness, and fully filled mortar joints.",
-          "Mortar and bricks: verify approved materials, mortar mix, brick condition, and appropriate wetting where specified.",
-          "Laying and curing: ensure proper laying technique, toothed/keyed junctions where specified, and curing as required."
-        ]
-      },
-      {
-        label: "Before Plastering",
-        nameOverride: "Brickwork & Plaster",
-        items: [
-          "Pre-plaster services: check plumbing pipes, electrical conduits/boxes, and A.C. pipe/fittings before plastering.",
-          "Surface preparation: ensure background is clean, sound, and prepared to the approved method; provide bonding treatment where specified.",
-          "Chicken mesh at concrete and brickwork joints.",
-          "Surface curing before plastering."
-        ]
-      },
-      {
-        label: "During Plastering",
-        nameOverride: "Brickwork & Plaster",
-        items: [
-          "Finish, level, and plumb: check thickness (12mm internal, verified with pin at 3 points per wall), flatness, corners, edges, line, level, and verticality."
-        ]
-      },
-      {
-        label: "After Plastering",
-        nameOverride: "Brickwork & Plaster",
-        items: [
-          "Curing: plastered surface cured as required."
-        ]
-      }
-    ]
-  },
-  {
-    name: "Waterproofing Inspection",
-    scope: "unit-area",
-    phases: [
-      {
-        label: "Before Application",
-        items: ["All surface cracks sealed before WP coat: approved crack filler; inspector confirms surface is ready."]
-      },
-      {
-        label: "During Application",
-        items: ["Two coats applied, turned up 150mm on all walls: overlap 150mm at joints, full turn-up at floor-wall junction."]
-      },
-      {
-        label: "After WP / Before Tiling",
-        items: ["Flood test — 50mm water ponding for 24 hours: non-negotiable; inspector present at start and end."]
-      },
-      {
-        label: "After 24 Hours",
-        items: [
-          "Ceiling below inspected for seepage after 24 hours: zero leaks to proceed; any seepage means redo WP and retest.",
-          "Sign-off: flood test result recorded with date, time, and inspector name — photo mandatory."
-        ]
-      }
-    ]
-  },
-  {
-    name: "Plumbing & Electrical Inspection",
-    scope: "unit",
-    phases: [
-      { label: "Before Plastering", items: ["Pipe pressure test before concealment: 1.5x working pressure for 30 minutes, zero pressure drop."] },
-      { label: "Before Pour", items: ["All sleeves placed before structural pour: DRI confirms — no chasing of RCC members allowed."] },
-      { label: "During Installation", items: ["Earthing continuity confirmed floor by floor: continuity tester, each floor signed off separately."] },
-      { label: "After Panel Installation", items: ["ELCB trip test done after panel installation: trip time within IS specification, recorded in register."] },
-      { label: "Before Handover", items: ["As-built drawing updated and filed before handover: attached to the QC file for this apartment."] }
-    ]
-  }
-];
-
-const phaseWorkType = (group: PhaseGroup, phase: PhaseDef) => `${phase.nameOverride || group.name} — ${phase.label}`;
-
-// workType -> which group/phase it is, so the form can look up its scope
-// and what has to have passed before it unlocks.
-const PHASE_LOOKUP = new Map<string, { group: PhaseGroup; phaseIndex: number }>();
-for (const group of PHASE_GROUPS) {
-  group.phases.forEach((phase, phaseIndex) => PHASE_LOOKUP.set(phaseWorkType(group, phase), { group, phaseIndex }));
-}
-
-// Flat map of every Work Type -> its checklist items, for the places that
-// just need "what are this checklist's points" (seeding the form, Case
-// Studies' category list) without caring whether it's standalone or one
-// phase of a group.
-export const QC_CHECKLISTS: Record<string, string[]> = {
-  ...STANDALONE_CHECKLISTS,
-  ...Object.fromEntries(
-    PHASE_GROUPS.flatMap((group) => group.phases.map((phase) => [phaseWorkType(group, phase), phase.items]))
-  )
-};
+// The checklist structure itself (Work Types / Phases / items) used to be
+// hardcoded here — it now lives in Masters ▸ Checklist Groups/Phases/Items
+// and is built by useChecklistDefs() (frontend/src/shared/checklistDefs.ts),
+// called inside the component below, so QC_CHECKLISTS/WORK_TYPES/scopeOf/etc.
+// are no longer module-level constants.
 type ChecklistStatus = (typeof CHECKLIST_STATUSES)[number];
-
-// The Work Type picker: standalone checklists in their old order, then
-// each phase group's phases in sequence (so "R.C.C. Slab Inspection —
-// Before Pour" always precedes "— During Pour" in the list).
-export const WORK_TYPES = [
-  "Material Testing & Quality Checks",
-  "Column Inspection",
-  ...PHASE_GROUPS.flatMap((group) => group.phases.map((phase) => phaseWorkType(group, phase))),
-  "Tile Work Inspection",
-  "Finishing & Handover Inspection"
-];
-
-// A standalone checklist's scope: floor-level ones ask no flat; unit-level
-// ones (just Tile Work and the final Finishing & Handover gate — the phase
-// groups handle their own scope via PHASE_LOOKUP) do.
-const STANDALONE_UNIT_SCOPED = new Set(["Tile Work Inspection", "Finishing & Handover Inspection"]);
-
-export function scopeOf(wt: string): "floor" | "unit" | "unit-area" {
-  const phase = PHASE_LOOKUP.get(wt);
-  if (phase) return phase.group.scope;
-  return STANDALONE_UNIT_SCOPED.has(wt) ? "unit" : "floor";
-}
-export const isFlatWise = (wt: string) => !!wt && scopeOf(wt) !== "floor";
-export const requiresAreas = (wt: string) => !!wt && scopeOf(wt) === "unit-area";
-
-// Outer/exterior Brickwork & Plaster work is done from scaffolding and
-// genuinely covers several floors in one go, not one flat at a time —
-// picking more than one floor restricts the checklist to just these 4
-// phases, and the inspection is recorded floor-wise (no flat) for each
-// floor picked, instead of the usual single-flat scope.
-const BRICKWORK_PLASTER_GROUP = PHASE_GROUPS.find((g) => g.name === "Brickwork")!;
-const MULTI_FLOOR_WORK_TYPES = BRICKWORK_PLASTER_GROUP.phases.map((p) => phaseWorkType(BRICKWORK_PLASTER_GROUP, p));
-
-// The unit-wise/unit-area-wise stages whose LAST phase (or, for a
-// standalone checklist, itself) must have a Pass on record before
-// Finishing & Handover — the final gate — can be filled for that flat.
-const UNIT_FINAL_STAGES = [
-  ...PHASE_GROUPS.filter((g) => g.scope !== "floor").map((g) => phaseWorkType(g, g.phases[g.phases.length - 1])),
-  "Tile Work Inspection"
-];
-
-// Real site work was already recorded (and passed) under the OLD,
-// pre-phase-gating checklist names before this phase split existed —
-// Zen Garden had flats fully Brickwork/Plastering-passed the old way, and
-// the new gate had no idea that satisfied anything, blocking the next
-// phase for work that was genuinely already done. Each entry here says
-// "a Pass on this OLD workType counts as a Pass on this NEW phase" for
-// gating purposes — new inspections are never written under the old
-// names again, this only makes pre-existing history count.
-// Each current phase can have MULTIPLE old names that should still count as
-// having cleared it — a flat passed under an EARLIER name of the same
-// phase was never re-inspected under the new name, so gating must still
-// recognize it, or already-finished real work would suddenly show as
-// blocking the next phase. List newest-old-name first; order doesn't
-// matter for correctness (latestResult merges all of them), just readability.
-const LEGACY_PHASE_EQUIVALENT: Record<string, string[]> = {
-  // Only the Brickwork-only phases' name actually changed (the group's own
-  // name dropped the redundant "& Plaster" there); the Plastering phases
-  // kept the original "Brickwork & Plaster" via their own nameOverride, so
-  // only Brickwork needs an entry for THAT rename — every inspection saved
-  // before it still has the old combined group name in its workType.
-  "Brickwork — During Brickwork": ["Brickwork & Plaster — During Brickwork", "Brickwork Inspection"],
-  // "Before Plastering" was split out of the old "During Plastering" phase
-  // (its first 2 points) — a flat already Pass'd under the old pre-split
-  // "Plastering Inspection" name, or the old single "During Plastering"
-  // phase (before that split), should count as having cleared this too,
-  // not get newly gated on it.
-  "Brickwork & Plaster — Before Plastering": ["Plastering Inspection"],
-  "Brickwork & Plaster — During Plastering": ["Plastering Inspection"],
-  "R.C.C. Slab Inspection — After Pour": ["R.C.C. Slab Inspection"],
-  "Waterproofing Inspection — After 24 Hours": ["Waterproofing Inspection"],
-  "Plumbing & Electrical Inspection — Before Handover": ["Plumbing & Electrical Inspection"]
-};
 
 // Column/Slab option lists now come from Masters ▸ Column Master / Slab
 // Master (coll(data, "columnMaster"/"slabMaster")) instead of a fixed
@@ -323,6 +63,7 @@ const QC_INSPECTION_STAGE_ID = "STG-QC-INSPECTION";
 
 export default function QualityInspection() {
   const { data, currentUserId, myRole, apply, toast, me, reInspectQualityId, setReInspectQualityId, setActiveTab } = useApp();
+  const { PHASE_GROUPS, PHASE_LOOKUP, QC_CHECKLISTS, WORK_TYPES, scopeOf, isFlatWise, requiresAreas, MULTI_FLOOR_WORK_TYPES, UNIT_FINAL_STAGES, LEGACY_PHASE_EQUIVALENT, phaseWorkType } = useChecklistDefs();
   const isAdmin = currentUserId === "U-ADMIN";
   const canCreate = isAdmin || hasModuleGrant(data, currentUserId, "qualityInspection", "create");
   const allProjects = myProjects(data, currentUserId);
@@ -382,7 +123,7 @@ This cannot be undone.`)) return;
   const rowActions = (insp: QI, snag: Snag | null, row: boolean) => (
     <div className={row ? "flex flex-col gap-1.5 items-start" : "flex flex-wrap gap-1.5"} onClick={(e) => e.stopPropagation()}>
       <Btn label="History" color="secondary" size="sm" onClick={() => setHistoryFloor({ floorId: insp.floorId, floorLabel: insp.floorName })} />
-      {canCreate && insp.result !== "Pass" && snag?.status !== "Closed" && (
+      {canCreate && insp.result !== "Pass" && (
         <Btn label="Re-inspect" color="secondary" size="sm" onClick={() => { setReInspectOf(insp); setPanelOpen(true); }} />
       )}
       {isAdmin && <Btn label="Delete" color="secondary" size="sm" onClick={() => deleteInspection(insp)} />}
@@ -819,6 +560,7 @@ function InspectionForm({
   apply: (ops: any[]) => Promise<boolean>;
   toast: (msg: string) => void;
 }) {
+  const { PHASE_GROUPS, PHASE_LOOKUP, QC_CHECKLISTS, WORK_TYPES, scopeOf, isFlatWise, requiresAreas, MULTI_FLOOR_WORK_TYPES, UNIT_FINAL_STAGES, LEGACY_PHASE_EQUIVALENT, phaseWorkType } = useChecklistDefs();
   const [projectId, setProjectId] = useState("");
   const [floorIds, setFloorIds] = useState<string[]>([]);
   const [unitId, setUnitId] = useState("");
@@ -1074,13 +816,13 @@ function InspectionForm({
   // Floor-to-floor is a heads-up only, never a hard block (teams asked for
   // flexibility here) — the inspector can still proceed, but sees which
   // earlier floor(s) haven't finished their own Structure stage yet.
-  const structureGroup = PHASE_GROUPS.find((g) => g.name === "R.C.C. Slab Inspection")!;
-  const structureLastPhase = phaseWorkType(structureGroup, structureGroup.phases[structureGroup.phases.length - 1]);
+  const structureGroup = PHASE_GROUPS.find((g) => g.name === "R.C.C. Slab Inspection" && g.phases.length > 0);
+  const structureLastPhase = structureGroup ? phaseWorkType(structureGroup, structureGroup.phases[structureGroup.phases.length - 1]) : "";
   function floorPassed(fId: string): boolean {
     const arr = inspectionsByWorkTypeAndTarget.get(`${structureLastPhase}::floor:${fId}`);
     return arr?.[0]?.result === "Pass";
   }
-  const earlierFloorsNotStructurallyDone = workType && PHASE_LOOKUP.get(workType)?.group === structureGroup && floor
+  const earlierFloorsNotStructurallyDone = structureGroup && workType && PHASE_LOOKUP.get(workType)?.group === structureGroup && floor
     ? floors.filter((f) => (f.seq || 0) < (floor.seq || 0) && !floorPassed(f.id))
     : [];
 
@@ -1116,7 +858,7 @@ function InspectionForm({
     if (phaseInfo?.group.name === "R.C.C. Slab Inspection" && selectedSlabs.length === 0) { toast("Select at least one slab"); return; }
     if (requiresAreas(workType) && selectedAreas.length === 0) { toast("Select at least one area (kitchen/bathroom/balcony)"); return; }
     if (checklist.some((row) => !row.status)) { toast("Mark every checklist point as OK / Not OK / N/A"); return; }
-    if (photos.length === 0) { toast("Add at least one photo as evidence"); return; }
+    if (photos.length === 0 && !import.meta.env.DEV) { toast("Add at least one photo as evidence"); return; }
     if (result !== "Pass" && !remarks.trim()) { toast("Remarks are required for Fail / Rework Required"); return; }
     if (result !== "Pass" && !assignedToUserId) { toast("A responsible DRI must be assigned for Fail / Rework Required"); return; }
     if (result !== "Pass" && !targetDate) { toast("A target date is required for the corrective action"); return; }
