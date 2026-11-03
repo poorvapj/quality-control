@@ -8,6 +8,13 @@ import { executionComplete } from "../shared/misData";
 import { boardLensFor, qualityByUnit, qualityByFloor, measurementByUnit, LENS_LABEL, type BoardLens } from "../shared/boardLens";
 
 const ALL_FLOORS = "__all__";
+
+// These 3 unit "types" (Brickwork & Plaster's multi-floor exterior checks —
+// see QualityInspection.tsx's MULTI_FLOOR_UNIT_NAMES) have no seq and a bare
+// numeric code (e.g. "1010"), so a cell showing it was just an unlabeled
+// number indistinguishable from any other unit — nothing on the tile said
+// which of the three it actually was. Shown as a short abbreviation instead.
+const SPECIAL_UNIT_ABBR: Record<string, string> = { "Inner Common": "IC", "Outer Plaster": "OP", "Exterior Area": "EA" };
 type StatusFilter = "" | "open-snag" | "qc-fail" | "locked" | "handed-over" | "not-started"
   | "ex-done" | "q-checked" | "q-in-progress" | "q-failed" | "q-pending" | "q-none" | "m-done" | "m-pending" | "m-none";
 const LENSES: BoardLens[] = ["all", "execution", "quality", "measurement"];
@@ -277,7 +284,7 @@ export default function TowerBoard() {
                       // blockReason()/canAct(), not by this click.
                       onClick={() => openDrawer({ kind: "unit", id: u.id })}
                     >
-                      {u.seq != null ? u.seq : u.code}
+                      {SPECIAL_UNIT_ABBR[u.name] || (u.seq != null ? u.seq : u.code)}
                       {lens === "all" && qs === "checked" && (
                         <span
                           aria-label="Quality checked"

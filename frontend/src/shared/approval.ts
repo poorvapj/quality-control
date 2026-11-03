@@ -25,11 +25,35 @@ export function approvalFor(data: BoardData | null, userId: string | null): Appr
   return { status: "pending", approverUserId: team.leaderId, approverName: leader?.name || "" };
 }
 
+/** True only for a qualityInspections record whose one-time, approval-gated
+ *  side effect (raising a Fail/Rework's Snag, or a Pass re-inspection
+ *  closing the ORIGINAL's Snag) has already actually happened — meaning it
+ *  fired immediately back when the author needed no approval at all. If
+ *  that author is only LATER put on a team (or their team only later gets a
+ *  leader), effectiveApproval()'s "no stored approval + author now has a
+ *  leader = treat as pending" rule below would otherwise keep surfacing
+ *  this record as newly needing that leader's decision forever — a Snag
+ *  already raised or already closed has nothing left to gate, so re-asking
+ *  is pure noise (this is what made an old, already-resolved Fail keep
+ *  showing up red on a leader's dashboard with nothing actionable behind it). */
+function qiConsequenceAlreadySettled(data: BoardData | null, r: Rec): boolean {
+  if (typeof r.result !== "string") return false; // not a qualityInspections record (materialMeasurements/workMeasurements have no such field)
+  if (r.result !== "Pass") return !!r.linkedSnagId; // Fail/Rework: already raised its Snag?
+  if (!r.reInspectionOf) return false; // a plain Pass never gates anything
+  const original = (coll(data, "qualityInspections") as any[]).find((i) => i.id === r.reInspectionOf);
+  const snag = original?.linkedSnagId ? (coll(data, "snags") as any[]).find((s) => s.id === original.linkedSnagId) : null;
+  return !!snag && snag.status === "Closed";
+}
+
 /** The approval a record effectively has. A record saved before approval
  *  existed has none stored; if its author is on a team it counts as awaiting
  *  that team's leader (the server applies the same rule when they decide it),
- *  so the leader can still review older work. */
+ *  so the leader can still review older work — unless its own gated side
+ *  effect already fired without ever needing approval (see
+ *  qiConsequenceAlreadySettled above), in which case there is nothing left
+ *  to decide and it is never shown as pending at all. */
 export function effectiveApproval(data: BoardData | null, r: Rec): Approval | undefined {
+  if (!r.approval && qiConsequenceAlreadySettled(data, r)) return undefined;
   const current = approvalFor(data, creatorOf(r)); // the author's team + CURRENT leader, if any
   if (!r.approval) return current;
   // Pending work is waiting on the team's CURRENT leader, even if the leader was
