@@ -208,6 +208,17 @@ This cannot be undone.`)) return;
       const aWaiting = awaitingReInspection(linkedSnag(a));
       const bWaiting = awaitingReInspection(linkedSnag(b));
       if (aWaiting !== bWaiting) return aWaiting ? -1 : 1;
+      // Among pending approvals, oldest first — a newest-first list buried
+      // genuinely overdue approvals (sometimes weeks old) under a pile of
+      // same-day submissions, so nobody ever scrolled far enough to see one
+      // flagged Overdue (same fix already applied to the Dashboard's own
+      // Awaiting My Approval widget, in shared/approval.ts's pendingFor()).
+      // Only reorders pending-vs-pending; everything else (approved/
+      // rejected/no-approval-needed) still sorts by recency as before.
+      const aPending = effectiveApproval(data, a)?.status === "pending";
+      const bPending = effectiveApproval(data, b)?.status === "pending";
+      if (aPending && bPending) return a.createdAt - b.createdAt;
+      if (aPending !== bPending) return aPending ? -1 : 1;
       return b.createdAt - a.createdAt;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
