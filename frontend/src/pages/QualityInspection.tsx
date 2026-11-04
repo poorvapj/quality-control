@@ -10,7 +10,7 @@ import { hasModuleGrant } from "../shared/permissionMatrix";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
 import { approvalFor, effectiveApproval } from "../shared/approval";
-import { ApprovalBadge, ApprovalActions, ApprovalReviewPanel } from "../components/ApprovalControls";
+import { ApprovalBadge, ApprovalActions, ApprovalReviewPanel, OverdueBadge } from "../components/ApprovalControls";
 import PhotoGroupUploader from "../components/PhotoGroupUploader";
 import SidePanel from "../components/SidePanel";
 import StatTile from "../components/StatTile";
@@ -407,6 +407,9 @@ This cannot be undone.`)) return;
                       <span className="whitespace-nowrap">{insp.result}</span>
                     </Badge>
                     <ApprovalBadge approval={effectiveApproval(data, insp)} />
+                    {effectiveApproval(data, insp)?.status === "pending" && (
+                      <OverdueBadge pendingSinceTs={insp.createdAt} queueKey="qualityInspectionApproval" />
+                    )}
                   </div>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-[11.5px] text-[var(--text-muted)]">
@@ -456,7 +459,12 @@ This cannot be undone.`)) return;
                   <Badge color={insp.result === "Pass" ? "green" : insp.result === "Fail" ? "red" : "amber"}>
                     <span className="whitespace-nowrap">{insp.result}</span>
                   </Badge>
-                  <div className="mt-1"><ApprovalBadge approval={effectiveApproval(data, insp)} /></div>
+                  <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                    <ApprovalBadge approval={effectiveApproval(data, insp)} />
+                    {effectiveApproval(data, insp)?.status === "pending" && (
+                      <OverdueBadge pendingSinceTs={insp.createdAt} queueKey="qualityInspectionApproval" />
+                    )}
+                  </div>
                   <div onClick={(e) => e.stopPropagation()}><ApprovalActions collName="qualityInspections" record={insp} /></div>
                 </TableCell>
                 <TableCell muted className="truncate max-w-0" title={insp.inspectorName}>{insp.inspectorName}</TableCell>

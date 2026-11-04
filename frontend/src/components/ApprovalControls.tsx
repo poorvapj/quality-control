@@ -42,7 +42,7 @@ export function ApprovalBadge({ approval }: { approval?: Approval }) {
 }
 
 /** Small red flag once a pending item has sat past its Masters ▸ SLA Timeline hours (Date.now() check, not reactive — fine for a dashboard that re-renders on its own poll/rev bump). */
-function OverdueBadge({ pendingSinceTs, queueKey }: { pendingSinceTs: number; queueKey: SlaQueueKey }) {
+export function OverdueBadge({ pendingSinceTs, queueKey }: { pendingSinceTs: number; queueKey: SlaQueueKey }) {
   const { isOverdue } = useSlaTimelines();
   if (!isOverdue(pendingSinceTs, queueKey)) return null;
   return <Badge color="red"><span className="whitespace-nowrap">Overdue</span></Badge>;

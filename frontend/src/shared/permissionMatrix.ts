@@ -132,18 +132,24 @@ export function fillLegacyGrants(
   return role === undefined ? out : fillDefaultOn(out, role);
 }
 
-/* Admin (U-ADMIN) always has every permission — this is an unconditional
-   bypass, matching every other permission mechanism in the app
-   (canActOnStage, assertOpAllowed). Everyone else's grant is ADDITIVE: it
-   only ever unlocks extra access beyond myRole()==="ADMIN"/canAct(), never
-   revokes anything a Role already gives — call sites use
-   `existingCheck || hasModuleGrant(...)`, never as a sole gate. Falls back
-   to DEFAULT_ROLE_GRANTS only when nothing's been explicitly saved for
-   this exact module+action. */
+/* U-ADMIN no longer has an unconditional bypass here — an explicit Off set
+   on the Permission Matrix (per-user or role-wide) now applies to U-ADMIN
+   too, same as anyone else. This is a deliberate, requested change: it
+   means a mistaken Off on a big module (e.g. Masters itself) for U-ADMIN
+   has no built-in safety net — recovering from that needs a direct
+   database fix, not another click in the app. Everyone else's grant stays
+   ADDITIVE as before: it only ever unlocks extra access beyond
+   myRole()==="ADMIN"/canAct(), never revokes anything a Role already gives
+   — call sites use `existingCheck || hasModuleGrant(...)`, never as a sole
+   gate. Falls back to DEFAULT_ROLE_GRANTS only when nothing's been
+   explicitly saved for this exact module+action. Note: several pages'
+   OWN separate `isAdmin = currentUserId === "U-ADMIN"` checks (Delete
+   buttons, etc.) are a different, unrelated mechanism and are untouched
+   by this — this function only covers Permission-Matrix-driven module
+   grants. */
 export function hasModuleGrant(
   data: BoardData | null, userId: string | null, moduleKey: string, action: ModuleAction
 ): boolean {
-  if (userId === "U-ADMIN") return true;
   const explicit = explicitGrant(data, userId, moduleKey, action);
   if (explicit !== undefined) return explicit;
   // Pages that predate their own matrix row inherit the old module's value.
@@ -213,7 +219,6 @@ export const DEFAULT_ON_MODULES = Object.values(TAB_ACCESS).filter((t) => t.mode
 
 /** A normally-open page: visible unless "view" was explicitly switched Off. */
 export function canSeeModule(data: BoardData | null, userId: string | null, moduleKey: string): boolean {
-  if (userId === "U-ADMIN") return true;
   const explicit = explicitGrant(data, userId, moduleKey, "view");
   if (explicit !== undefined) return explicit;
   const role = byId(coll(data, "users"), userId)?.role;
@@ -222,8 +227,11 @@ export function canSeeModule(data: BoardData | null, userId: string | null, modu
 
 /** The one question the sidebar and the page router both ask. */
 export function canAccessTab(data: BoardData | null, userId: string | null, tab: string): boolean {
-  if (userId === "U-ADMIN") return true;
-  if (tab === "permissionMatrix") return false;
+  // The one tab that never follows the matrix, in either direction — it's
+  // the only way to fix a mistaken Off anywhere else (including a mistaken
+  // Off on U-ADMIN's own access to something), so it can never itself be
+  // turned off, even for U-ADMIN.
+  if (tab === "permissionMatrix") return userId === "U-ADMIN";
   // the create-user screen needs the same right as editing Masters
   if (tab === "addUser") return hasModuleGrant(data, userId, "masters", "edit");
   // Case Studies follows its own Permission Matrix row only — it used to
