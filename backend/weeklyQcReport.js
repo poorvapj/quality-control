@@ -18,17 +18,26 @@ function parseYmd(s) {
 function fmtDate(ts) {
   return new Date(ts).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
+function fmtDateTime(ts) {
+  const ist = new Date(ts + IST_OFFSET_MS);
+  return `${fmtDate(ts)}, ${String(ist.getUTCHours()).padStart(2, "0")}:${String(ist.getUTCMinutes()).padStart(2, "0")}`;
+}
 
-/** Today, in IST wall-clock terms — the report now runs once per day. */
+/** Rolling 24h window ending now (the report runs once a day, at 4pm IST,
+ *  so this is "yesterday 4pm IST -> today 4pm IST"). `to`/`from` here are
+ *  still plain dates (used only as the once-a-day send marker key); the
+ *  actual filtering below uses the precise `toTs`/`fromTs` timestamps. */
 function currentWeekBounds() {
   const now = istNow();
+  const toTs = Date.now();
+  const fromTs = toTs - DAY_MS;
   const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  return { from: ymd(to), to: ymd(to) };
+  return { from: ymd(to), to: ymd(to), fromTs, toTs };
 }
 
 async function buildWeeklyQcReportData(mongoDb) {
   const bounds = currentWeekBounds();
-  const periodLabel = fmtDate(parseYmd(bounds.to).getTime());
+  const periodLabel = `${fmtDateTime(bounds.fromTs)} – ${fmtDateTime(bounds.toTs)}`;
 
   const [allInspections, allSnags] = await Promise.all([
     mongoDb.collection("qualityInspections").find({}).toArray(),
@@ -37,8 +46,7 @@ async function buildWeeklyQcReportData(mongoDb) {
   const snagById = new Map(allSnags.map((s) => [s.id, s]));
 
   const inRange = allInspections.filter((i) => {
-    const d = (i.inspectionDate || "").slice(0, 10);
-    return d >= bounds.from && d <= bounds.to;
+    return i.createdAt >= bounds.fromTs && i.createdAt <= bounds.toTs;
   }).sort((a, b) => b.createdAt - a.createdAt);
 
   function linkedSnag(i) {
