@@ -620,6 +620,41 @@ async function notifySnagTarget(eventType, rec, existing) {
   }
 }
 
+// Lets the Quality team know as soon as Execution has done the corrective
+// work (with photo evidence) or a DRI has closed a quality-fail snag
+// directly — either way, Quality's own re-inspection is now the next step,
+// and otherwise they'd only find out by noticing it on the board. Every
+// user with role "Quality" gets their own DM (that's a handful of people,
+// not a single fixed recipient like the other snag notifications).
+async function notifyQualityTeamOfSnagProgress(kind, rec, existing, actorUserId) {
+  try {
+    if ((rec.stageId || existing?.stageId) !== "STG-QC-INSPECTION") return; // only quality-fail snags feed back to Quality
+    const [actor, project, qualityUsers] = await Promise.all([
+      actorUserId ? mongoDb.collection("users").findOne({ id: actorUserId }, { projection: { name: 1 } }) : null,
+      (rec.projectId || existing?.projectId)
+        ? mongoDb.collection("projects").findOne({ id: rec.projectId || existing.projectId }, { projection: { name: 1 } })
+        : null,
+      mongoDb.collection("users").find({ role: "Quality", active: { $ne: false } }, { projection: { name: 1, email: 1, slackId: 1 } }).toArray()
+    ]);
+    const title = rec.title || existing?.title || "";
+    const projectName = project?.name || "—";
+    const actorName = actor?.name || "Someone";
+    const text = kind === "resolved"
+      ? `📸 *${actorName}* (Execution) marked Snag *${title}* (${projectName}) *resolved* with a photo — ready for re-inspection.`
+      : `✅ *${actorName}* (DRI) *closed* Snag *${title}* (${projectName}) directly, with a photo — worth a quick check.`;
+    // DMs each Quality user directly (one shared text, several recipients —
+    // doesn't fit notifyEvent/notifySlack's one-eventType-one-recipient
+    // shape) and posts to the team channel/observer copies exactly once,
+    // not once per Quality user.
+    await Promise.all(qualityUsers.map((u) =>
+      slackUserIdForEmail(u.email, u.slackId).then((uid) => uid && slackPostMessage(uid, text, undefined, { to: u.name, noCopy: true }))
+    ));
+    if (SLACK_CHANNEL_ID) await slackPostMessage(SLACK_CHANNEL_ID, text, undefined, { to: "the team channel" });
+  } catch (e) {
+    console.error(`notifyQualityTeamOfSnagProgress failed (${kind}):`, e.message);
+  }
+}
+
 // Every Work Quality Inspection submission — not just a Fail — goes to
 // Poorva directly (not role-based like the other Slack notifications,
 // since this one's addressed to a specific person rather than "whoever's
@@ -1679,7 +1714,7 @@ async function applyOps(ops, session, trace) {
         } else if (op.coll === "snags") {
           const existing = await db.collection("snags").findOne(
             { id: op.rec.id },
-            { projection: { assignedTo: 1, status: 1, reopenCount: 1, title: 1, projectId: 1 } }
+            { projection: { assignedTo: 1, status: 1, reopenCount: 1, title: 1, projectId: 1, stageId: 1, resolvedAt: 1, closeReason: 1 } }
           );
           await writeRecord(db, op, update);
           const reopened = !!existing && existing.status === "Closed" && rec.status && rec.status !== "Closed"
@@ -1692,6 +1727,13 @@ async function applyOps(ops, session, trace) {
             after(() => notifySnagTarget("snag_reopened", rec, existing));
           } else if (reassigned) {
             after(() => notifySnagTarget("snag_assigned", rec, existing));
+          }
+          const newlyResolved = rec.resolvedAt && !existing?.resolvedAt;
+          const closedDirectlyByDri = !!existing && existing.status !== "Closed" && rec.status === "Closed" && rec.closeReason !== "Not Applicable";
+          if (newlyResolved) {
+            after(() => notifyQualityTeamOfSnagProgress("resolved", rec, existing, session?.userId));
+          } else if (closedDirectlyByDri) {
+            after(() => notifyQualityTeamOfSnagProgress("closed_by_dri", rec, existing, session?.userId));
           }
         } else if (op.coll === "qualityInspections") {
           await writeRecord(db, op, update);
