@@ -265,6 +265,20 @@ export const MASTERS: Record<MasterKey, MasterDef> = {
       { k: "active", label: "Active", type: "bool" }
     ]
   },
+  slaTimelines: {
+    label: "SLA Timeline", icon: "⏳", prefix: "SLA",
+    desc: "How many hours a pending item gets in each approval/sign-off queue before it's flagged Overdue — one row per queue. A queue with no row here falls back to a default (48 hours).",
+    cols: ["queueKey", "hours", "active"],
+    fields: [
+      {
+        k: "queueKey", label: "Queue", type: "select", required: true,
+        options: ["qualityInspectionApproval", "materialMeasurementApproval", "workMeasurementApproval", "teamDailyReportSignoff"],
+        hint: "qualityInspectionApproval / materialMeasurementApproval / workMeasurementApproval = team leader approval queues; teamDailyReportSignoff = the Team Daily Report sign-off."
+      },
+      { k: "hours", label: "Hours before Overdue", type: "number", required: true },
+      { k: "active", label: "Active", type: "bool" }
+    ]
+  },
   workTargets: {
     label: "Work Target", icon: "🎯", prefix: "WTG",
     desc: "One planned quantity per project + work category — Daily Progress Report qty entries roll up against this on the report page's Planned vs Completed table.",

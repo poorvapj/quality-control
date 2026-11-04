@@ -309,14 +309,18 @@ export default function DrawingRequestsPage() {
                             >
                               <NavIcon name="edit" size={14} />
                             </button>
-                            {/* Matches ui/Btn.tsx's `small color="red"`: bg #EF4444, hover #DC2626, text white. */}
-                            <button
-                              title="Delete" onClick={() => deleteRequest(r)}
-                              style={{ height: 32, padding: "0 12px", border: "none", borderRadius: 6, background: "#EF4444", color: "#fff", display: "inline-flex", alignItems: "center", cursor: "pointer" }}
-                            >
-                              <NavIcon name="trash" size={14} />
-                            </button>
                           </>
+                        )}
+                        {myRole() === "ADMIN" && (
+                          // Deleting a drawing request removes it for everyone on the
+                          // board, permanently — Admin-only, unlike View/Edit above
+                          // which DRI and granted roles also get.
+                          <button
+                            title="Delete" onClick={() => deleteRequest(r)}
+                            style={{ height: 32, padding: "0 12px", border: "none", borderRadius: 6, background: "#EF4444", color: "#fff", display: "inline-flex", alignItems: "center", cursor: "pointer" }}
+                          >
+                            <NavIcon name="trash" size={14} />
+                          </button>
                         )}
                       </div>
                     </td>

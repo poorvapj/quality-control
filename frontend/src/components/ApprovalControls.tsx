@@ -3,13 +3,21 @@ import { viewPhoto } from "../shared/photoViewer";
 import { useApp } from "../context/AppContext";
 import { buildEventOp } from "../shared/eventLog";
 import { canDecide, decideOp, describeRecord, effectiveApproval, KIND_LABEL, pendingFor, rejectedFor, type ApprovalColl } from "../shared/approval";
-import type { Approval } from "../types";
+import { useSlaTimelines } from "../shared/slaTimelines";
+import type { Approval, SlaQueueKey } from "../types";
+
+/** Maps an approval collection to its Masters ▸ SLA Timeline queue key. */
+const SLA_QUEUE_FOR: Record<ApprovalColl, SlaQueueKey> = {
+  qualityInspections: "qualityInspectionApproval",
+  materialMeasurements: "materialMeasurementApproval",
+  workMeasurements: "workMeasurementApproval"
+};
 import Badge from "../ui/tw/Badge";
 import Btn from "../ui/tw/Btn";
 import Card from "../ui/tw/Card";
 import NavIcon from "./NavIcon";
 import SidePanel from "./SidePanel";
-import { coll } from "../shared/rules";
+import { coll, refLabel } from "../shared/rules";
 
 /** Where a record stands: Pending approval / Approved / Rejected (with the leader's remark). */
 export function ApprovalBadge({ approval }: { approval?: Approval }) {
@@ -31,6 +39,13 @@ export function ApprovalBadge({ approval }: { approval?: Approval }) {
       {approval.remark && <div className="text-[10.5px] text-[var(--text-muted)] mt-1 max-w-[220px] whitespace-normal">{approval.remark}</div>}
     </div>
   );
+}
+
+/** Small red flag once a pending item has sat past its Masters ▸ SLA Timeline hours (Date.now() check, not reactive — fine for a dashboard that re-renders on its own poll/rev bump). */
+function OverdueBadge({ pendingSinceTs, queueKey }: { pendingSinceTs: number; queueKey: SlaQueueKey }) {
+  const { isOverdue } = useSlaTimelines();
+  if (!isOverdue(pendingSinceTs, queueKey)) return null;
+  return <Badge color="red"><span className="whitespace-nowrap">Overdue</span></Badge>;
 }
 
 /** Approve / Reject buttons — render nothing unless the signed-in person may decide this record. */
@@ -80,10 +95,10 @@ function Detail({ label, children }: { label: string; children?: React.ReactNode
   return <div className="mb-3"><div className={FIELD_LABEL}>{label}</div><div className="text-[13px] leading-snug">{children}</div></div>;
 }
 
-function Photos({ photos }: { photos?: { url: string }[] }) {
+function Photos({ photos, label = "Photos" }: { photos?: { url: string }[]; label?: string }) {
   if (!photos || photos.length === 0) return null;
   return (
-    <Detail label={`Photos (${photos.length})`}>
+    <Detail label={`${label} (${photos.length})`}>
       <div className="flex flex-wrap gap-2">
         {photos.map((p, i) => (
           <img key={i} src={p.url} alt="" onClick={() => viewPhoto(p.url, photos.map((x) => x.url))}
@@ -98,8 +113,15 @@ const STATUS_COLOR: Record<string, string> = { OK: "#16a34a", "Not OK": "#dc2626
 
 /** The whole record, laid out so a leader can judge it before deciding. */
 function RecordDetails({ collName, rec }: { collName: ApprovalColl; rec: any }) {
+  const { data } = useApp();
   if (collName === "qualityInspections") {
     const color = rec.result === "Pass" ? "#16a34a" : rec.result === "Fail" ? "#dc2626" : "#d97706";
+    // The corrective-action evidence — whatever Execution added when marking
+    // it Resolved, or a DRI added when closing it directly — lives on the
+    // linked Snag's own `photos`, not on this inspection record. Shown
+    // separately from the inspection's own photos above (which only prove
+    // the defect existed, not that it's fixed).
+    const linkedSnag = rec.linkedSnagId ? coll(data, "snags").find((s: any) => s.id === rec.linkedSnagId) : null;
     return (
       <>
         <Detail label="Project">{rec.projectCode} — {rec.projectName}</Detail>
@@ -131,6 +153,13 @@ function RecordDetails({ collName, rec }: { collName: ApprovalColl; rec: any }) 
         <Photos photos={rec.photos} />
         {rec.correctiveAction && <Detail label="Corrective action">{rec.correctiveAction.assignedToName} · due {rec.correctiveAction.targetDate}</Detail>}
         <Detail label="Snag raised">{rec.linkedSnagId}</Detail>
+        {linkedSnag?.resolvedAt && (
+          <Detail label="Marked resolved">{refLabel(data, "users", linkedSnag.resolvedBy)} · {new Date(linkedSnag.resolvedAt).toLocaleString()}</Detail>
+        )}
+        {linkedSnag?.closedAt && (
+          <Detail label="Closed">{refLabel(data, "users", linkedSnag.closedBy)} · {new Date(linkedSnag.closedAt).toLocaleString()}</Detail>
+        )}
+        <Photos photos={linkedSnag?.photos} label="Corrective-action photos" />
       </>
     );
   }
@@ -188,7 +217,10 @@ export function ApprovalReviewPanel({ item, onClose, closeWhenDecided }: {
     >
       {item && live && (
         <>
-          <div className="mb-4"><ApprovalBadge approval={approval} /></div>
+          <div className="mb-4 flex items-center gap-2 flex-wrap">
+            <ApprovalBadge approval={approval} />
+            {approval?.status === "pending" && <OverdueBadge pendingSinceTs={live.createdAt} queueKey={SLA_QUEUE_FOR[item.coll]} />}
+          </div>
           <RecordDetails collName={item.coll} rec={live} />
           {decidable && (
             <div className="mt-2 pt-3 border-t border-[var(--border)]">
@@ -233,7 +265,10 @@ export function ApprovalQueue() {
                   by {rec.inspectorName || rec.recordedByName || "—"}{rec.inspectionDate || rec.measurementDate ? ` · ${rec.inspectionDate || rec.measurementDate}` : ""}
                 </div>
               </div>
-              <span className="text-[11px] font-semibold text-[var(--theme-primary)] whitespace-nowrap shrink-0">View details ›</span>
+              <div className="flex items-center gap-2 shrink-0">
+                <OverdueBadge pendingSinceTs={rec.createdAt} queueKey={SLA_QUEUE_FOR[c]} />
+                <span className="text-[11px] font-semibold text-[var(--theme-primary)] whitespace-nowrap">View details ›</span>
+              </div>
             </div>
             <div onClick={(e) => e.stopPropagation()}><ApprovalActions collName={c} record={rec} /></div>
           </div>

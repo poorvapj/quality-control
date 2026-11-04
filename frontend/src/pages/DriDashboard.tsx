@@ -11,6 +11,7 @@ import Btn from "../ui/tw/Btn";
 import Badge from "../ui/tw/Badge";
 import StatTile from "../components/StatTile";
 import { ApprovalQueue, SentBackList } from "../components/ApprovalControls";
+import { useSlaTimelines } from "../shared/slaTimelines";
 import type { TabKey, TeamDailyReport, QualityInspection } from "../types";
 
 /* One Team's Daily Report, pending or already-signed-off — the leader
@@ -18,6 +19,7 @@ import type { TabKey, TeamDailyReport, QualityInspection } from "../types";
    else; confirmed with whoever asked for this feature). */
 function TeamReportCard({ report, canApprove }: { report: TeamDailyReport; canApprove: boolean }) {
   const { apply, toast } = useApp();
+  const { isOverdue } = useSlaTimelines();
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
@@ -45,10 +47,15 @@ function TeamReportCard({ report, canApprove }: { report: TeamDailyReport; canAp
         </div>
         {report.status === "Approved" ? (
           <Badge color="green">Approved{report.approvedByName ? ` by ${report.approvedByName}` : ""}</Badge>
-        ) : canApprove ? (
-          <Btn label={busy ? "Approving…" : "Approve"} color="primary" size="sm" onClick={approve} disabled={busy} />
         ) : (
-          <Badge color="amber">Pending</Badge>
+          <div className="flex items-center gap-2">
+            {isOverdue(report.generatedAt, "teamDailyReportSignoff") && <Badge color="red">Overdue</Badge>}
+            {canApprove ? (
+              <Btn label={busy ? "Approving…" : "Approve"} color="primary" size="sm" onClick={approve} disabled={busy} />
+            ) : (
+              <Badge color="amber">Pending</Badge>
+            )}
+          </div>
         )}
       </div>
       {expanded && (

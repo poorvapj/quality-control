@@ -851,6 +851,7 @@ export interface BoardData {
   columnMaster: ColumnMaster[];
   slabMaster: SlabMaster[];
   ackTimelines: AckTimeline[];
+  slaTimelines: SlaTimeline[];
   executionRecords: ExecutionRecord[];
   checklistGroups: ChecklistGroup[];
   checklistPhases: ChecklistPhase[];
@@ -919,6 +920,26 @@ export interface AckTimeline extends BaseRecord {
   active?: boolean;
 }
 
+/** The pending queues an SLA timeline can be set for — see
+ *  frontend/src/shared/slaTimelines.ts. Deliberately excludes Drawing
+ *  Requests and DPR (out of scope — those have their own separate review
+ *  flows, not this generic approval-style pending queue). */
+export type SlaQueueKey =
+  | "qualityInspectionApproval"
+  | "materialMeasurementApproval"
+  | "workMeasurementApproval"
+  | "teamDailyReportSignoff";
+
+/* Masters ▸ SLA Timeline — how many hours a pending item in one of the
+ * queues above gets before it counts as overdue. One row per queue; a
+ * queue with no row here falls back to a hardcoded default (see
+ * shared/slaTimelines.ts) rather than never showing overdue. */
+export interface SlaTimeline extends BaseRecord {
+  queueKey: SlaQueueKey;
+  hours: number;
+  active?: boolean;
+}
+
 export interface ChecklistGroup extends BaseRecord {
   name: string;
   kind: "standalone" | "phased";
@@ -955,7 +976,7 @@ export type Op =
   | { op: "event"; ev: EventLog };
 
 export type TabKey = "dash" | "misDashboard" | "userMis" | "executionReconciliation" | "qualityInspection" | "execution" | "qualityFails" | "caseStudies" | "unitExecutionWorkflow" | "measurement" | "progressAnalysis" | "purchaseOrders" | "work" | "board" | "handoverChecklist" | "handoverInternal" | "handoverOwner" | "snags" | "team" | "masters" | "addUser" | "dpr" | "drawingRequests" | "backups" | "auditLog" | "permissionMatrix";
-export type MasterKey = "projects" | "floors" | "units" | "columnMaster" | "slabMaster" | "stages" | "qparams" | "checklists" | "stagemap" | "users" | "permissions" | "workTargets" | "teams" | "roles" | "forms" | "ackTimelines" | "checklistGroups" | "checklistPhases" | "checklistItems";
+export type MasterKey = "projects" | "floors" | "units" | "columnMaster" | "slabMaster" | "stages" | "qparams" | "checklists" | "stagemap" | "users" | "permissions" | "workTargets" | "teams" | "roles" | "forms" | "ackTimelines" | "slaTimelines" | "checklistGroups" | "checklistPhases" | "checklistItems";
 
 export type FieldType = "text" | "number" | "date" | "color" | "select" | "ref" | "bool" | "textarea" | "items" | "password" | "permissionGrid" | "formFields";
 

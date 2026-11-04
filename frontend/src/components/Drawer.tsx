@@ -544,11 +544,17 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
 }
 
 function SnagDrawer({ id }: { id: string }) {
-  const { data, closeDrawer, toast, myRole, currentUserId } = useApp();
+  const { data, closeDrawer, toast, myRole, currentUserId, apply } = useApp();
   const { setSnagStatus, markSnagNotApplicable, markSnagResolved, saveSnagAssignee, capturePhoto } = useActions();
   const fileRef = useRef<HTMLInputElement>(null);
   const resolveFileRef = useRef<HTMLInputElement>(null);
   const closeFileRef = useRef<HTMLInputElement>(null);
+  // The photo-then-status round trip (upload + watermark + two sequential
+  // apply() calls) takes a couple of seconds with no other feedback in
+  // between — without this, a person unsure anything happened would tap
+  // Resolve/Close again, firing a second upload and a second status write
+  // for the same action.
+  const [actionBusy, setActionBusy] = useState(false);
   const s = byId(coll(data, "snags"), id);
   // Starts neutral ("Choose") rather than pre-filled with the current
   // assignee — who it's presently assigned to already shows separately
@@ -641,7 +647,18 @@ function SnagDrawer({ id }: { id: string }) {
             <div style={label}>Photos</div>
             <div className="photo-strip" style={{ marginBottom: 20 }}>
               {(s.photos || []).map((p, i) => (
-                <img key={i} className="photo-thumb" src={p.url} onClick={() => viewPhoto(p.url, (s.photos || []).map((x) => x.url))} />
+                <div key={i} style={{ position: "relative", display: "inline-block" }}>
+                  <img className="photo-thumb" src={p.url} onClick={() => viewPhoto(p.url, (s.photos || []).map((x) => x.url))} />
+                  <button
+                    type="button"
+                    title="Remove photo"
+                    onClick={() => {
+                      if (!confirm("Remove this photo?")) return;
+                      apply([{ op: "upsert", coll: "snags", rec: { id: s.id, photos: (s.photos || []).filter((_, pi) => pi !== i) } }]);
+                    }}
+                    style={{ position: "absolute", top: -6, right: -6, width: 18, height: 18, borderRadius: 99, border: "none", background: "var(--color-fail)", color: "#fff", fontSize: 10, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}
+                  >✕</button>
+                </div>
               ))}
             </div>
           </>
@@ -669,7 +686,9 @@ function SnagDrawer({ id }: { id: string }) {
           >Not Applicable</button>
         )}
         {!closed && isQualityFailSnag && myRole() === "Execution" && s.assignedTo === currentUserId && (
-          <button className="btn btn-secondary btn-sm" onClick={() => resolveFileRef.current?.click()}>✅ Resolve (add photo)</button>
+          <button className="btn btn-secondary btn-sm" disabled={actionBusy} onClick={() => resolveFileRef.current?.click()}>
+            {actionBusy ? "Processing…" : "✅ Resolve (add photo)"}
+          </button>
         )}
         {closed ? (
           <button className="btn btn-secondary btn-sm" onClick={() => setSnagStatus(s.id, "Open")}>Reopen</button>
@@ -678,8 +697,8 @@ function SnagDrawer({ id }: { id: string }) {
           // QualityInspection.tsx) — but the DRI can also close it directly
           // here, as long as there's a photo on record as evidence.
           (myRole() === "DRI" || myRole() === "ADMIN") && (
-            <button className="btn btn-success btn-sm" onClick={() => closeFileRef.current?.click()}>
-              📸 Close snag (add photo)
+            <button className="btn btn-success btn-sm" disabled={actionBusy} onClick={() => closeFileRef.current?.click()}>
+              {actionBusy ? "Processing…" : "📸 Close snag (add photo)"}
             </button>
           )
         ) : (
@@ -699,7 +718,10 @@ function SnagDrawer({ id }: { id: string }) {
         onChange={async (e) => {
           const file = e.target.files?.[0];
           e.target.value = "";
-          if (file) { await capturePhoto("snag", s.id, "", file); await markSnagResolved(s.id); }
+          if (!file || actionBusy) return;
+          setActionBusy(true);
+          try { await capturePhoto("snag", s.id, "", file); await markSnagResolved(s.id); closeDrawer(); }
+          finally { setActionBusy(false); }
         }}
       />
       <input
@@ -707,7 +729,10 @@ function SnagDrawer({ id }: { id: string }) {
         onChange={async (e) => {
           const file = e.target.files?.[0];
           e.target.value = "";
-          if (file) { await capturePhoto("snag", s.id, "", file); await setSnagStatus(s.id, "Closed"); }
+          if (!file || actionBusy) return;
+          setActionBusy(true);
+          try { await capturePhoto("snag", s.id, "", file); await setSnagStatus(s.id, "Closed"); closeDrawer(); }
+          finally { setActionBusy(false); }
         }}
       />
     </>

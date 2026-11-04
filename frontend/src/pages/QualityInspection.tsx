@@ -109,11 +109,18 @@ This cannot be undone.`)) return;
 
   // Pieces shared by the desktop table row and the mobile card, so the two
   // layouts always show the same thing.
+  // Execution has done the corrective work and added a photo, but hasn't
+  // closed the snag itself (only a DRI/Admin can) — this is the moment
+  // Quality's own re-inspection is actually the next step, so it gets its
+  // own distinct badge/color rather than just reading as "still Open".
+  const awaitingReInspection = (snag: Snag | null) => !!snag && snag.status !== "Closed" && !!snag.resolvedAt;
   const snagSummary = (insp: QI, snag: Snag | null, overdue: boolean) =>
     !snag ? <span className="text-[var(--text-sub)]">—</span> : (
       <div>
-        <Badge color={snag.status === "Closed" ? "green" : overdue ? "red" : "amber"}>
-          <span className="whitespace-nowrap">{snag.status === "Closed" ? "Resolved" : overdue ? "Overdue" : snag.status}</span>
+        <Badge color={snag.status === "Closed" ? "green" : awaitingReInspection(snag) ? "blue" : overdue ? "red" : "amber"}>
+          <span className="whitespace-nowrap">
+            {snag.status === "Closed" ? "Resolved" : awaitingReInspection(snag) ? "Ready for re-inspection" : overdue ? "Overdue" : snag.status}
+          </span>
         </Badge>
         <div className="text-[10.5px] text-[var(--text-muted)] mt-1">
           {insp.correctiveAction?.assignedToName} · due {insp.correctiveAction?.targetDate}
@@ -194,7 +201,15 @@ This cannot be undone.`)) return;
         if (fApproval === "none" ? !!approval : approval?.status !== fApproval) return false;
       }
       return true;
-    }).sort((a, b) => b.createdAt - a.createdAt);
+    }).sort((a, b) => {
+      // Execution has resolved the corrective work and is just waiting on
+      // Quality to re-inspect — that's the most actionable thing on this
+      // whole list, so it floats to the top ahead of plain recency.
+      const aWaiting = awaitingReInspection(linkedSnag(a));
+      const bWaiting = awaitingReInspection(linkedSnag(b));
+      if (aWaiting !== bWaiting) return aWaiting ? -1 : 1;
+      return b.createdAt - a.createdAt;
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inspections, fProjectId, fFloorId, fResult, fDri, fSnagStatus, fApproval, dateBounds, snags, data]);
 
