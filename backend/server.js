@@ -1086,7 +1086,20 @@ async function decideApprovalFromSlack({ coll, id, status, remark, actor }) {
   const rec = await mongoDb.collection(coll).findOne({ id }, { projection: { _id: 0 } });
   if (!rec) return { ok: false, message: "⚠️ That record no longer exists." };
   if (rec.approval && rec.approval.status && rec.approval.status !== "pending") {
-    return { ok: false, message: `ℹ️ Already ${rec.approval.status}.` };
+    // Already decided (via the app, or an earlier/duplicate Slack click) —
+    // the ORIGINAL message's buttons must go away too, not just a DM telling
+    // the clicker it's done, otherwise the message keeps inviting another
+    // click forever even though there's nothing left to decide.
+    const decider = rec.approval.decidedByUserId
+      ? await mongoDb.collection("users").findOne({ id: rec.approval.decidedByUserId }, { projection: { name: 1 } })
+      : null;
+    return {
+      ok: false,
+      alreadyDecided: true,
+      message: approvalSlack.approvalResultLine({
+        coll, rec, status: rec.approval.status, remark: rec.approval.remark, byName: decider?.name || rec.approval.approverName
+      })
+    };
   }
   const [users, teams] = await Promise.all([
     mongoDb.collection("users").find({}, { projection: { _id: 0, id: 1, name: 1, teamId: 1 } }).toArray(),
@@ -2606,6 +2619,19 @@ async function handleApi(req, res, urlPath) {
           if (parsed.kind === "approval_reject") {
             const ent = approvalSlack.parseApprovalEntity(parsed.entityId);
             if (ent) {
+              const existingRec = await mongoDb.collection(ent.coll).findOne({ id: ent.id }, { projection: { _id: 0 } });
+              // Already decided (via the app, or the Approve button already
+              // clicked) — update the message instead of opening an empty
+              // reject form for a record there's nothing left to redo on.
+              if (existingRec?.approval && existingRec.approval.status && existingRec.approval.status !== "pending") {
+                const decider = existingRec.approval.decidedByUserId
+                  ? await mongoDb.collection("users").findOne({ id: existingRec.approval.decidedByUserId }, { projection: { name: 1 } })
+                  : null;
+                await respond(approvalSlack.approvalResultLine({
+                  coll: ent.coll, rec: existingRec, status: existingRec.approval.status, remark: existingRec.approval.remark, byName: decider?.name || existingRec.approval.approverName
+                }));
+                return;
+              }
               const summary = String(payload.message?.text || "").split("\n")[0];
               await slackOpenView(payload.trigger_id, approvalSlack.rejectModal({ coll: ent.coll, id: ent.id, summary, channel: payload.channel?.id, ts: payload.message?.ts }));
             }
@@ -2616,8 +2642,11 @@ async function handleApi(req, res, urlPath) {
             const ent = approvalSlack.parseApprovalEntity(parsed.entityId);
             if (!ent) { await respond("⚠️ That item can't be approved here."); return; }
             const out = await decideApprovalFromSlack({ coll: ent.coll, id: ent.id, status: "approved", actor });
-            // a refusal leaves the buttons where they are (so a wrong click doesn't kill the request)
-            if (out.ok) await respond(out.message);
+            // Already decided -> update the message itself (buttons must go
+            // away). Any OTHER refusal (no user match, wrong approver, etc.)
+            // leaves the buttons where they are and just DMs the clicker, so
+            // a wrong click doesn't kill a request that's still actionable.
+            if (out.ok || out.alreadyDecided) await respond(out.message);
             else if (payload.user?.id) await slackPostMessage(payload.user.id, out.message, undefined, { noCopy: true });
             return;
           }
