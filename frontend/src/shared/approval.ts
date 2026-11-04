@@ -78,7 +78,12 @@ export function pendingFor(data: BoardData | null, userId: string | null): { col
   for (const c of APPROVAL_COLLS) {
     for (const rec of coll(data, c) as Rec[]) if (canDecide(data, userId, rec)) out.push({ coll: c, rec });
   }
-  return out.sort((a, b) => (b.rec.createdAt || 0) - (a.rec.createdAt || 0));
+  // Oldest first — the only consumer (ApprovalQueue) caps the visible list
+  // to the first 8 unless "Show all" is clicked, so newest-first was
+  // silently burying the genuinely overdue ones (sometimes weeks old)
+  // behind a pile of same-day submissions, and nobody ever scrolled down
+  // far enough to see them flagged Overdue.
+  return out.sort((a, b) => (a.rec.createdAt || 0) - (b.rec.createdAt || 0));
 }
 
 /** Records this person made that their leader rejected — sent back to redo. */
