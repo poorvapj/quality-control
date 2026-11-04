@@ -1,6 +1,6 @@
 /* Server-side mirror of frontend/src/pages/QualityInspection.tsx's own
  * generateReport() — builds the exact same QcInspectionPdfData shape, for
- * the daily-1pm-IST scheduled Slack send (see server.js). "All projects"
+ * the daily-4pm-IST scheduled Slack send (see server.js). "All projects"
  * scope, same as generating it on the page with every filter left blank.
  */
 const DAY_MS = 86400000;
@@ -81,7 +81,7 @@ async function buildWeeklyQcReportData(mongoDb) {
     scopeLabel: "All projects",
     periodLabel,
     generatedAt: Date.now(),
-    generatedBy: "Scheduled (daily 1pm IST)",
+    generatedBy: "Scheduled (daily 4pm IST)",
     kpis: { total, pass, fail, rework, passRate: total ? Math.round((pass / total) * 100) : 0, overdue, resolved },
     rows
   };
