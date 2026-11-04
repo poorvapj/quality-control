@@ -548,6 +548,7 @@ function SnagDrawer({ id }: { id: string }) {
   const { setSnagStatus, markSnagNotApplicable, markSnagResolved, saveSnagAssignee, capturePhoto } = useActions();
   const fileRef = useRef<HTMLInputElement>(null);
   const resolveFileRef = useRef<HTMLInputElement>(null);
+  const closeFileRef = useRef<HTMLInputElement>(null);
   const s = byId(coll(data, "snags"), id);
   // Starts neutral ("Choose") rather than pre-filled with the current
   // assignee — who it's presently assigned to already shows separately
@@ -677,20 +678,16 @@ function SnagDrawer({ id }: { id: string }) {
           // QualityInspection.tsx) — but the DRI can also close it directly
           // here, as long as there's a photo on record as evidence.
           (myRole() === "DRI" || myRole() === "ADMIN") && (
-            <button
-              className="btn btn-success btn-sm"
-              onClick={() => {
-                if (!(s.photos || []).length) { toast("Add a photo before closing this snag"); return; }
-                setSnagStatus(s.id, "Closed");
-              }}
-            >Close snag</button>
+            <button className="btn btn-success btn-sm" onClick={() => closeFileRef.current?.click()}>
+              📸 Close snag (add photo)
+            </button>
           )
         ) : (
           <button className="btn btn-success btn-sm" onClick={() => setSnagStatus(s.id, "Closed")}>Close snag</button>
         )}
       </div>
       <input
-        type="file" accept="image/*" capture="environment" ref={fileRef} style={{ display: "none" }}
+        type="file" accept="image/*" ref={fileRef} style={{ display: "none" }}
         onChange={(e) => {
           const file = e.target.files?.[0];
           e.target.value = "";
@@ -698,11 +695,19 @@ function SnagDrawer({ id }: { id: string }) {
         }}
       />
       <input
-        type="file" accept="image/*" capture="environment" ref={resolveFileRef} style={{ display: "none" }}
+        type="file" accept="image/*" ref={resolveFileRef} style={{ display: "none" }}
         onChange={async (e) => {
           const file = e.target.files?.[0];
           e.target.value = "";
           if (file) { await capturePhoto("snag", s.id, "", file); await markSnagResolved(s.id); }
+        }}
+      />
+      <input
+        type="file" accept="image/*" ref={closeFileRef} style={{ display: "none" }}
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (file) { await capturePhoto("snag", s.id, "", file); await setSnagStatus(s.id, "Closed"); }
         }}
       />
     </>

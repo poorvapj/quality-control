@@ -186,6 +186,10 @@ export interface Photo {
   // URL kept locally instead, purely so the uploader UI can warn the user
   // the photo didn't actually upload (see uploadPhoto.ts).
   localOnly?: boolean;
+  // When this photo was captured — lets the server tell a photo taken
+  // just now (e.g. as closing evidence) apart from one already sitting on
+  // the record from earlier (e.g. the original QC-fail inspection photo).
+  at?: number;
 }
 
 export interface Snag extends BaseRecord {

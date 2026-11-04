@@ -272,7 +272,7 @@ export function useActions() {
     const label = kind === "snag" ? refLabel(data, "snags", id) : refLabel(data, kind === "unit" ? "units" : "floors", id);
     const dataUrl = await watermarkPhoto(file, label, data ? byId(coll(data, "users"), currentUserId)?.name : undefined);
     const photoType = kind === "snag" ? "snags" : "progress";
-    let photo: { url: string; publicId: string | null; localOnly?: boolean } = { url: dataUrl, publicId: null };
+    let photo: { url: string; publicId: string | null; localOnly?: boolean; at: number } = { url: dataUrl, publicId: null, at: Date.now() };
     try {
       const r = await fetch(API_BASE + "/api/photo", {
         method: "POST",
@@ -281,7 +281,7 @@ export function useActions() {
       });
       if (r.status === 401) notifySessionExpired();
       const j = await r.json();
-      if (j.url) photo = { url: j.url, publicId: j.publicId || null };
+      if (j.url) photo = { url: j.url, publicId: j.publicId || null, at: photo.at };
       else photo.localOnly = true;
     } catch {
       photo.localOnly = true;
@@ -432,7 +432,7 @@ export function useActions() {
     toast("Processing photo…");
     const label = refLabel(data, "units", unitId);
     const dataUrl = await watermarkPhoto(file, label, data ? byId(coll(data, "users"), currentUserId)?.name : undefined);
-    let photo: { url: string; publicId: string | null; localOnly?: boolean } = { url: dataUrl, publicId: null };
+    let photo: { url: string; publicId: string | null; localOnly?: boolean; at: number } = { url: dataUrl, publicId: null, at: Date.now() };
     try {
       const r = await fetch(API_BASE + "/api/photo", {
         method: "POST",
@@ -441,7 +441,7 @@ export function useActions() {
       });
       if (r.status === 401) notifySessionExpired();
       const j = await r.json();
-      if (j.url) photo = { url: j.url, publicId: j.publicId || null };
+      if (j.url) photo = { url: j.url, publicId: j.publicId || null, at: photo.at };
       else photo.localOnly = true;
     } catch {
       photo.localOnly = true;

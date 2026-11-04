@@ -1189,11 +1189,19 @@ async function assertOpAllowed(op, session) {
       throw e;
     }
     if (originQi) {
-      const photosOnOp = Array.isArray(op.rec.photos) ? op.rec.photos.length : 0;
-      if (!photosOnOp) {
+      // A fresh photo, taken just now as closing evidence — not just ANY
+      // photo ever on record (e.g. the original QC-fail inspection photo,
+      // which proves the defect existed, not that it's fixed). "Fresh"
+      // means captured in the last 5 minutes, generous enough to cover the
+      // add-photo-then-close round trip (upload + two sequential ops).
+      const FRESH_PHOTO_WINDOW_MS = 5 * 60 * 1000;
+      const now = Date.now();
+      const isFresh = (p) => typeof p.at === "number" && now - p.at <= FRESH_PHOTO_WINDOW_MS;
+      const freshOnOp = Array.isArray(op.rec.photos) && op.rec.photos.some(isFresh);
+      if (!freshOnOp) {
         const existingSnag = await mongoDb.collection("snags").findOne({ id: op.rec.id }, { projection: { photos: 1 } });
-        const existingPhotos = existingSnag && Array.isArray(existingSnag.photos) ? existingSnag.photos.length : 0;
-        if (!existingPhotos) { const e = new Error("Add a photo before closing this snag"); e.status = 400; throw e; }
+        const freshExisting = existingSnag && Array.isArray(existingSnag.photos) && existingSnag.photos.some(isFresh);
+        if (!freshExisting) { const e = new Error("Add a photo before closing this snag"); e.status = 400; throw e; }
       }
     }
   }
