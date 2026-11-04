@@ -2672,9 +2672,9 @@ async function handleApi(req, res, urlPath) {
     }
   }
   if (req.method === "POST" && urlPath === "/api/reports/weekly-qc/send-now") {
-    // Manual test trigger for the Saturday-1pm-IST weekly Quality Inspection
-    // report — Admin only, ignores the schedule/once-per-week marker, so it
-    // can be verified immediately instead of waiting for Saturday.
+    // Manual test trigger for the daily-1pm-IST Quality Inspection report —
+    // Admin only, ignores the schedule/once-per-day marker, so it can be
+    // verified immediately instead of waiting for the next 1pm IST window.
     const session = getSession(req);
     if (!session) return sendJson(res, 401, { error: "Sign-in required" });
     if (!session.isAdmin) return sendJson(res, 403, { error: "Admin access required" });
@@ -3010,18 +3010,18 @@ connectMongo()
       setInterval(runSync, 30 * 60 * 1000); // every 30 minutes
     }
 
-    // Weekly Work Quality Inspection report -> Slack, Saturday 1pm IST.
+    // Work Quality Inspection report -> Slack, daily at 1pm IST.
     // WEEKLY_QC_REPORT_RECIPIENT_EMAILS is comma-separated (defaults to
-    // just Poorva, for testing) — add rakesh@neotericgrp.in to the list on
-    // Render once ready, no code change needed; everyone listed gets their
-    // own DM with the PDF. A "meta" marker (keyed by the week's end date)
-    // stops a second send if this check fires more than once inside the
-    // match window.
+    // the sir + the two DRIs) — add/remove recipients on Render whenever
+    // needed, no code change required; everyone listed gets their own DM
+    // with the PDF. A "meta" marker (keyed by the report day) stops a
+    // second send if this check fires more than once inside the match
+    // window.
     {
       const { buildWeeklyQcReportData, currentWeekBounds } = require("./weeklyQcReport.js");
       const { renderQcInspectionPdfBuffer } = require("./qcInspectionPdfDocument.js");
       const { sendPdfToEmail } = require("./weeklyReportSlack.js");
-      const RECIPIENT_EMAILS = (process.env.WEEKLY_QC_REPORT_RECIPIENT_EMAILS || process.env.WEEKLY_QC_REPORT_RECIPIENT_EMAIL || "poorva@neotericgrp.in")
+      const RECIPIENT_EMAILS = (process.env.WEEKLY_QC_REPORT_RECIPIENT_EMAILS || process.env.WEEKLY_QC_REPORT_RECIPIENT_EMAIL || "poorva@neotericgrp.in,rishabh.r@neotericgrp.in,deepti@neotericgrp.in")
         .split(",").map((e) => e.trim()).filter(Boolean);
 
       async function sendWeeklyQcReport() {
@@ -3047,9 +3047,8 @@ connectMongo()
         weeklyQcCheckInFlight = true;
         (async () => {
           const istNow = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
-          const isSaturday = istNow.getUTCDay() === 6;
           const hour = istNow.getUTCHours();
-          if (!isSaturday || hour !== 13) return; // only fires within the 13:00-13:59 IST hour, Saturday
+          if (hour !== 13) return; // only fires within the 13:00-13:59 IST hour, every day
           const { to } = currentWeekBounds();
           const markerId = "weeklyQcReportSent:" + to;
           // Atomic claim (findOneAndUpdate, not findOne-then-updateOne) —
@@ -3082,7 +3081,7 @@ connectMongo()
       checkWeeklyQcSchedule(); // in case the process starts mid-window
 
       // Manual test trigger — Admin only, ignores the schedule/marker, so
-      // this can be verified immediately instead of waiting for Saturday.
+      // this can be verified immediately instead of waiting for 1pm IST.
       globalThis.__sendWeeklyQcReportNow = sendWeeklyQcReport;
     }
   })

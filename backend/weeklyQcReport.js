@@ -1,6 +1,6 @@
 /* Server-side mirror of frontend/src/pages/QualityInspection.tsx's own
  * generateReport() — builds the exact same QcInspectionPdfData shape, for
- * the Saturday-1pm-IST scheduled Slack send (see server.js). "All projects"
+ * the daily-1pm-IST scheduled Slack send (see server.js). "All projects"
  * scope, same as generating it on the page with every filter left blank.
  */
 const DAY_MS = 86400000;
@@ -19,19 +19,16 @@ function fmtDate(ts) {
   return new Date(ts).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-/** This week's Sunday-through-today (inclusive) in IST wall-clock terms —
- *  run on a Saturday, that's the full Sun-Sat week just finishing. */
+/** Today, in IST wall-clock terms — the report now runs once per day. */
 function currentWeekBounds() {
   const now = istNow();
   const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const dow = to.getUTCDay(); // 0=Sun..6=Sat
-  const from = new Date(to.getTime() - dow * DAY_MS);
-  return { from: ymd(from), to: ymd(to) };
+  return { from: ymd(to), to: ymd(to) };
 }
 
 async function buildWeeklyQcReportData(mongoDb) {
   const bounds = currentWeekBounds();
-  const periodLabel = `${fmtDate(parseYmd(bounds.from).getTime())} – ${fmtDate(parseYmd(bounds.to).getTime())}`;
+  const periodLabel = fmtDate(parseYmd(bounds.to).getTime());
 
   const [allInspections, allSnags] = await Promise.all([
     mongoDb.collection("qualityInspections").find({}).toArray(),
@@ -84,7 +81,7 @@ async function buildWeeklyQcReportData(mongoDb) {
     scopeLabel: "All projects",
     periodLabel,
     generatedAt: Date.now(),
-    generatedBy: "Scheduled (Saturday 1pm IST)",
+    generatedBy: "Scheduled (daily 1pm IST)",
     kpis: { total, pass, fail, rework, passRate: total ? Math.round((pass / total) * 100) : 0, overdue, resolved },
     rows
   };
