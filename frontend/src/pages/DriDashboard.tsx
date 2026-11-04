@@ -180,7 +180,15 @@ const STAGE_LABEL: Record<string, string> = {
    concern the way their own raised tickets are. */
 export default function DriDashboard() {
   const { data, currentUserId, me, setActiveTab, setOpenDrawingRequestId, openDrawer } = useApp();
-  const projects = myProjects(data, currentUserId);
+  // myProjects() falls back to "every project" for anyone with no
+  // projectIds set (right for a project PICKER elsewhere in the app — an
+  // unscoped Execution/Quality person should see every project to choose
+  // from) — but this page is "MY responsibility as a DRI", so the same
+  // fallback would wrongly put every open Fail/Rework in the whole app
+  // onto the plate of any DRI who simply hasn't been scoped to specific
+  // projects yet (e.g. a team leader who isn't meant to be a project DRI
+  // at all). Here, no projectIds genuinely means none.
+  const projects = currentUserId === "U-ADMIN" || me()?.projectIds?.length ? myProjects(data, currentUserId) : [];
   const projectIds = projects.map((p) => p.id);
 
   // If this DRI leads a Team (Masters ▸ Teams), their dashboard also shows
