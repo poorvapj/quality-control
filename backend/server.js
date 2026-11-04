@@ -3071,7 +3071,7 @@ connectMongo()
       const { buildWeeklyQcReportData, currentWeekBounds } = require("./weeklyQcReport.js");
       const { renderQcInspectionPdfBuffer } = require("./qcInspectionPdfDocument.js");
       const { sendPdfToEmail } = require("./weeklyReportSlack.js");
-      const RECIPIENT_EMAILS = (process.env.WEEKLY_QC_REPORT_RECIPIENT_EMAILS || process.env.WEEKLY_QC_REPORT_RECIPIENT_EMAIL || "poorva@neotericgrp.in,rishabh.r@neotericgrp.in,deepti@neotericgrp.in")
+      const RECIPIENT_EMAILS = (process.env.WEEKLY_QC_REPORT_RECIPIENT_EMAILS || process.env.WEEKLY_QC_REPORT_RECIPIENT_EMAIL || "poorva@neotericgrp.in,rishabh.r@neotericgrp.in,deepti@neotericgrp.in,rakesh@neotericgrp.in")
         .split(",").map((e) => e.trim()).filter(Boolean);
 
       async function sendWeeklyQcReport() {
