@@ -2894,6 +2894,22 @@ async function handleApi(req, res, urlPath) {
     if (result.deletedCount === 0) return sendJson(res, 404, { error: "Backup not found" });
     return sendJson(res, 200, { ok: true });
   }
+  if (req.method === "GET" && urlPath === "/api/reports/weekly-qc/cron") {
+    // Same pattern as /api/backup/scheduled and /api/team-reports/generate —
+    // an external cron pinger hits this at 4pm IST instead of relying on
+    // the in-process setInterval, which only runs while this process
+    // happens to be awake (Render's free tier sleeps on inactivity).
+    const secret = process.env.WEEKLY_QC_REPORT_CRON_SECRET;
+    if (!secret) return sendJson(res, 501, { error: "WEEKLY_QC_REPORT_CRON_SECRET is not configured" });
+    if (!timingSafeStringEqual(req.headers["x-cron-secret"], secret)) return sendJson(res, 401, { error: "Invalid cron secret" });
+    if (!globalThis.__runWeeklyQcReportCron) return sendJson(res, 503, { error: "Not ready yet — try again in a few seconds" });
+    try {
+      const out = await globalThis.__runWeeklyQcReportCron();
+      return sendJson(res, 200, out);
+    } catch (e) {
+      return sendJson(res, 500, { ok: false, error: "Scheduled QC report failed: " + e.message });
+    }
+  }
   if (req.method === "GET" && urlPath === "/api/backup/scheduled") {
     // No login required — this is for an external cron pinger (Render's
     // free tier sleeps, so an in-process setInterval can't be relied on).
@@ -3162,6 +3178,27 @@ connectMongo()
       // Manual test trigger — Admin only, ignores the schedule/marker, so
       // this can be verified immediately instead of waiting for 4pm IST.
       globalThis.__sendWeeklyQcReportNow = sendWeeklyQcReport;
+
+      // External-cron-safe trigger — same atomic once-per-day marker claim
+      // as checkWeeklyQcSchedule above, but callable any time (no hour
+      // check), for an outside pinger (e.g. /api/backup/scheduled's own
+      // cron-job.org setup) to hit at 4pm IST. The in-process setInterval
+      // above only works while this process happens to be awake; Render's
+      // free tier sleeps on inactivity, which is why the report has been
+      // missing some days — an external HTTP ping both wakes the dyno and
+      // doesn't depend on a timer surviving inside it.
+      globalThis.__runWeeklyQcReportCron = async () => {
+        const { to } = currentWeekBounds();
+        const markerId = "weeklyQcReportSent:" + to;
+        const claim = await mongoDb.collection("meta").findOneAndUpdate(
+          { _id: markerId },
+          { $setOnInsert: { sentAt: Date.now() } },
+          { upsert: true, returnDocument: "before" }
+        );
+        if (claim) return { ok: true, skipped: true }; // already sent today
+        const ok = await sendWeeklyQcReport();
+        return { ok, skipped: false };
+      };
     }
   })
   .catch((e) => {
