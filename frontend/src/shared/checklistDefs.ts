@@ -76,23 +76,23 @@ const FALLBACK_PHASE_GROUPS: PhaseGroup[] = [
     name: "Brickwork",
     scope: "unit",
     phases: [
-      { label: "Before Brickwork", nameOverride: "", items: ["Brickwork layout: check wall location, thickness, openings, and alignment against approved drawings."] },
-      { label: "During Brickwork", nameOverride: "", items: [
+      { label: "Before Brickwork", items: ["Brickwork layout: check wall location, thickness, openings, and alignment against approved drawings."] },
+      { label: "During Brickwork", items: [
         "Line, level, and plumb: check courses and wall faces regularly using suitable instruments — plumb check every 3 courses, max deviation 3mm per 3m.",
         "Bond and joints: ensure proper bond, staggered vertical joints, uniform joint thickness, and fully filled mortar joints.",
         "Mortar and bricks: verify approved materials, mortar mix, brick condition, and appropriate wetting where specified.",
         "Laying and curing: ensure proper laying technique, toothed/keyed junctions where specified, and curing as required."
       ] },
-      { label: "Before Plastering", nameOverride: "", items: [
+      { label: "Before Plastering", nameOverride: "Plaster", items: [
         "Pre-plaster services: check plumbing pipes, electrical conduits/boxes, and A.C. pipe/fittings before plastering.",
         "Surface preparation: ensure background is clean, sound, and prepared to the approved method; provide bonding treatment where specified.",
         "Chicken mesh at concrete and brickwork joints.",
         "Surface curing before plastering."
       ] },
-      { label: "During Plastering", nameOverride: "", items: [
+      { label: "During Plastering", nameOverride: "Plaster", items: [
         "Finish, level, and plumb: check thickness (12mm internal, verified with pin at 3 points per wall), flatness, corners, edges, line, level, and verticality."
       ] },
-      { label: "After Plastering", nameOverride: "", items: ["Curing: plastered surface cured as required."] }
+      { label: "After Plastering", nameOverride: "Plaster", items: ["Curing: plastered surface cured as required."] }
     ]
   },
   {
@@ -124,15 +124,14 @@ const FALLBACK_PHASE_GROUPS: PhaseGroup[] = [
 // Keyed by the CURRENT work type name a phase displays as; values are every
 // name it used to display as (so a record saved under the old name still
 // counts toward this phase's gating/lookup logic — see latestResult() in
-// QualityInspection.tsx). "Brickwork"/"Brickwork & Plaster" were dropped
-// from these 5 phases' displayed names (redundant — the phase label already
-// says it), so their old prefixed names move here as legacy equivalents.
+// QualityInspection.tsx). The 3 Plastering phases used to show under
+// "Brickwork & Plaster" — now under "Plaster" — and briefly (one deploy)
+// showed with no prefix at all, so both are kept as legacy equivalents.
 export const LEGACY_PHASE_EQUIVALENT: Record<string, string[]> = {
-  "Before Brickwork": ["Brickwork — Before Brickwork"],
-  "During Brickwork": ["Brickwork — During Brickwork", "Brickwork & Plaster — During Brickwork", "Brickwork Inspection"],
-  "Before Plastering": ["Brickwork & Plaster — Before Plastering", "Plastering Inspection"],
-  "During Plastering": ["Brickwork & Plaster — During Plastering", "Plastering Inspection"],
-  "After Plastering": ["Brickwork & Plaster — After Plastering"],
+  "Brickwork — During Brickwork": ["Brickwork & Plaster — During Brickwork", "Brickwork Inspection", "During Brickwork"],
+  "Plaster — Before Plastering": ["Brickwork & Plaster — Before Plastering", "Plastering Inspection", "Before Plastering"],
+  "Plaster — During Plastering": ["Brickwork & Plaster — During Plastering", "Plastering Inspection", "During Plastering"],
+  "Plaster — After Plastering": ["After Plastering"],
   "R.C.C. Slab Inspection — After Pour": ["R.C.C. Slab Inspection"],
   "Waterproofing Inspection — After 24 Hours": ["Waterproofing Inspection"],
   "Plumbing & Electrical Inspection — Before Handover": ["Plumbing & Electrical Inspection"]
