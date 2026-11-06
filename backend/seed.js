@@ -44,7 +44,8 @@ const COLLECTIONS = [
   "slaTimelines", // Masters ▸ SLA Timeline — hours before a pending approval/sign-off queue item is flagged Overdue, per queue
   "checklistGroups", // Masters ▸ Checklist Groups — the Work Types shown in Quality Inspection/Execution (standalone or phased)
   "checklistPhases", // Masters ▸ Checklist Phases — ordered phases within a phased Checklist Group (gating sequence)
-  "checklistItems" // Masters ▸ Checklist Items — the actual checklist points for a group (standalone) or phase
+  "checklistItems", // Masters ▸ Checklist Items — the actual checklist points for a group (standalone) or phase
+  "measurementUnits" // Masters ▸ Measurement Units — unit options on Material/Work Measurement forms
 ];
 
 function blankData() {

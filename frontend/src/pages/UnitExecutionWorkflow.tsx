@@ -4,6 +4,7 @@ import { API_BASE } from "../services/config";
 import { coll, myProjects, projectFloors, floorUnits } from "../shared/rules";
 import { buildEventOp } from "../shared/eventLog";
 import { hasModuleGrant } from "../shared/permissionMatrix";
+import { useMeasurementUnits } from "../shared/measurementUnits";
 import { makeTempId } from "../shared/helpers";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
@@ -30,12 +31,6 @@ interface MeasurementPrefill {
 
 const CUSTOM_ITEM = "__custom__";
 const todayStr = () => new Date().toISOString().slice(0, 10);
-
-// Same fixed list + "Other" fallback as Measurement.tsx's Unit field — a
-// dropdown avoids typos/inconsistent spelling that would otherwise make
-// unit comparisons (e.g. against VMS) unreliable, while "Other" still
-// allows a value outside this list since VMS's own units aren't fixed.
-const MEASUREMENT_UNITS = ["sq.ft", "R.ft", "Rmt", "Cum", "Sqm", "Kg", "MT", "Nos", "Bag", "Ltr"];
 
 const qty = (n: number) => n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
 
@@ -231,6 +226,7 @@ function MeasurementForm({
   toast: (msg: string) => void;
 }) {
   const { data } = useApp();
+  const measurementUnits = useMeasurementUnits();
   const [pProjectId, setPProjectId] = useState("");
   const [pFloorId, setPFloorId] = useState("");
   const [pUnitId, setPUnitId] = useState("");
@@ -432,14 +428,14 @@ function MeasurementForm({
           {!customMeasuredUnit ? (
             <select
               className="select"
-              value={MEASUREMENT_UNITS.includes(measuredUnit) ? measuredUnit : ""}
+              value={measurementUnits.includes(measuredUnit) ? measuredUnit : ""}
               onChange={(e) => {
                 if (e.target.value === "__other__") { setCustomMeasuredUnit(true); setMeasuredUnit(""); }
                 else setMeasuredUnit(e.target.value);
               }}
             >
               <option value="">Select unit…</option>
-              {MEASUREMENT_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+              {measurementUnits.map((u) => <option key={u} value={u}>{u}</option>)}
               <option value="__other__">Other…</option>
             </select>
           ) : (
@@ -459,14 +455,14 @@ function MeasurementForm({
           {!customMaterialUnit ? (
             <select
               className="select"
-              value={MEASUREMENT_UNITS.includes(materialUnit) ? materialUnit : ""}
+              value={measurementUnits.includes(materialUnit) ? materialUnit : ""}
               onChange={(e) => {
                 if (e.target.value === "__other__") { setCustomMaterialUnit(true); setMaterialUnit(""); }
                 else setMaterialUnit(e.target.value);
               }}
             >
               <option value="">Select unit…</option>
-              {MEASUREMENT_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+              {measurementUnits.map((u) => <option key={u} value={u}>{u}</option>)}
               <option value="__other__">Other…</option>
             </select>
           ) : (

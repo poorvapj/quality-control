@@ -5,6 +5,7 @@ import { coll, myProjects, projectFloors, projectUnits, floorUnits } from "../sh
 import { buildEventOp } from "../shared/eventLog";
 import { makeTempId } from "../shared/helpers";
 import { hasModuleGrant } from "../shared/permissionMatrix";
+import { useMeasurementUnits } from "../shared/measurementUnits";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
 import { approvalFor, effectiveApproval } from "../shared/approval";
@@ -32,12 +33,6 @@ interface Comparison {
 
 const qty = (n: number) => n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
 
-// Common construction-measurement units — a fixed dropdown instead of free
-// text avoids typos/inconsistent spelling (e.g. "sqft" vs "sq.ft") that
-// would otherwise silently break the VMS comparison's unit match. "Other"
-// still allows a value outside this list, since VMS's own scope-item units
-// aren't a fixed, enumerable set either.
-const MEASUREMENT_UNITS = ["sq.ft", "R.ft", "Rmt", "Cum", "Sqm", "Kg", "MT", "Nos", "Bag", "Ltr"];
 const loc = (l: WorkMeasurement["location"]) =>
   [l.tower && `Tower ${l.tower}`, l.floor && `Floor ${l.floor}`, l.flat && `Flat ${l.flat}`, l.area].filter(Boolean).join(" · ") || "—";
 
@@ -383,6 +378,7 @@ function MeasurementPanel({ open, onClose, categories, categoriesNote, existing,
 }) {
   const { data, currentUserId } = useApp();
   const projects = myProjects(data, currentUserId);
+  const measurementUnits = useMeasurementUnits();
   const today = new Date().toISOString().slice(0, 10);
 
   const [projectId, setProjectId] = useState("");
@@ -552,14 +548,14 @@ function MeasurementPanel({ open, onClose, categories, categoriesNote, existing,
           {!customUnit ? (
             <select
               className="select"
-              value={MEASUREMENT_UNITS.includes(measuredUnit) ? measuredUnit : ""}
+              value={measurementUnits.includes(measuredUnit) ? measuredUnit : ""}
               onChange={(e) => {
                 if (e.target.value === "__other__") { setCustomUnit(true); setMeasuredUnit(""); }
                 else setMeasuredUnit(e.target.value);
               }}
             >
               <option value="">Select unit…</option>
-              {MEASUREMENT_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+              {measurementUnits.map((u) => <option key={u} value={u}>{u}</option>)}
               <option value="__other__">Other…</option>
             </select>
           ) : (

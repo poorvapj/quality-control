@@ -255,6 +255,16 @@ export const MASTERS: Record<MasterKey, MasterDef> = {
       { k: "active", label: "Active", type: "bool" }
     ]
   },
+  measurementUnits: {
+    label: "Measurement Units", icon: "📏", prefix: "UNM",
+    desc: "The unit options offered on Material/Work Measurement forms (e.g. sq.ft, Cum, Kg). Order decides the dropdown order.",
+    cols: ["name", "order", "active"],
+    fields: [
+      { k: "name", label: "Unit name", type: "text", required: true, hint: "Shown exactly as typed, e.g. \"sq.ft\" or \"Cum\"." },
+      { k: "order", label: "Order", type: "number" },
+      { k: "active", label: "Active", type: "bool" }
+    ]
+  },
   ackTimelines: {
     label: "Acknowledgment Timeline", icon: "⏱️", prefix: "ACKT",
     desc: "How many hours the site's own DRI gets to acknowledge a Fail/Rework before it counts as overdue — one row per checklist GROUP (the part of a Quality Inspection Work Type before the \" — \", e.g. \"Brickwork\", \"Brickwork & Plaster\", \"R.C.C. Slab Inspection\", \"Plumbing & Electrical Inspection\" — covers every phase under that group). A group with no row here never shows as overdue.",

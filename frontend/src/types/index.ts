@@ -856,6 +856,7 @@ export interface BoardData {
   checklistGroups: ChecklistGroup[];
   checklistPhases: ChecklistPhase[];
   checklistItems: ChecklistItemDef[];
+  measurementUnits: MeasurementUnit[];
   progress: Record<string, ProgressPatch>;
   events: EventLog[];
   [key: string]: unknown;
@@ -920,6 +921,16 @@ export interface AckTimeline extends BaseRecord {
   active?: boolean;
 }
 
+/* Masters ▸ Measurement Units — the unit options offered on Material/Work
+ * Measurement forms (Measurement.tsx, UnitExecutionWorkflow.tsx). Falls back
+ * to a fixed list (see shared/measurementUnits.ts) if this collection is
+ * empty, so nothing breaks on a fresh DB before it's been populated. */
+export interface MeasurementUnit extends BaseRecord {
+  name: string;
+  order?: number;
+  active?: boolean;
+}
+
 /** The pending queues an SLA timeline can be set for — see
  *  frontend/src/shared/slaTimelines.ts. Deliberately excludes Drawing
  *  Requests and DPR (out of scope — those have their own separate review
@@ -976,7 +987,7 @@ export type Op =
   | { op: "event"; ev: EventLog };
 
 export type TabKey = "dash" | "misDashboard" | "userMis" | "executionReconciliation" | "qualityInspection" | "execution" | "qualityFails" | "caseStudies" | "unitExecutionWorkflow" | "measurement" | "progressAnalysis" | "purchaseOrders" | "work" | "board" | "handoverChecklist" | "handoverInternal" | "handoverOwner" | "snags" | "team" | "masters" | "addUser" | "dpr" | "drawingRequests" | "backups" | "auditLog" | "permissionMatrix";
-export type MasterKey = "projects" | "floors" | "units" | "columnMaster" | "slabMaster" | "stages" | "qparams" | "checklists" | "stagemap" | "users" | "permissions" | "workTargets" | "teams" | "roles" | "forms" | "ackTimelines" | "slaTimelines" | "checklistGroups" | "checklistPhases" | "checklistItems";
+export type MasterKey = "projects" | "floors" | "units" | "columnMaster" | "slabMaster" | "stages" | "qparams" | "checklists" | "stagemap" | "users" | "permissions" | "workTargets" | "teams" | "roles" | "forms" | "ackTimelines" | "slaTimelines" | "checklistGroups" | "checklistPhases" | "checklistItems" | "measurementUnits";
 
 export type FieldType = "text" | "number" | "date" | "color" | "select" | "ref" | "bool" | "textarea" | "items" | "password" | "permissionGrid" | "formFields";
 
