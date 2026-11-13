@@ -104,7 +104,7 @@ export default function DailyProgressReportPage() {
   // A DRI's first stop here is almost always "did my own report go through" —
   // the Summary tab's list is what answers that, so start there instead of
   // Work Progress (which is a site-wide view, less relevant to them first).
-  const [tab, setTab] = useState<DprTab>(isDri ? "summary" : "work");
+  const [tab, setTab] = useState<DprTab>("summary");
   const [summaryPage, setSummaryPage] = useState(1);
   const SUMMARY_PAGE_SIZE = 10;
   const [viewReportId, setViewReportId] = useState<string | null>(null);
