@@ -720,12 +720,12 @@ export default function DailyProgressReportPage() {
                 <table className="data">
                   <thead>
                     <tr>
-                      <th>Date</th><th>Project</th><th>Contractor</th><th>DRI</th><th>Shift</th><th>Labourers</th><th>Categories</th><th></th>
+                      <th>Date</th><th>Project</th><th>Contractor</th><th>DRI</th><th>Shift</th><th>Labourers</th><th>Categories</th>
                     </tr>
                   </thead>
                   <tbody>
                     {rows.slice((summaryPage - 1) * SUMMARY_PAGE_SIZE, summaryPage * SUMMARY_PAGE_SIZE).map((r) => (
-                      <tr key={r.id}>
+                      <tr key={r.id} style={{ cursor: "pointer" }} onClick={() => setViewReportId(r.id)}>
                         <td style={{ whiteSpace: "nowrap" }}>{fmtDate(new Date(r.date).getTime())}</td>
                         <td>{r.projectName || refLabel(data, "projects", r.projectId)}</td>
                         <td>{r.vendorName || r.vendorCode}</td>
@@ -733,11 +733,6 @@ export default function DailyProgressReportPage() {
                         <td><span className={"badge-tag " + (r.shift === "Night" ? "mute" : "wip")}>{r.shift}</span></td>
                         <td className="num">{r.labourCount}</td>
                         <td title={r.workEntries.map((e) => e.category).join(", ")}>{r.workEntries.map((e) => e.category).join(", ") || "—"}</td>
-                        <td>
-                          <button className="btn btn-secondary btn-sm" title="View" onClick={() => setViewReportId(r.id)}>
-                            <NavIcon name="eye" size={13} />
-                          </button>
-                        </td>
                       </tr>
                     ))}
                   </tbody>
