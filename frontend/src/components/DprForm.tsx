@@ -33,10 +33,11 @@ type PhotoGroup = "generalPhotos" | "beforePhotos" | "afterPhotos";
 // One checked work type's qty/unit + three photo pickers. Memoised so typing
 // a quantity in one work type (or any header field) doesn't re-render the
 // photo thumbnails of every other checked work type.
-const CategoryEntry = React.memo(function CategoryEntry({ cat, entry, target, onQty, onPhotos }: {
+const CategoryEntry = React.memo(function CategoryEntry({ cat, entry, target, onQty, onPhotos, onEquipmentField }: {
   cat: string; entry: DprWorkEntry | undefined; target: WorkTarget | undefined;
   onQty: (cat: string, qty: string, unit: string) => void;
   onPhotos: (cat: string, group: PhotoGroup, photos: Photo[]) => void;
+  onEquipmentField: (cat: string, field: "equipmentOwner" | "equipmentHours" | "tractorTrips", value: string) => void;
 }) {
   const onGeneral = useCallback((p: Photo[]) => onPhotos(cat, "generalPhotos", p), [cat, onPhotos]);
   const onBefore = useCallback((p: Photo[]) => onPhotos(cat, "beforePhotos", p), [cat, onPhotos]);
@@ -62,6 +63,36 @@ const CategoryEntry = React.memo(function CategoryEntry({ cat, entry, target, on
             onChange={(e) => onQty(cat, entry?.qty != null ? String(entry.qty) : "", e.target.value)}
           />
         </div>
+        {cat === "JCB" && (
+          <>
+            <div className="field">
+              <label>Owner</label>
+              <input
+                className="input" placeholder="JCB owner/operator name"
+                value={entry?.equipmentOwner ?? ""}
+                onChange={(e) => onEquipmentField(cat, "equipmentOwner", e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label>Number of hours</label>
+              <input
+                className="input" type="number" min={0} step="any" placeholder="e.g. 6"
+                value={entry?.equipmentHours ?? ""}
+                onChange={(e) => onEquipmentField(cat, "equipmentHours", e.target.value)}
+              />
+            </div>
+          </>
+        )}
+        {cat === "Tractor" && (
+          <div className="field">
+            <label>Number of tractor trips</label>
+            <input
+              className="input" type="number" min={0} step="any" placeholder="e.g. 4"
+              value={entry?.tractorTrips ?? ""}
+              onChange={(e) => onEquipmentField(cat, "tractorTrips", e.target.value)}
+            />
+          </div>
+        )}
       </div>
       <PhotoGroupUploader label="General / WIP photos" photos={entry?.generalPhotos || NO_PHOTOS} onChange={onGeneral} />
       <PhotoGroupUploader label="Before photos" photos={entry?.beforePhotos || NO_PHOTOS} onChange={onBefore} />
@@ -112,6 +143,16 @@ export default function DprForm({ isPublic, onDone, onDirtyChange }: { isPublic:
 
   const setEntryQty = useCallback((cat: string, qty: string, unit: string) => {
     setEntries((e) => ({ ...e, [cat]: { ...e[cat], qty: qty === "" ? undefined : Number(qty), unit: unit || undefined } }));
+  }, []);
+
+  const setEntryEquipmentField = useCallback((cat: string, field: "equipmentOwner" | "equipmentHours" | "tractorTrips", value: string) => {
+    setEntries((e) => ({
+      ...e,
+      [cat]: {
+        ...e[cat],
+        [field]: field === "equipmentOwner" ? value : (value === "" ? undefined : Number(value))
+      }
+    }));
   }, []);
 
   const workTargets = coll(data, "workTargets") as WorkTarget[];
@@ -296,7 +337,7 @@ export default function DprForm({ isPublic, onDone, onDirtyChange }: { isPublic:
         <CategoryGrid checked={checked} onToggle={toggleCategory} />
 
         {WORK_CATEGORIES.filter((c) => checked[c]).map((cat) => (
-          <CategoryEntry key={cat} cat={cat} entry={entries[cat]} target={targetsByCategory.get(cat)} onQty={setEntryQty} onPhotos={setEntryPhotos} />
+          <CategoryEntry key={cat} cat={cat} entry={entries[cat]} target={targetsByCategory.get(cat)} onQty={setEntryQty} onPhotos={setEntryPhotos} onEquipmentField={setEntryEquipmentField} />
         ))}
       </div>
 

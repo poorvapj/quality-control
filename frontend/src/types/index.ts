@@ -337,6 +337,11 @@ export interface DprWorkEntry {
   // against WorkTarget.plannedQty for the same project+category.
   qty?: number;
   unit?: string;
+  // JCB only: who owns/operates the machine, and how many hours it ran today.
+  equipmentOwner?: string;
+  equipmentHours?: number;
+  // Tractor only: number of trips made today.
+  tractorTrips?: number;
 }
 
 export interface DailyProgressReport extends BaseRecord {

@@ -40,7 +40,7 @@ export const WORK_CATEGORIES = [
   "Scaffolding", "POP", "Aluminium", "AC",
   "Texture", "Camera", "Road", "Termite treatment",
   "Lift", "Material Shifting", "Stone", "Tiles",
-  "Epoxy", "Ceiling", "Welding", "Railing", "Other"
+  "Epoxy", "Ceiling", "Welding", "Railing", "JCB", "Tractor", "Other"
 ];
 
 export const SEVERITIES: Severity[] = ["Critical", "Major", "Minor"];
