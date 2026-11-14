@@ -25,7 +25,7 @@ export const API_BASE: string = (() => {
   const isViteDevPort = isLocal && port !== "" && port !== "5000";
   if (isViteDevPort) return "http://localhost:5000";
   if (isLocal) return "";
-  return "https://quality-control-1t2r.onrender.com";
+  return "https://quality-control-5h5b.onrender.com";
 })();
 
 /* Real site work-type checklist for Daily Progress Report — matches the
