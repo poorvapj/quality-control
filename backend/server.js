@@ -792,30 +792,33 @@ async function connectMongo() {
   mongoClient = client;
   mongoDb = client.db(process.env.MONGODB_DB || undefined);
 
-  for (const c of COLLECTIONS) {
-    await mongoDb.collection(c).createIndex({ id: 1 }, { unique: true });
-  }
-  await mongoDb.collection("events").createIndex({ ts: -1 });
-  // sparse: users created before email-based login existed (or without an
-  // email) don't collide with each other on a shared "" value.
-  await mongoDb.collection("users").createIndex({ email: 1 }, { unique: true, sparse: true });
-  await mongoDb.collection("backups").createIndex({ id: 1 }, { unique: true });
-  await mongoDb.collection("backups").createIndex({ createdAt: -1 });
-  // The only real filtered (non-find({})) queries in the app today: a
-  // project delete cascades by scanning floors/units for that projectId
-  // (line ~1237), and the VMS-link report scans workMeasurements for any
-  // linked record. Full collections are tiny right now so these are fast
-  // either way, but indexing them costs nothing and keeps that true as
-  // floors/units/workMeasurements grow over time.
-  await mongoDb.collection("floors").createIndex({ projectId: 1 });
-  await mongoDb.collection("units").createIndex({ projectId: 1 });
-  await mongoDb.collection("workMeasurements").createIndex({ linkedItemId: 1 });
-  // Expires the /api/ops idempotency markers (see opsBatch.js). Only documents
-  // that have an `expireAt` date are affected — the other `meta` docs (rev,
-  // weekly-report markers) don't, so they are never removed.
-  await mongoDb.collection("meta").createIndex({ expireAt: 1 }, { expireAfterSeconds: 0 });
-
-  if (EVENTS_ARCHIVE_DAYS > 0) await mongoDb.collection("eventsArchive").createIndex({ expireAt: 1 }, { expireAfterSeconds: 0 });
+  // Independent index creations — fired together instead of one-by-one, since
+  // each is its own Atlas round trip and sequentially awaiting 39+ of them was
+  // adding real seconds to every cold start (Render free tier spins the
+  // instance down on idle, so this runs on the first request after any gap).
+  await Promise.all([
+    ...COLLECTIONS.map((c) => mongoDb.collection(c).createIndex({ id: 1 }, { unique: true })),
+    mongoDb.collection("events").createIndex({ ts: -1 }),
+    // sparse: users created before email-based login existed (or without an
+    // email) don't collide with each other on a shared "" value.
+    mongoDb.collection("users").createIndex({ email: 1 }, { unique: true, sparse: true }),
+    mongoDb.collection("backups").createIndex({ id: 1 }, { unique: true }),
+    mongoDb.collection("backups").createIndex({ createdAt: -1 }),
+    // The only real filtered (non-find({})) queries in the app today: a
+    // project delete cascades by scanning floors/units for that projectId
+    // (line ~1237), and the VMS-link report scans workMeasurements for any
+    // linked record. Full collections are tiny right now so these are fast
+    // either way, but indexing them costs nothing and keeps that true as
+    // floors/units/workMeasurements grow over time.
+    mongoDb.collection("floors").createIndex({ projectId: 1 }),
+    mongoDb.collection("units").createIndex({ projectId: 1 }),
+    mongoDb.collection("workMeasurements").createIndex({ linkedItemId: 1 }),
+    // Expires the /api/ops idempotency markers (see opsBatch.js). Only documents
+    // that have an `expireAt` date are affected — the other `meta` docs (rev,
+    // weekly-report markers) don't, so they are never removed.
+    mongoDb.collection("meta").createIndex({ expireAt: 1 }, { expireAfterSeconds: 0 }),
+    EVENTS_ARCHIVE_DAYS > 0 ? mongoDb.collection("eventsArchive").createIndex({ expireAt: 1 }, { expireAfterSeconds: 0 }) : null
+  ]);
   if (OPS_ATOMIC) {
     // READ-ONLY probe (a transaction that only reads and commits nothing): says in the log, at every start, whether
     // OPS_ATOMIC can really work on this database. If not, batches silently keep the old non-atomic writes.
