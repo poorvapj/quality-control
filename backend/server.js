@@ -1115,7 +1115,32 @@ async function decideApprovalFromSlack({ coll, id, status, remark, actor }) {
   });
   if (!r.ok) return { ok: false, message: `🚫 ${r.error}` };
   if (!r.approval) return { ok: false, message: "ℹ️ That record doesn't need approval." };
-  await mongoDb.collection(coll).updateOne({ id }, { $set: { approval: r.approval } });
+  // CAS on "still pending" — the plain updateOne({id}, ...) this used to be
+  // let two near-simultaneous clicks (the real app + Slack, or two Slack
+  // clicks racing) both pass the "already decided?" findOne above and both
+  // write, each firing its own author notification for the same decision.
+  const applied = await mongoDb.collection(coll).updateOne({ id, "approval.status": "pending" }, { $set: { approval: r.approval } });
+  if (applied.matchedCount === 0) {
+    const nowRec = await mongoDb.collection(coll).findOne({ id }, { projection: { _id: 0 } });
+    const decider = nowRec?.approval?.decidedByUserId
+      ? await mongoDb.collection("users").findOne({ id: nowRec.approval.decidedByUserId }, { projection: { name: 1 } })
+      : null;
+    return {
+      ok: false,
+      alreadyDecided: true,
+      message: approvalSlack.approvalResultLine({
+        coll, rec: nowRec || rec, status: nowRec?.approval?.status || status, remark: nowRec?.approval?.remark, byName: decider?.name || nowRec?.approval?.approverName
+      })
+    };
+  }
+  // Same follow-ups the app's own approve path applies (raise a snag on an
+  // approved Fail/Rework, close the original on an approved Pass
+  // re-inspection) — a Slack approval used to skip both, since it wrote
+  // `approval` directly instead of going through applyApprovalRules.
+  if (coll === "qualityInspections" && status === "approved") {
+    if (rec.result !== "Pass" && !rec.linkedSnagId) await raiseSnagOnApproveQi(mongoDb, rec);
+    else if (rec.result === "Pass" && rec.reInspectionOf) await closeOriginalSnagOnApproveQi(mongoDb, rec, actor.id);
+  }
   await mongoDb.collection("events").insertOne({
     ts: Date.now(), userId: actor.id, action: status === "approved" ? "APPROVAL_APPROVE" : "APPROVAL_REJECT", targetId: id, stageId: "",
     detail: `${approvalSlack.KIND_LABEL[coll]} · ${approvalSlack.describeRecord(coll, rec)} (via Slack)`
@@ -1181,6 +1206,56 @@ async function applyApprovalRules(op, session) {
     && existing.result === "Pass" && existing.reInspectionOf) {
     op._closeOriginalSnagOnApprove = true;
   }
+}
+
+/* Raises the ONE snag a Fail/Rework inspection gets, the moment it's
+ * actually approved (by a team leader in the app, OR by decideApprovalFromSlack
+ * below — both call this, so a Slack approval can no longer skip it). */
+async function raiseSnagOnApproveQi(db, rec) {
+  const full = await db.collection("qualityInspections").findOne({ id: rec.id }, { projection: { _id: 0 } });
+  if (!full || full.linkedSnagId) return null;
+  const snagId = "SNG-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
+  // Atomically claim the right to raise this inspection's ONE snag before
+  // actually creating it — see the comment at the original call site for why.
+  const claim = await db.collection("qualityInspections").updateOne({ id: full.id, linkedSnagId: null }, { $set: { linkedSnagId: snagId } });
+  if (claim.modifiedCount !== 1) return null;
+  const location = full.unitName ? `${full.floorName} / ${full.unitName}` : full.floorName;
+  const label = full.itemDescription ? `${location} · ${full.itemDescription}` : location;
+  await db.collection("snags").insertOne({
+    id: snagId,
+    projectId: full.projectId,
+    floorId: full.floorId,
+    ...(full.unitId ? { unitId: full.unitId } : {}),
+    stageId: QC_INSPECTION_STAGE_ID,
+    qualityInspectionId: full.id,
+    title: `Quality ${full.result} — ${label}`,
+    description: full.remarks || "",
+    severity: full.severity || "Major",
+    status: "Open",
+    raisedBy: full.inspectorUserId || "",
+    raisedAt: Date.now(),
+    assignedTo: full.correctiveAction ? full.correctiveAction.assignedToUserId : "",
+    dueAt: full.correctiveAction ? new Date(full.correctiveAction.targetDate).getTime() || null : null,
+    photos: full.photos || [],
+    comments: []
+  });
+  rec.linkedSnagId = snagId;
+  return snagId;
+}
+
+/* Mirror of the above for the closing half: a Pass re-inspection's team-leader
+ * approval closes the ORIGINAL failed inspection's linked snag. Shared the
+ * same way so a Slack approval closes it too, instead of leaving it open. */
+async function closeOriginalSnagOnApproveQi(db, rec, actorUserId) {
+  const full = await db.collection("qualityInspections").findOne({ id: rec.id }, { projection: { reInspectionOf: 1 } });
+  const original = full?.reInspectionOf
+    ? await db.collection("qualityInspections").findOne({ id: full.reInspectionOf }, { projection: { linkedSnagId: 1 } })
+    : null;
+  if (!original?.linkedSnagId) return;
+  await db.collection("snags").updateOne(
+    { id: original.linkedSnagId, status: { $ne: "Closed" } },
+    { $set: { status: "Closed", closedAt: Date.now(), closedBy: actorUserId || null } }
+  );
 }
 
 async function assertOpAllowed(op, session) {
@@ -1752,49 +1827,15 @@ async function applyOps(ops, session, trace) {
             after(() => notifyQualityTeamOfSnagProgress("closed_by_dri", rec, existing, session?.userId));
           }
         } else if (op.coll === "qualityInspections") {
+          // Only a brand-new record is a "submission" — an approve/reject
+          // decision or a DRI acknowledge/dispute is an EDIT to an existing
+          // one and must not re-announce it as newly submitted (that used to
+          // fire on every such edit, including with no real checklist/result
+          // on the incoming patch, producing a "Result: undefined" DM).
+          const existingQi = await db.collection("qualityInspections").findOne({ id: op.rec.id }, { projection: { _id: 1 } });
           await writeRecord(db, op, update);
-          // Every submission (not just a Fail) — there's no edit path for an
-          // already-saved inspection (only a fresh re-inspect record), so
-          // this upsert is always a brand-new one.
-          after(() => notifyQualityInspectionSubmitted(rec));
-          if (op._raiseSnagOnApprove) {
-            const full = await db.collection("qualityInspections").findOne({ id: rec.id }, { projection: { _id: 0 } });
-            if (full && !full.linkedSnagId) {
-              const snagId = "SNG-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
-              // Atomically claim the right to raise this inspection's ONE
-              // snag before actually creating it — two near-simultaneous
-              // approval-decision calls on the same record both passing the
-              // findOne's !linkedSnagId check above could otherwise each
-              // insert their own snag. Only the request whose update
-              // actually matches (linkedSnagId still null right now) may
-              // proceed; the loser just skips, exactly as if it had arrived
-              // after the id was already set.
-              const claim = await db.collection("qualityInspections").updateOne({ id: full.id, linkedSnagId: null }, { $set: { linkedSnagId: snagId } });
-              if (claim.modifiedCount === 1) {
-                const location = full.unitName ? `${full.floorName} / ${full.unitName}` : full.floorName;
-                const label = full.itemDescription ? `${location} · ${full.itemDescription}` : location;
-                await db.collection("snags").insertOne({
-                  id: snagId,
-                  projectId: full.projectId,
-                  floorId: full.floorId,
-                  ...(full.unitId ? { unitId: full.unitId } : {}),
-                  stageId: QC_INSPECTION_STAGE_ID,
-                  qualityInspectionId: full.id,
-                  title: `Quality ${full.result} — ${label}`,
-                  description: full.remarks || "",
-                  severity: full.severity || "Major",
-                  status: "Open",
-                  raisedBy: full.inspectorUserId || "",
-                  raisedAt: Date.now(),
-                  assignedTo: full.correctiveAction ? full.correctiveAction.assignedToUserId : "",
-                  dueAt: full.correctiveAction ? new Date(full.correctiveAction.targetDate).getTime() || null : null,
-                  photos: full.photos || [],
-                  comments: []
-                });
-                rec.linkedSnagId = snagId;
-              }
-            }
-          }
+          if (!existingQi) after(() => notifyQualityInspectionSubmitted(rec));
+          if (op._raiseSnagOnApprove) await raiseSnagOnApproveQi(db, rec);
           // A passing re-inspection closes the ORIGINAL failed inspection's
           // linked Snag server-side — never trust the client alone to close
           // its own loop, since that Snag's status gates the "open issues"
@@ -1820,18 +1861,7 @@ async function applyOps(ops, session, trace) {
               if (trace) trace.snagClosed = closedRes?.modifiedCount || 0; // (diagnostics only)
             }
           }
-          if (op._closeOriginalSnagOnApprove) {
-            const full = await db.collection("qualityInspections").findOne({ id: rec.id }, { projection: { reInspectionOf: 1 } });
-            const original = full?.reInspectionOf
-              ? await db.collection("qualityInspections").findOne({ id: full.reInspectionOf }, { projection: { linkedSnagId: 1 } })
-              : null;
-            if (original?.linkedSnagId) {
-              await db.collection("snags").updateOne(
-                { id: original.linkedSnagId, status: { $ne: "Closed" } },
-                { $set: { status: "Closed", closedAt: Date.now(), closedBy: session ? session.userId : null } }
-              );
-            }
-          }
+          if (op._closeOriginalSnagOnApprove) await closeOriginalSnagOnApproveQi(db, rec, session ? session.userId : null);
         } else {
           await writeRecord(db, op, update);
         }
@@ -2657,12 +2687,38 @@ async function handleApi(req, res, urlPath) {
             const snag = await mongoDb.collection("snags").findOne({ id: parsed.entityId });
             if (!snag) { await respond("⚠️ That snag no longer exists."); return; }
             if (snag.status === "Closed") { await respond(`✅ Already closed.`); return; }
-            await mongoDb.collection("snags").updateOne(
-              { id: parsed.entityId },
-              { $set: { status: "Closed", closedAt: Date.now(), closedBy: actor?.id || null } }
+            // Same gates /api/ops applies to the app's own "close this snag"
+            // write (assertOpAllowed, server.js ~1228) — a bare valid Slack
+            // signature used to be the ONLY check here, so anyone in the
+            // channel (even with no matching app account) could close a
+            // quality-fail snag with no DRI sign-off and no fresh photo.
+            if (!actor) { await respond("🚫 Couldn't match your Slack account to a user in the app (the emails must be the same)."); return; }
+            if (actor.id !== ADMIN_USER_ID) {
+              const isProjectDri = actor.role === "DRI" && Array.isArray(actor.projectIds) && actor.projectIds.includes(snag.projectId);
+              if (!isProjectDri) { await respond("🚫 Only this project's DRI (or an admin) can close this snag."); return; }
+            }
+            const originQi = await mongoDb.collection("qualityInspections").findOne(
+              { linkedSnagId: snag.id },
+              { projection: { driAcknowledged: 1, driDisputed: 1 } }
             );
+            if (originQi && !originQi.driAcknowledged && !originQi.driDisputed) {
+              await respond("🚫 This snag's quality failure hasn't been acknowledged (or disputed) by the project DRI yet — do that in the app first.");
+              return;
+            }
+            if (originQi) {
+              const FRESH_PHOTO_WINDOW_MS = 5 * 60 * 1000;
+              const now = Date.now();
+              const isFresh = (p) => typeof p.at === "number" && now - p.at <= FRESH_PHOTO_WINDOW_MS;
+              const hasFresh = Array.isArray(snag.photos) && snag.photos.some(isFresh);
+              if (!hasFresh) { await respond("🚫 Add a fresh closing photo in the app before closing this snag — Slack can't attach one."); return; }
+            }
+            const closed = await mongoDb.collection("snags").updateOne(
+              { id: parsed.entityId, status: { $ne: "Closed" } },
+              { $set: { status: "Closed", closedAt: Date.now(), closedBy: actor.id } }
+            );
+            if (closed.modifiedCount === 0) { await respond(`✅ Already closed.`); return; }
             await bumpRev();
-            await respond(`✅ Snag *${snag.title}* closed${actor ? ` by ${actor.name}` : " via Slack"}.`);
+            await respond(`✅ Snag *${snag.title}* closed by ${actor.name}.`);
           } else if (parsed.kind === "team_report_approve") {
             const report = await mongoDb.collection("teamDailyReports").findOne({ id: parsed.entityId });
             if (!report) { await respond("⚠️ That report no longer exists."); return; }
@@ -3144,33 +3200,36 @@ connectMongo()
         if (weeklyQcCheckInFlight) return;
         weeklyQcCheckInFlight = true;
         (async () => {
-          const istNow = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
-          const hour = istNow.getUTCHours();
-          if (hour !== 16) return; // only fires within the 16:00-16:59 IST hour, every day
-          const { to } = currentWeekBounds();
-          const markerId = "weeklyQcReportSent:" + to;
-          // Atomic claim (findOneAndUpdate, not findOne-then-updateOne) —
-          // the previous check-then-act version let two overlapping
-          // processes (e.g. a deploy restart during the match window, or
-          // horizontal scaling) both see "not sent yet" and send twice.
-          // $setOnInsert so a second racer's update is a no-op that still
-          // reports the pre-existing doc, which it can tell apart from a
-          // genuine first claim (returns null before the write) only via
-          // the upsert's own "didn't exist before" signal — MongoDB gives
-          // us that by returning the PRE-update document (null = we just
-          // created it = we won the race).
-          // mongodb driver v6 returns the document directly (or null) here —
-          // not the legacy {value, ok} wrapper — since includeResultMetadata
-          // now defaults to false.
-          const claim = await mongoDb.collection("meta").findOneAndUpdate(
-            { _id: markerId },
-            { $setOnInsert: { sentAt: Date.now() } },
-            { upsert: true, returnDocument: "before" }
-          );
-          if (claim) return; // already existed — someone else (or an earlier tick) claimed it first
           try {
+            const istNow = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+            const hour = istNow.getUTCHours();
+            if (hour !== 16) return; // only fires within the 16:00-16:59 IST hour, every day
+            const { to } = currentWeekBounds();
+            const markerId = "weeklyQcReportSent:" + to;
+            // Atomic claim (findOneAndUpdate, not findOne-then-updateOne) —
+            // the previous check-then-act version let two overlapping
+            // processes (e.g. a deploy restart during the match window, or
+            // horizontal scaling) both see "not sent yet" and send twice.
+            // $setOnInsert so a second racer's update is a no-op that still
+            // reports the pre-existing doc, which it can tell apart from a
+            // genuine first claim (returns null before the write) only via
+            // the upsert's own "didn't exist before" signal — MongoDB gives
+            // us that by returning the PRE-update document (null = we just
+            // created it = we won the race).
+            // mongodb driver v6 returns the document directly (or null) here —
+            // not the legacy {value, ok} wrapper — since includeResultMetadata
+            // now defaults to false.
+            const claim = await mongoDb.collection("meta").findOneAndUpdate(
+              { _id: markerId },
+              { $setOnInsert: { sentAt: Date.now() } },
+              { upsert: true, returnDocument: "before" }
+            );
+            if (claim) return; // already existed — someone else (or an earlier tick) claimed it first
             await sendWeeklyQcReport();
           } catch (e) {
+            // Any failure here (including the Mongo claim itself) must never
+            // become an unhandled rejection — process.exit(1)'s handler
+            // elsewhere would take the whole server down over one bad tick.
             console.error("  [weekly-qc-report] failed:", e && e.stack ? e.stack : e);
           }
         })().finally(() => { weeklyQcCheckInFlight = false; });

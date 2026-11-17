@@ -232,7 +232,7 @@ async function syncVmsDprCycle(mongoDb, sourceDb) {
       // this function's own existing-id check and this insert. Benign:
       // the record is in QC either way. Anything else is a real failure
       // and must still surface.
-      if (err.code !== 11000 && !(err.writeErrors || []).every((e) => e.code === 11000)) throw err;
+      if (err.code !== 11000 && !(Array.isArray(err.writeErrors) && err.writeErrors.length > 0 && err.writeErrors.every((e) => e.code === 11000))) throw err;
       const duplicates = err.writeErrors ? err.writeErrors.length : toInsert.length;
       insertedCount = toInsert.length - duplicates;
     }
