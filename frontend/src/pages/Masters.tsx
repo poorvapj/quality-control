@@ -184,7 +184,7 @@ export default function Masters() {
               // The Users master gets its own dedicated Add New User page
               // (password + inline Permission Matrix) instead of the
               // generic RecordModal — every other master is unaffected.
-              onClick={() => (activeMaster === "users" ? setActiveTab("addUser") : openRecordModal({ master: activeMaster, id: null }))}
+              onClick={() => (activeMaster === "users" ? setActiveTab("addUser") : openRecordModal({ master: activeMaster, id: null, defaults: isProjectScoped && fProject ? { projectId: fProject } : undefined }))}
             >
               ＋ New
             </button>
@@ -197,6 +197,7 @@ export default function Masters() {
             master={activeMaster as "columnMaster" | "slabMaster"}
             idPrefix={activeMaster === "columnMaster" ? "COL" : "SLB"}
             namePrefix={activeMaster === "columnMaster" ? "Column" : "Slab"}
+            defaultProjectId={fProject}
             onClose={() => setBulkAddListOpen(false)}
           />
         )}

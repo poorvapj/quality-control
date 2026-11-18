@@ -89,7 +89,7 @@ interface DrawerRef { kind: "unit" | "floor" | "snag" | "user"; id: string }
 export interface AssignModalState { targetType: "unit" | "floor"; targetId: string; stageId: string; itemId?: string; presetUser?: string; projectId?: string }
 export interface SnagModalState { unitId: string; stageId: string; itemId?: string; preset?: string }
 export interface ChecklistModalState { kind: "unit" | "floor"; id: string; stageId: string; itemId?: string; checklistId: string }
-export interface RecordModalState { master: MasterKey; id: string | null }
+export interface RecordModalState { master: MasterKey; id: string | null; defaults?: Record<string, any> }
 
 interface AppContextValue {
   data: BoardData | null;

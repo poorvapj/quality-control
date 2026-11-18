@@ -50,6 +50,11 @@ export default function RecordModal() {
       if (f.type === "permissionGrid") { base[f.k] = (rec as any)?.[f.k] || {}; continue; }
       base[f.k] = rec ? (rec as any)[f.k] : (f.type === "bool" ? (f.default ?? true) : "");
     }
+    // A brand-new record opened while the Masters list is already filtered
+    // to one project (e.g. Slab Master's project picker) starts pre-set to
+    // that same project instead of blank — the filter you're looking at is
+    // almost always the project you meant to add to.
+    if (!rec && recordModal.defaults) Object.assign(base, recordModal.defaults);
     setValues(base);
     setItems((rec as any)?.items || []);
     setFormFields((rec as any)?.fields || []);

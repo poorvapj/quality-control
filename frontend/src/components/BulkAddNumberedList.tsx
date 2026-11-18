@@ -12,16 +12,20 @@ import SearchDropdown from "./SearchDropdown";
  *  a single save, continuing after whatever that project's highest
  *  existing display-order number already is. */
 export default function BulkAddNumberedList({
-  master, idPrefix, namePrefix, onClose
+  master, idPrefix, namePrefix, defaultProjectId, onClose
 }: {
   master: "columnMaster" | "slabMaster";
   idPrefix: string;
   namePrefix: string;
+  /** The Masters list's own project filter, if one's already picked there —
+   *  takes priority over the app-wide current project, since that's the
+   *  project you were just looking at when you clicked Bulk Add. */
+  defaultProjectId?: string;
   onClose: () => void;
 }) {
   const { data, currentUserId, currentProjectId, apply, toast } = useApp();
   const allProjects = myProjects(data, currentUserId);
-  const [projectId, setProjectId] = useState(currentProjectId || "");
+  const [projectId, setProjectId] = useState(defaultProjectId || currentProjectId || "");
   const [prefix, setPrefix] = useState(namePrefix);
   const [from, setFrom] = useState("1");
   const [to, setTo] = useState("10");
