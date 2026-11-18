@@ -35,6 +35,12 @@ const FALLBACK_STANDALONE: Record<string, string[]> = {
     "Shuttering/formwork: verify dimensions, line, level, verticality, rigidity, joints, cleanliness, and application of release agent.",
     "Plumb: check column verticality before concreting and recheck as required."
   ],
+  "R.C.C. Slab Inspection": [
+    "Shuttering check: verify slab level, thickness, dimensions, support/props, stability, tight joints, and cleanliness.",
+    "Reinforcement steel: check bar diameter, spacing, top and bottom reinforcement, extra bars, laps, anchorage, and openings as per drawings.",
+    "Cover and embedded services: verify cover blocks, electrical conduits, sleeves, and other inserts do not displace reinforcement.",
+    "Pre-pour approval: confirm inspection clearance, concrete grade, pour sequence, access, and curing arrangements."
+  ],
   "Tile Work Inspection": [
     "Floor level and slope: verify finished levels and required slope toward floor traps/drains in wet areas.",
     "Tile condition: check tiles for cracks, chips, scratches, stains, and other visible defects before laying.",
@@ -54,24 +60,6 @@ const FALLBACK_STANDALONE: Record<string, string[]> = {
 };
 
 const FALLBACK_PHASE_GROUPS: PhaseGroup[] = [
-  {
-    name: "R.C.C. Slab Inspection",
-    scope: "floor",
-    phases: [
-      { label: "Before Pour", items: [
-        "Shuttering check: verify slab level, thickness, dimensions, support/props, stability, tight joints, and cleanliness.",
-        "Reinforcement steel: check bar diameter, spacing, top and bottom reinforcement, extra bars, laps, anchorage, and openings as per drawings.",
-        "Cover and embedded services: verify cover blocks, electrical conduits, sleeves, and other inserts do not displace reinforcement.",
-        "Pre-pour approval: confirm inspection clearance, concrete grade, pour sequence, access, and curing arrangements."
-      ] },
-      { label: "During Pour", items: [
-        "Slump test at pour point: record the value and reject the batch if it falls outside the design mix range.",
-        "Cube samples taken: minimum 3 cubes per 5 cum, labelled with floor and date.",
-        "Vibration done correctly: poker at max 500mm centres, no cold joints — no gap over 30 minutes between layers."
-      ] },
-      { label: "After Pour", items: ["Curing started within 24 hours of pour: wet gunny or curing compound, minimum 7 days."] }
-    ]
-  },
   {
     name: "Brickwork",
     scope: "unit",
@@ -132,7 +120,13 @@ export const LEGACY_PHASE_EQUIVALENT: Record<string, string[]> = {
   "Plaster — Before Plastering": ["Brickwork & Plaster — Before Plastering", "Plastering Inspection", "Before Plastering"],
   "Plaster — During Plastering": ["Brickwork & Plaster — During Plastering", "Plastering Inspection", "During Plastering"],
   "Plaster — After Plastering": ["After Plastering"],
-  "R.C.C. Slab Inspection — After Pour": ["R.C.C. Slab Inspection"],
+  // R.C.C. Slab Inspection used to be split into Before/During/After Pour
+  // phases (which also collided with Plumbing & Electrical's own "Before
+  // Pour" phase — same plain label, no group prefix, so selecting "Before
+  // Pour" could silently open the Plumbing checklist instead). It's now one
+  // single checklist, same as Column Inspection — old phased records still
+  // count toward it.
+  "R.C.C. Slab Inspection": ["Before Pour", "During Pour", "After Pour", "R.C.C. Slab Inspection — Before Pour", "R.C.C. Slab Inspection — During Pour", "R.C.C. Slab Inspection — After Pour"],
   "Waterproofing Inspection — After 24 Hours": ["Waterproofing Inspection"],
   "Plumbing & Electrical Inspection — Before Handover": ["Plumbing & Electrical Inspection"]
 };

@@ -1126,7 +1126,7 @@ function InspectionForm({
         {earlierFloorsNotStructurallyDone.length > 0 && (
           <div className="field full">
             <div className="text-[12.5px] font-semibold p-3 rounded-radius-md" style={{ background: "rgba(217,119,6,0.08)", color: "#d97706" }}>
-              Heads up: {earlierFloorsNotStructurallyDone.map((f) => f.name).join(", ")} {earlierFloorsNotStructurallyDone.length === 1 ? "hasn't" : "haven't"} finished Structure (After Pour) yet — pouring on this floor ahead of that is out of sequence, though you can still proceed.
+              Heads up: {earlierFloorsNotStructurallyDone.map((f) => f.name).join(", ")} {earlierFloorsNotStructurallyDone.length === 1 ? "hasn't" : "haven't"} finished Structure (After Casting) yet — pouring on this floor ahead of that is out of sequence, though you can still proceed.
             </div>
           </div>
         )}
