@@ -704,7 +704,7 @@ function InspectionForm({
     if (!isFlatWise(wt)) setUnitId(""); // floor-level checklist: no flat
     const group = PHASE_LOOKUP.get(wt)?.group.name;
     if (wt !== "Column Inspection") setSelectedColumns([]);
-    if (group !== "R.C.C. Slab Inspection") { setSelectedSlabs([]); setAddingCustomSlab(false); setCustomSlabText(""); }
+    if (wt !== "R.C.C. Slab Inspection") { setSelectedSlabs([]); setAddingCustomSlab(false); setCustomSlabText(""); }
     if (group !== "Waterproofing Inspection") { setSelectedAreas([]); setAddingCustomArea(false); setCustomAreaText(""); }
     setChecklist((QC_CHECKLISTS[wt] || []).map((text) => ({ text, status: "", remarks: "" })));
   }
@@ -887,7 +887,7 @@ function InspectionForm({
     if (flatWise && !unitId) { toast("Pick the flat — Brickwork and the work after it is inspected flat by flat"); return; }
     if (blockedByPriorStages) { toast(`Finish and pass ${pendingPriorStages.join(", ")} for this flat first`); return; }
     if (workType === "Column Inspection" && selectedColumns.length === 0) { toast("Select at least one column"); return; }
-    if (phaseInfo?.group.name === "R.C.C. Slab Inspection" && selectedSlabs.length === 0) { toast("Select at least one slab"); return; }
+    if (workType === "R.C.C. Slab Inspection" && selectedSlabs.length === 0) { toast("Select at least one slab"); return; }
     if (requiresAreas(workType) && selectedAreas.length === 0) { toast("Select at least one area (kitchen/bathroom/balcony)"); return; }
     if (checklist.some((row) => !row.status)) { toast("Mark every checklist point as OK / Not OK / N/A"); return; }
     if (photos.length === 0 && !import.meta.env.DEV) { toast("Add at least one photo as evidence"); return; }
@@ -946,7 +946,7 @@ function InspectionForm({
         unit: itemEntry?.unit,
         workType,
         columns: workType === "Column Inspection" ? selectedColumns : undefined,
-        slabs: phaseInfo?.group.name === "R.C.C. Slab Inspection" ? selectedSlabs : undefined,
+        slabs: workType === "R.C.C. Slab Inspection" ? selectedSlabs : undefined,
         areas: requiresAreas(workType) ? selectedAreas : undefined,
         contractor: contractor.trim() || undefined,
         checklistItems: checklist.map((row) => ({ text: row.text, status: row.status as "OK" | "Not OK" | "N/A", remarks: row.remarks.trim() || undefined })),
@@ -1144,7 +1144,7 @@ function InspectionForm({
           </div>
         )}
 
-        {phaseInfo?.group.name === "R.C.C. Slab Inspection" && (
+        {workType === "R.C.C. Slab Inspection" && (
           <div className="field full">
             <label>Select Slabs *</label>
             <SearchDropdown
