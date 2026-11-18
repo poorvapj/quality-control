@@ -831,7 +831,12 @@ function InspectionForm({
   const pendingPriorAreas = phaseInfo?.group.scope === "unit-area" && priorPhaseWorkType && unitId
     ? selectedAreas.filter((area) => latestResult(priorPhaseWorkType, unitId, area) !== "Pass")
     : [];
-  const blockedByPriorPhase = !!priorPhaseWorkType && scopeKeyReady && (
+  // R.C.C. Slab Inspection (scope "floor") is excluded here — Before/During/
+  // After Pour get checked off slab by slab (see "Select Slabs" below), so
+  // gating the whole floor's phase on an earlier phase's Pass doesn't match
+  // how it's actually inspected: a floor with several slabs can have Before
+  // Pour done on one slab and During Pour already starting on another.
+  const blockedByPriorPhase = !!priorPhaseWorkType && scopeKeyReady && phaseInfo!.group.scope !== "floor" && (
     phaseInfo!.group.scope === "unit-area"
       ? selectedAreas.length > 0 && pendingPriorAreas.length > 0
       : latestResult(priorPhaseWorkType, unitId) !== "Pass"
