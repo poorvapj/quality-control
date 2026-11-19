@@ -6,6 +6,7 @@ import { API_BASE } from "../services/config";
 import { coll, myProjects, projectFloors, floorUnits, byId } from "../shared/rules";
 import { nextId, makeTempId, displayId } from "../shared/helpers";
 import { buildEventOp } from "../shared/eventLog";
+import { thumbUrl } from "../shared/photoThumb";
 import { hasModuleGrant } from "../shared/permissionMatrix";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
@@ -564,7 +565,7 @@ function FloorHistoryPanel({
                 {insp.remarks && <div className="text-[12px] mt-1.5">{insp.remarks}</div>}
                 {insp.photos?.length > 0 && (
                   <div className="flex gap-1.5 mt-2 flex-wrap">
-                    {insp.photos.map((p, idx) => <img key={idx} src={p.url} className="w-14 h-14 object-cover rounded-radius-sm border border-[var(--border)]" />)}
+                    {insp.photos.map((p, idx) => <img key={idx} src={thumbUrl(p.url)} className="w-14 h-14 object-cover rounded-radius-sm border border-[var(--border)]" />)}
                   </div>
                 )}
                 {snag && (

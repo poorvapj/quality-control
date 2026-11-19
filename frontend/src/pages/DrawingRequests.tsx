@@ -104,14 +104,14 @@ export default function DrawingRequestsPage() {
   // Matches ui/Filters.tsx's SelectFilter/SearchFilter: h-10 (40px), text-sm (14px),
   // rounded-lg (8px), border-gray-200 (#E5E7EB).
   const filterInput: React.CSSProperties = {
-    height: 40, boxSizing: "border-box", fontSize: 14, border: "1px solid #E5E7EB", borderRadius: 8,
-    color: "#6B7280", background: "#fff", outline: "none"
+    height: 40, boxSizing: "border-box", fontSize: 14, border: "1px solid var(--border)", borderRadius: 8,
+    color: "var(--text-muted)", background: "var(--bg-card)", outline: "none"
   };
   const selectStyle: React.CSSProperties = { ...filterInput, padding: "0 12px", cursor: "pointer" };
   // Matches ui/DatePicker.tsx's DateRangePicker: h-9 (36px), text-[13px], pl-8/pr-2.5.
   const dateInput: React.CSSProperties = {
-    height: 36, boxSizing: "border-box", fontSize: 13, border: "1px solid #E5E7EB", borderRadius: 8,
-    color: "#1A1A2E", background: "#fff", outline: "none"
+    height: 36, boxSizing: "border-box", fontSize: 13, border: "1px solid var(--border)", borderRadius: 8,
+    color: "var(--text-main)", background: "var(--bg-card)", outline: "none"
   };
 
   return (
@@ -126,8 +126,8 @@ export default function DrawingRequestsPage() {
             <NavIcon name="drawing" size={20} />
           </div>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 20, fontWeight: 700, color: "#1A1A2E", lineHeight: 1.3 }}>Drawing Requests</div>
-            <div style={{ fontSize: 14, fontWeight: 400, color: "#6B7280", lineHeight: 1.4 }}>Manage drawing requests — {rows.length} total</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: "var(--text-main)", lineHeight: 1.3 }}>Drawing Requests</div>
+            <div style={{ fontSize: 14, fontWeight: 400, color: "var(--text-muted)", lineHeight: 1.4 }}>Manage drawing requests — {rows.length} total</div>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
@@ -135,8 +135,8 @@ export default function DrawingRequestsPage() {
           <button
             onClick={() => setCreateOpen(true)}
             style={{
-              height: 40, padding: "0 24px", border: "1px solid #E5E7EB", borderRadius: 6, background: "#fff",
-              fontSize: 13, fontWeight: 700, color: "#374151", display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer"
+              height: 40, padding: "0 24px", border: "1px solid var(--border)", borderRadius: 6, background: "var(--bg-card)",
+              fontSize: 13, fontWeight: 700, color: "var(--text-muted)", display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer"
             }}
           >
             <NavIcon name="drawing" size={16} /> Drawing Request
@@ -147,7 +147,7 @@ export default function DrawingRequestsPage() {
       {/* Matches ui/Filters.tsx's FilterRow: flex flex-wrap items-end gap-3 (12px) mb-4 (16px). */}
       <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", rowGap: 12, columnGap: 12, marginBottom: 16 }}>
         <div style={{ position: "relative", flex: 1, minWidth: 180 }}>
-          <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", display: "flex" }}>
+          <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-sub)", display: "flex" }}>
             <NavIcon name="search" size={16} />
           </span>
           <input
@@ -163,53 +163,53 @@ export default function DrawingRequestsPage() {
             <option value="">All Types</option>
             {["Architectural", "Structural", "MEP", "Civil", "Interior", "Landscape", "Shop Drawing", "As-Built", "Other"].map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
-          <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none", display: "flex" }}><NavIcon name="chevronDown" size={14} /></span>
+          <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", color: "var(--text-sub)", pointerEvents: "none", display: "flex" }}><NavIcon name="chevronDown" size={14} /></span>
         </span>
         <span style={{ position: "relative", flexShrink: 0 }}>
           <select style={{ ...selectStyle, width: 120, appearance: "none", paddingRight: 26 }} value={dPriority} onChange={(e) => setDPriority(e.target.value)}>
             <option value="">All Priorities</option>
             <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="urgent">Urgent</option>
           </select>
-          <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none", display: "flex" }}><NavIcon name="chevronDown" size={14} /></span>
+          <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", color: "var(--text-sub)", pointerEvents: "none", display: "flex" }}><NavIcon name="chevronDown" size={14} /></span>
         </span>
         <span style={{ position: "relative", flexShrink: 0 }}>
           <select style={{ ...selectStyle, width: 115, appearance: "none", paddingRight: 26 }} value={dStatus} onChange={(e) => setDStatus(e.target.value)}>
             <option value="">All Statuses</option>
             {Object.entries(STAGE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
-          <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none", display: "flex" }}><NavIcon name="chevronDown" size={14} /></span>
+          <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", color: "var(--text-sub)", pointerEvents: "none", display: "flex" }}><NavIcon name="chevronDown" size={14} /></span>
         </span>
         <span style={{ position: "relative", flexShrink: 0 }}>
           <select style={{ ...selectStyle, width: 168, appearance: "none", paddingRight: 26 }} value={dTracking} onChange={(e) => setDTracking(e.target.value)}>
             <option value="">All Review Stages</option>
             <option value="pending">Pending</option><option value="committed">Committed</option><option value="completed">Completed</option><option value="delayed">Delayed</option>
           </select>
-          <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none", display: "flex" }}><NavIcon name="chevronDown" size={14} /></span>
+          <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", color: "var(--text-sub)", pointerEvents: "none", display: "flex" }}><NavIcon name="chevronDown" size={14} /></span>
         </span>
         <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
           <span style={{ position: "relative" }}>
-            <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", display: "flex", pointerEvents: "none" }}>
+            <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-sub)", display: "flex", pointerEvents: "none" }}>
               <NavIcon name="calendar" size={16} />
             </span>
-            {!dFrom && <span style={{ position: "absolute", left: 32, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", fontSize: 13, pointerEvents: "none" }}>From</span>}
+            {!dFrom && <span style={{ position: "absolute", left: 32, top: "50%", transform: "translateY(-50%)", color: "var(--text-sub)", fontSize: 13, pointerEvents: "none" }}>From</span>}
             <input
               className="date-compact"
               type="date"
-              style={{ ...dateInput, width: 116, padding: "0 10px 0 32px", color: dFrom ? "#1A1A2E" : "transparent" }}
+              style={{ ...dateInput, width: 116, padding: "0 10px 0 32px", color: dFrom ? "var(--text-main)" : "transparent" }}
               value={dFrom}
               onChange={(e) => setDFrom(e.target.value)}
             />
           </span>
-          <span style={{ color: "#9CA3AF", fontSize: 14, margin: "0 8px" }}>to</span>
+          <span style={{ color: "var(--text-sub)", fontSize: 14, margin: "0 8px" }}>to</span>
           <span style={{ position: "relative" }}>
-            <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", display: "flex", pointerEvents: "none" }}>
+            <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-sub)", display: "flex", pointerEvents: "none" }}>
               <NavIcon name="calendar" size={16} />
             </span>
-            {!dTo && <span style={{ position: "absolute", left: 32, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", fontSize: 13, pointerEvents: "none" }}>To</span>}
+            {!dTo && <span style={{ position: "absolute", left: 32, top: "50%", transform: "translateY(-50%)", color: "var(--text-sub)", fontSize: 13, pointerEvents: "none" }}>To</span>}
             <input
               className="date-compact"
               type="date"
-              style={{ ...dateInput, width: 116, padding: "0 10px 0 32px", color: dTo ? "#1A1A2E" : "transparent" }}
+              style={{ ...dateInput, width: 116, padding: "0 10px 0 32px", color: dTo ? "var(--text-main)" : "transparent" }}
               value={dTo}
               onChange={(e) => setDTo(e.target.value)}
             />
@@ -232,15 +232,15 @@ export default function DrawingRequestsPage() {
           text-sm (14px) table, bg-gray-50 thead, px-4 py-3 (16/12) cells,
           text-[11px] font-bold uppercase tracking-wider text-gray-500 headers,
           divide-y divide-gray-100 rows, hover:bg-gray-50. */}
-      <div style={{ width: "100%", overflowX: "auto", borderRadius: 8, border: "1px solid #E5E7EB" }}>
+      <div style={{ width: "100%", overflowX: "auto", borderRadius: 8, border: "1px solid var(--border)" }}>
         {rows.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "56px 0", color: "#9CA3AF", fontSize: 14 }}>No drawing requests match these filters</div>
+          <div style={{ textAlign: "center", padding: "56px 0", color: "var(--text-sub)", fontSize: 14 }}>No drawing requests match these filters</div>
         ) : (
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, minWidth: 620 }}>
-            <thead style={{ background: "#F9FAFB" }}>
+            <thead style={{ background: "var(--bg-subtle)" }}>
               <tr>
                 {["Ticket No", "Project", "Description", "Type", "Source", "Requested by", "Request date", "Review", "Priority", "Status", "Plan verified", "Proj. ack.", "Remarks", "Action"].map((h) => (
-                  <th key={h} style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "#6B7280", padding: "12px 16px", whiteSpace: "nowrap", textAlign: "left" }}>
+                  <th key={h} style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--text-muted)", padding: "12px 16px", whiteSpace: "nowrap", textAlign: "left" }}>
                     {h}
                   </th>
                 ))}
@@ -257,7 +257,7 @@ export default function DrawingRequestsPage() {
                   : r.reviewStatus === "stage-2-produce" ? TONE.blue
                   : TONE.amber;
                 // Matches ui/Table.tsx's Td: px-4 py-3 (16/12) align-middle.
-                const td: React.CSSProperties = { padding: "12px 16px", borderTop: i === 0 ? "none" : "1px solid #F3F4F6", verticalAlign: "middle", color: "#1A1A2E" };
+                const td: React.CSSProperties = { padding: "12px 16px", borderTop: i === 0 ? "none" : "1px solid var(--border)", verticalAlign: "middle", color: "var(--text-main)" };
                 const ellipsis = (max: number): React.CSSProperties => ({ ...td, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: max });
                 // Matches ui/Badge.tsx's `small` variant: px-1.5 py-0.5 (6/2), text-[10px], rounded-full, font-bold uppercase tracking-wide.
                 const badge = (tone: { bg: string; text: string }): React.CSSProperties => ({
@@ -274,30 +274,30 @@ export default function DrawingRequestsPage() {
                   <tr
                     key={r.id}
                     onClick={() => setDetail(r)}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = "#F9FAFB"; }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-subtle)"; }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
                     style={{ transition: "background-color .15s ease", cursor: "pointer" }}
                   >
                     {/* Matches "font-mono font-bold text-purple-600" on the ticket number. */}
                     <td style={td}><strong style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontWeight: 700, color: "#9333EA" }}>{displayId(r.ticketNo)}</strong></td>
-                    <td style={ellipsis(160)} title={r.projectName}><strong style={{ fontWeight: 600, color: "#1A1A2E" }}>{r.projectName}</strong></td>
+                    <td style={ellipsis(160)} title={r.projectName}><strong style={{ fontWeight: 600, color: "var(--text-main)" }}>{r.projectName}</strong></td>
                     <td style={ellipsis(180)} title={r.description}>{r.description}</td>
                     <td style={td}>{r.drawingType}</td>
-                    <td style={td}>{r.source || <span style={{ color: "#D1D5DB" }}>—</span>}</td>
+                    <td style={td}>{r.source || <span style={{ color: "var(--text-sub)" }}>—</span>}</td>
                     <td style={td}>{r.requesterName}</td>
                     <td style={td}>{r.createdAt ? fmtDate(r.createdAt) : "—"}</td>
                     <td style={td}><span style={{ ...badge(reviewTone), whiteSpace: "normal", textAlign: "center", maxWidth: 100 }}>{STAGE_LABEL[r.reviewStatus]}</span></td>
-                    <td style={td}>{priorityVal ? <span style={badge(priorityTone)}>{priorityVal}</span> : <span style={{ color: "#D1D5DB" }}>—</span>}</td>
+                    <td style={td}>{priorityVal ? <span style={badge(priorityTone)}>{priorityVal}</span> : <span style={{ color: "var(--text-sub)" }}>—</span>}</td>
                     <td style={td}><span style={statusText}>{trackingVal}</span></td>
-                    <td style={td}><span style={{ color: r.planningVerified ? "#059669" : "#9CA3AF", fontWeight: r.planningVerified ? 600 : 400 }}>{r.planningVerified ? "Yes" : "No"}</span></td>
-                    <td style={td}><span style={{ color: r.projectAcknowledged ? "#059669" : "#9CA3AF", fontWeight: r.projectAcknowledged ? 600 : 400 }}>{r.projectAcknowledged ? "Yes" : "No"}</span></td>
-                    <td style={ellipsis(140)} title={r.remarks}>{r.remarks || <span style={{ color: "#D1D5DB" }}>—</span>}</td>
+                    <td style={td}><span style={{ color: r.planningVerified ? "#059669" : "var(--text-sub)", fontWeight: r.planningVerified ? 600 : 400 }}>{r.planningVerified ? "Yes" : "No"}</span></td>
+                    <td style={td}><span style={{ color: r.projectAcknowledged ? "#059669" : "var(--text-sub)", fontWeight: r.projectAcknowledged ? 600 : 400 }}>{r.projectAcknowledged ? "Yes" : "No"}</span></td>
+                    <td style={ellipsis(140)} title={r.remarks}>{r.remarks || <span style={{ color: "var(--text-sub)" }}>—</span>}</td>
                     <td style={td} onClick={(e) => e.stopPropagation()}>
                       <div style={{ display: "flex", gap: 4 }}>
                         {/* Matches ui/Btn.tsx's `small outline`: h-8 (32px) px-3 (12px) text-[11px] rounded-md (6px) border-gray-200 bg-white text-gray-700. */}
                         <button
                           title="View" onClick={() => setDetail(r)}
-                          style={{ height: 32, padding: "0 12px", border: "1px solid #E5E7EB", borderRadius: 6, background: "#fff", color: "#374151", display: "inline-flex", alignItems: "center", cursor: "pointer" }}
+                          style={{ height: 32, padding: "0 12px", border: "1px solid var(--border)", borderRadius: 6, background: "var(--bg-card)", color: "var(--text-muted)", display: "inline-flex", alignItems: "center", cursor: "pointer" }}
                         >
                           <NavIcon name="eye" size={14} />
                         </button>
@@ -305,7 +305,7 @@ export default function DrawingRequestsPage() {
                           <>
                             <button
                               title="Edit" onClick={() => setEditing(r)}
-                              style={{ height: 32, padding: "0 12px", border: "1px solid #E5E7EB", borderRadius: 6, background: "#fff", color: "#374151", display: "inline-flex", alignItems: "center", cursor: "pointer" }}
+                              style={{ height: 32, padding: "0 12px", border: "1px solid var(--border)", borderRadius: 6, background: "var(--bg-card)", color: "var(--text-muted)", display: "inline-flex", alignItems: "center", cursor: "pointer" }}
                             >
                               <NavIcon name="edit" size={14} />
                             </button>

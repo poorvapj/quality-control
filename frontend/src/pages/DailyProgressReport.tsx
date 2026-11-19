@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { viewPhoto } from "../shared/photoViewer";
+import { thumbUrl } from "../shared/photoThumb";
 import { useApp, authHeaders } from "../context/AppContext";
 import { API_BASE } from "../services/config";
 import { coll, refLabel, myProjects, byId } from "../shared/rules";
@@ -776,7 +777,7 @@ export default function DailyProgressReportPage() {
               {entry.generalPhotos.length > 0 && (
                 <div className="photo-strip" style={{ marginBottom: 8 }}>
                   {entry.generalPhotos.map((p, i) => (
-                    <img key={i} className="photo-thumb" src={p.url} onClick={() => viewPhoto(p.url, entry.generalPhotos.map((x) => x.url))} />
+                    <img key={i} className="photo-thumb" src={thumbUrl(p.url)} onClick={() => viewPhoto(p.url, entry.generalPhotos.map((x) => x.url))} />
                   ))}
                 </div>
               )}
@@ -786,7 +787,7 @@ export default function DailyProgressReportPage() {
                     <div>
                       <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 4 }}>Before</div>
                       <div className="photo-strip">
-                        {entry.beforePhotos.map((p, i) => <img key={i} className="photo-thumb" src={p.url} onClick={() => viewPhoto(p.url, entry.beforePhotos.map((x) => x.url))} />)}
+                        {entry.beforePhotos.map((p, i) => <img key={i} className="photo-thumb" src={thumbUrl(p.url)} onClick={() => viewPhoto(p.url, entry.beforePhotos.map((x) => x.url))} />)}
                       </div>
                     </div>
                   )}
@@ -794,7 +795,7 @@ export default function DailyProgressReportPage() {
                     <div>
                       <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 4 }}>After</div>
                       <div className="photo-strip">
-                        {entry.afterPhotos.map((p, i) => <img key={i} className="photo-thumb" src={p.url} onClick={() => viewPhoto(p.url, entry.afterPhotos.map((x) => x.url))} />)}
+                        {entry.afterPhotos.map((p, i) => <img key={i} className="photo-thumb" src={thumbUrl(p.url)} onClick={() => viewPhoto(p.url, entry.afterPhotos.map((x) => x.url))} />)}
                       </div>
                     </div>
                   )}

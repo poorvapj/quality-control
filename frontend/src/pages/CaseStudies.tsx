@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { viewPhoto } from "../shared/photoViewer";
+import { thumbUrl } from "../shared/photoThumb";
 import { useApp } from "../context/AppContext";
 import { coll, myProjects, projectFloors } from "../shared/rules";
 import { nextId } from "../shared/helpers";
@@ -79,7 +80,7 @@ export default function CaseStudies() {
           {caseStudies.map((c) => (
             <Card key={c.id} className="cursor-pointer" onClick={() => setOpenCase(c)}>
               {c.photosBefore[0] && (
-                <img src={c.photosBefore[0].url} className="w-full h-32 object-cover rounded-radius-sm mb-3" />
+                <img src={thumbUrl(c.photosBefore[0].url)} className="w-full h-32 object-cover rounded-radius-sm mb-3" />
               )}
               <div className="text-[13.5px] font-bold leading-snug">{c.title}</div>
               <div className="text-[11px] text-[var(--text-muted)] mt-1">
@@ -128,7 +129,7 @@ export default function CaseStudies() {
               <div>
                 <div className="micro-label mb-1">Before</div>
                 <div className="photo-strip">{openCase.photosBefore.map((p: Photo, i: number) => (
-                  <img key={i} className="photo-thumb" src={p.url} onClick={() => viewPhoto(p.url, openCase.photosBefore.map((x: Photo) => x.url))} />
+                  <img key={i} className="photo-thumb" src={thumbUrl(p.url)} onClick={() => viewPhoto(p.url, openCase.photosBefore.map((x: Photo) => x.url))} />
                 ))}</div>
               </div>
             )}
@@ -136,7 +137,7 @@ export default function CaseStudies() {
               <div>
                 <div className="micro-label mb-1">After</div>
                 <div className="photo-strip">{openCase.photosAfter.map((p: Photo, i: number) => (
-                  <img key={i} className="photo-thumb" src={p.url} onClick={() => viewPhoto(p.url, openCase.photosAfter.map((x: Photo) => x.url))} />
+                  <img key={i} className="photo-thumb" src={thumbUrl(p.url)} onClick={() => viewPhoto(p.url, openCase.photosAfter.map((x: Photo) => x.url))} />
                 ))}</div>
               </div>
             )}

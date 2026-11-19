@@ -3,6 +3,7 @@ import { useApp } from "../context/AppContext";
 import { byId, coll, refLabel, rccChecklistItems } from "../shared/rules";
 import { useActions } from "../hooks/useActions";
 import { uploadPhoto } from "../shared/uploadPhoto";
+import { thumbUrl } from "../shared/photoThumb";
 import Modal from "./Modal";
 import type { Photo, QParam } from "../types";
 
@@ -138,7 +139,7 @@ export default function ChecklistModal() {
                 >
                   {uploadingIdx === i ? "Uploading…" : row?.photo ? "📷 Retake photo" : "📸 Photo required"}
                 </button>
-                {row?.photo && <img src={row.photo.url} style={{ width: 36, height: 36, borderRadius: 6, objectFit: "cover" }} />}
+                {row?.photo && <img src={thumbUrl(row.photo.url)} style={{ width: 36, height: 36, borderRadius: 6, objectFit: "cover" }} />}
               </div>
             )}
           </div>

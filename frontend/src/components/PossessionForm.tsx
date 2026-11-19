@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { viewPhoto } from "../shared/photoViewer";
+import { thumbUrl } from "../shared/photoThumb";
 import { useApp } from "../context/AppContext";
 import { byId, coll, pkey, prog, projectFloors, floorUnits, trackStages, refLabel, myProjects } from "../shared/rules";
 import { useActions } from "../hooks/useActions";
@@ -567,7 +568,7 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
                                   {uploadingIdx === i ? "Uploading…" : row.photo ? "📷 Retake photo" : "📸 Photo required"}
                                 </button>
                               )}
-                              {row.photo && <img src={row.photo.url} onClick={() => viewPhoto(row.photo!.url)} style={{ width: form.readOnly ? 64 : 36, height: form.readOnly ? 64 : 36, borderRadius: 6, objectFit: "cover", cursor: "pointer" }} />}
+                              {row.photo && <img src={thumbUrl(row.photo.url)} onClick={() => viewPhoto(row.photo!.url)} style={{ width: form.readOnly ? 64 : 36, height: form.readOnly ? 64 : 36, borderRadius: 6, objectFit: "cover", cursor: "pointer" }} />}
                               {form.readOnly && !row.photo && <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>No photo attached</span>}
                             </div>
                           )}
@@ -622,7 +623,7 @@ export default function PossessionForm({ form, onDone }: { form: PossessionActiv
                         {uploadingOwnerPhoto ? "Uploading…" : ownerPhoto ? "📷 Retake photo" : "📸 Add owner photo"}
                       </button>
                     )}
-                    {ownerPhoto && <img src={ownerPhoto.url} onClick={() => viewPhoto(ownerPhoto.url)} style={{ width: 48, height: 48, borderRadius: 6, objectFit: "cover", cursor: "pointer" }} />}
+                    {ownerPhoto && <img src={thumbUrl(ownerPhoto.url)} onClick={() => viewPhoto(ownerPhoto.url)} style={{ width: 48, height: 48, borderRadius: 6, objectFit: "cover", cursor: "pointer" }} />}
                     {form.readOnly && !ownerPhoto && <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>No photo attached</span>}
                   </div>
                 </div>

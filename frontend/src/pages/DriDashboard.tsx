@@ -4,6 +4,7 @@ import { coll, myProjects, myAssignments, mySnags } from "../shared/rules";
 import NavIcon from "../components/NavIcon";
 import SidePanel from "../components/SidePanel";
 import { viewPhoto } from "../shared/photoViewer";
+import { thumbUrl } from "../shared/photoThumb";
 import AssignRow from "../components/AssignRow";
 import SnagRow from "../components/SnagRow";
 import Card from "../ui/tw/Card";
@@ -142,7 +143,7 @@ function AckRow({ insp }: { insp: QualityInspection }) {
           <div className="flex gap-1.5 mt-3 flex-wrap">
             {insp.photos.map((p, idx) => (
               <img
-                key={idx} src={p.url} className="w-20 h-20 object-cover rounded-radius-sm border border-[var(--border)] cursor-pointer"
+                key={idx} src={thumbUrl(p.url)} className="w-20 h-20 object-cover rounded-radius-sm border border-[var(--border)] cursor-pointer"
                 onClick={() => viewPhoto(p.url, insp.photos!.map((x) => x.url))}
               />
             ))}

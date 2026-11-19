@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { viewPhoto } from "../shared/photoViewer";
+import { thumbUrl } from "../shared/photoThumb";
 import { useApp } from "../context/AppContext";
 import { buildEventOp } from "../shared/eventLog";
 import { canDecide, decideOp, describeRecord, effectiveApproval, KIND_LABEL, pendingFor, rejectedFor, type ApprovalColl } from "../shared/approval";
@@ -101,7 +102,7 @@ function Photos({ photos, label = "Photos" }: { photos?: { url: string }[]; labe
     <Detail label={`${label} (${photos.length})`}>
       <div className="flex flex-wrap gap-2">
         {photos.map((p, i) => (
-          <img key={i} src={p.url} alt="" onClick={() => viewPhoto(p.url, photos.map((x) => x.url))}
+          <img key={i} src={thumbUrl(p.url)} alt="" onClick={() => viewPhoto(p.url, photos.map((x) => x.url))}
             className="w-16 h-16 object-cover rounded-radius-sm border border-[var(--border)] cursor-pointer" />
         ))}
       </div>

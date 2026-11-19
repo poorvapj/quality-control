@@ -1,5 +1,6 @@
 import React, { useRef, useState } from "react";
 import { viewPhoto } from "../shared/photoViewer";
+import { thumbUrl } from "../shared/photoThumb";
 import { useApp } from "../context/AppContext";
 import { ROLES } from "../services/config";
 import { byId, coll, canAct, blockReason, openSnagsFor, prog, refLabel, trackStages, snagTarget, unitSummary, rccChecklistItems, rccItemBlockReason, rccItemLabel, myProjects, isCivilLikeRole } from "../shared/rules";
@@ -648,7 +649,7 @@ function SnagDrawer({ id }: { id: string }) {
             <div className="photo-strip" style={{ marginBottom: 20 }}>
               {(s.photos || []).map((p, i) => (
                 <div key={i} style={{ position: "relative", display: "inline-block" }}>
-                  <img className="photo-thumb" src={p.url} onClick={() => viewPhoto(p.url, (s.photos || []).map((x) => x.url))} />
+                  <img className="photo-thumb" src={thumbUrl(p.url)} onClick={() => viewPhoto(p.url, (s.photos || []).map((x) => x.url))} />
                   <button
                     type="button"
                     title="Remove photo"

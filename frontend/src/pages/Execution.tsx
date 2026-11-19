@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { viewPhoto } from "../shared/photoViewer";
+import { thumbUrl } from "../shared/photoThumb";
 import { useApp } from "../context/AppContext";
 import { coll, myProjects, projectFloors, floorUnits, byId } from "../shared/rules";
 import { makeTempId, displayId, fmtDate } from "../shared/helpers";
@@ -144,7 +145,7 @@ function ExecutionDetail({ record: r, onClose }: { record: ExecutionRecord | nul
               <div className="flex gap-2 flex-wrap">
                 {r.photos.map((p, idx) => (
                   <button type="button" key={idx} onClick={() => viewPhoto(p.url, (r.photos || []).map((x) => x.url))} title="View photo" className="p-0 border-0 bg-transparent cursor-pointer">
-                    <img src={p.url} alt={`Evidence photo ${idx + 1}`} className="w-24 h-24 object-cover rounded-radius-sm border border-[var(--border)]" />
+                    <img src={thumbUrl(p.url)} alt={`Evidence photo ${idx + 1}`} className="w-24 h-24 object-cover rounded-radius-sm border border-[var(--border)]" />
                   </button>
                 ))}
               </div>
