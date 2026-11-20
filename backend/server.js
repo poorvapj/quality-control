@@ -909,7 +909,20 @@ const getStateGzip = () => stateBuilder.get();
 
 // `knownRev`: the revision the caller read BEFORE asking for the data. The snapshot is stamped with it, so it
 // can never claim to be newer than the data it carries (a write landing mid-read only makes the stamp old).
-async function getState(knownRev) {
+// On a real board, dpr + qualityInspections alone can be most of the whole
+// board's byte size (measured ~14 MB raw combined on production against
+// ~15 MB for every other collection together) — fine on broadband, but a
+// one-shot payload that size over a weak site/mobile connection is most of
+// why sign-in can feel like it hangs for a minute or more. `lite: true`
+// (only ever the FIRST /api/state right after login — see sendStateResponse)
+// skips fetching those two entirely so the app can render everything else
+// immediately; AppContext.tsx's normal poll (every 5s, no lite flag) fills
+// them in moments later with no extra endpoint or caching path to keep in
+// sync. Never used for the cached/polled path, so the shared rev-cache
+// below is untouched by this.
+const LITE_SKIP_COLLECTIONS = ["dpr", "qualityInspections"];
+async function getState(knownRev, opts) {
+  const lite = !!(opts && opts.lite);
   const rev = knownRev !== undefined ? knownRev : await getRev(); // read BEFORE the data, never in parallel with it
   // Every collection fetch here is an independent round-trip to Atlas —
   // awaiting them one at a time in a loop made total load time the SUM of
@@ -917,7 +930,9 @@ async function getState(knownRev) {
   // sign-in felt slow (this one call blocks the whole app on first load).
   // Promise.all runs them concurrently instead.
   const [collResults, progressDocs, events] = await Promise.all([
-    Promise.all(COLLECTIONS.map((c) => mongoDb.collection(c).find({}, { projection: { _id: 0 } }).toArray())),
+    Promise.all(COLLECTIONS.map((c) => (lite && LITE_SKIP_COLLECTIONS.includes(c)
+      ? Promise.resolve([])
+      : mongoDb.collection(c).find({}, { projection: { _id: 0 } }).toArray()))),
     mongoDb.collection("progress").find({}).toArray(),
     mongoDb.collection("events").find({}, { projection: { _id: 0 } }).sort({ ts: -1 }).limit(MAX_EVENTS).toArray()
   ]);
@@ -2276,6 +2291,27 @@ async function sendStateResponse(req, res) {
   // the same function answers a public form's own successful write. Off until PUBLIC_STATE_ENFORCE=1 (see below).
   if (PUBLIC_STATE_ENFORCE && !getSession(req)) {
     return sendJson(res, 200, await buildPublicState(mongoDb, COLLECTIONS, await getRev()));
+  }
+  // ?lite=1 — only sent by AppContext.tsx right after login (see getState's
+  // doc comment) — bypasses the shared rev-cache (built for the normal,
+  // identical-every-time polled response) and builds its own smaller one
+  // directly, skipping the heaviest collections.
+  let lite = false;
+  try { lite = new URL(req.url, "http://localhost").searchParams.get("lite") === "1"; } catch {}
+  if (lite) {
+    const state = await getState(undefined, { lite: true });
+    if (String(req.headers["accept-encoding"] || "").includes("gzip")) {
+      const compressed = await new Promise((resolve, reject) =>
+        zlib.gzip(JSON.stringify(state), (err, buf) => (err ? reject(err) : resolve(buf))));
+      res.writeHead(200, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Content-Encoding": "gzip",
+        "Content-Length": compressed.length,
+        "Cache-Control": "no-store"
+      });
+      return res.end(compressed);
+    }
+    return sendJson(res, 200, state);
   }
   if (String(req.headers["accept-encoding"] || "").includes("gzip")) {
     const { body: compressed } = await getStateGzip();

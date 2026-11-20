@@ -36,8 +36,15 @@ function currentTokenUser(): string | null {
 
 // Every board fetch carries the session token when there is one, so the server can tell a signed-in user
 // from an anonymous caller (public forms / sign-in screen), who may be given a reduced public snapshot.
-async function fetchBoard(): Promise<any> {
-  const r = await fetch(API_BASE + "/api/state", { cache: "no-store", headers: authHeaders() });
+// `lite`: skips the server's heaviest collections (dpr, qualityInspections —
+// measured as most of the whole board's byte size on a real project) so the
+// very first load after sign-in renders almost everything immediately
+// instead of waiting on a multi-MB payload over a slow site/mobile
+// connection. Only ever used for that one first fetch — the caller follows
+// up with a normal (non-lite) fetchBoard() right after to fill the rest in;
+// every later poll already fetches the full board as before.
+async function fetchBoard(lite = false): Promise<any> {
+  const r = await fetch(API_BASE + "/api/state" + (lite ? "?lite=1" : ""), { cache: "no-store", headers: authHeaders() });
   if (!r.ok) throw new Error("HTTP " + r.status);
   return r.json();
 }
@@ -519,12 +526,24 @@ export function AppProvider({ children, publicRoute = false }: { children: React
     let stopped = false;
     (async () => {
       try {
-        const j = await fetchBoard();
+        const j = await fetchBoard(true);
         if (stopped) return;
         acceptState(j); // first load: always shown (sign-in screen needs data) but a stale token is dropped
         setData(j.data); dataRef.current = j.data;
         setRev(j.rev); revRef.current = j.rev;
         setMode("live"); modeRef.current = "live";
+        // The lite fetch above left dpr/qualityInspections empty — top them
+        // up right away, without making the first render wait on them. Not
+        // folded into the normal rev-diffing poll below: that poll only
+        // re-fetches when the revision has CHANGED, which it hasn't here
+        // (same rev, just a smaller response), so this would otherwise never
+        // happen until someone's next unrelated write bumped the revision.
+        fetchBoard().then((full) => {
+          if (stopped || !acceptState(full)) return;
+          const merged = mergeStableCollections(dataRef.current, full.data);
+          setData(merged); dataRef.current = merged;
+          setRev(full.rev); revRef.current = full.rev;
+        }).catch(() => {});
         // Anything queued from a previous offline session (app was closed
         // before the connection came back) gets its chance to actually
         // reach the server now, before anyone starts making new changes.
