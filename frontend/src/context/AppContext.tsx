@@ -681,14 +681,24 @@ export function AppProvider({ children, publicRoute = false }: { children: React
       // fetch the real one now that there is a token, BEFORE selecting the user (which reads the user's
       // project restrictions from it). Skipped when the board already in memory is the full one (the normal case
       // while the snapshot feature is off) — then sign-in makes no extra request and waits for nothing.
+      // `lite`: same reasoning as the initial-load effect — don't make the
+      // Sign In button sit on dpr/qualityInspections/events over a slow
+      // connection when nothing right after login needs them yet. The
+      // background full fetch below tops them up moments later.
       if (needsFullBoardAfterLogin(lastStatePublicRef.current)) {
         try {
-          const s = await fetchBoard();
+          const s = await fetchBoard(true);
           if (s && s.data && !s.public) {
             lastStatePublicRef.current = false;
             const merged = mergeStableCollections(dataRef.current, s.data);
             setData(merged); dataRef.current = merged;
             setRev(s.rev); revRef.current = s.rev;
+            fetchBoard().then((full) => {
+              if (!full || !full.data || full.public) return;
+              const mergedFull = mergeStableCollections(dataRef.current, full.data);
+              setData(mergedFull); dataRef.current = mergedFull;
+              setRev(full.rev); revRef.current = full.rev;
+            }).catch(() => {});
           }
         } catch {}
       }
