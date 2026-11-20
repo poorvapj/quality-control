@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
-import { coll, myProjects, myAssignments, mySnags } from "../shared/rules";
+import { coll, myProjects, myAssignments, mySnags, byId } from "../shared/rules";
 import NavIcon from "../components/NavIcon";
 import SidePanel from "../components/SidePanel";
 import { viewPhoto } from "../shared/photoViewer";
@@ -241,7 +241,14 @@ export default function DriDashboard() {
   // the person the SNAG is assigned to, which is almost never the site DRI
   // themself).
   const needsAck = coll(data, "qualityInspections")
-    .filter((i) => projectIds.includes(i.projectId) && i.result !== "Pass" && !i.driAcknowledged && !i.driDisputed)
+    .filter((i) => {
+      if (!projectIds.includes(i.projectId) || i.result === "Pass" || i.driAcknowledged || i.driDisputed) return false;
+      // Already resolved (re-inspected to a Pass, or otherwise closed) before
+      // anyone acknowledged it — acknowledging a closed snag after the fact
+      // serves no purpose, so don't keep nagging the DRI about it.
+      const snag = i.linkedSnagId ? byId(coll(data, "snags"), i.linkedSnagId) : null;
+      return !snag || snag.status !== "Closed";
+    })
     .sort((a, b) => b.createdAt - a.createdAt);
 
   // Every OPEN snag on this DRI's own project(s), not just the ones
