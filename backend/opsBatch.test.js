@@ -46,8 +46,8 @@ async function main() {
     const db = fakeDb(); const store = createOpsBatchStore(() => db);
     assert.strictEqual(await store.claim("b1"), "new");
     await store.complete("b1");
-    assert.strictEqual(await store.claim("b1"), "done");
-    assert.strictEqual(await store.claim("b1"), "done");
+    assert.deepStrictEqual(await store.claim("b1"), { status: "done", resolvedIds: {} });
+    assert.deepStrictEqual(await store.claim("b1"), { status: "done", resolvedIds: {} });
     assert.strictEqual(await store.claim("b2"), "new", "a different batch is independent");
   });
 
@@ -75,7 +75,7 @@ async function main() {
     const db = fakeDb(); const store = createOpsBatchStore(() => db);
     await store.claim("b1"); await store.complete("b1");
     await store.release("b1");
-    assert.strictEqual(await store.claim("b1"), "done");
+    assert.deepStrictEqual(await store.claim("b1"), { status: "done", resolvedIds: {} });
   });
 
   await test("a stale pending marker (process died mid-apply) can be taken over by exactly one retry", async () => {

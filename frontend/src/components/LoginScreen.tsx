@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
 import NavIcon from "./NavIcon";
 
@@ -9,6 +9,11 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // The backend sleeps after ~15 min idle on Render's free tier and can
+  // take up to a minute to wake on the next request — without this, a slow
+  // first login just looks hung with no feedback.
+  const [waking, setWaking] = useState(false);
+  const wakingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   if (!data && mode === "offline") {
     return (
@@ -28,8 +33,12 @@ export default function LoginScreen() {
     if (!email.trim() || !password) return;
     setSubmitting(true);
     setError(null);
+    setWaking(false);
+    wakingTimerRef.current = setTimeout(() => setWaking(true), 3000);
     const err = await login(email.trim(), password);
+    if (wakingTimerRef.current) clearTimeout(wakingTimerRef.current);
     setSubmitting(false);
+    setWaking(false);
     if (err) setError(err);
   }
 
@@ -101,6 +110,9 @@ export default function LoginScreen() {
 
           {error && (
             <div className="note-box" style={{ marginTop: 12 }}>{error}</div>
+          )}
+          {waking && !error && (
+            <div className="note-box" style={{ marginTop: 12 }}>Waking up the server — this can take up to a minute if it's been idle. Hang tight…</div>
           )}
 
           <button

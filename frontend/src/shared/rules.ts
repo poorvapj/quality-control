@@ -57,7 +57,12 @@ export function trackStages(data: BoardData | null, projectId: string | null, tr
  *  should build its options from, instead of `coll(data,"projects")`
  *  directly. Admin is never restricted, even if `projectIds` was set. */
 export function myProjects(data: BoardData | null, userId: string | null): Project[] {
-  const all = coll(data, "projects").filter((p) => p.active !== false);
+  // Every picker that builds its options from this shares one sort order —
+  // by project code (PRJ-001, PRJ-002, …) — instead of whatever order the
+  // projects collection happens to come back in.
+  const all = coll(data, "projects")
+    .filter((p) => p.active !== false)
+    .sort((a, b) => (a.code || a.id).localeCompare(b.code || b.id, undefined, { numeric: true }));
   if (userId === "U-ADMIN") return all;
   const user = byId(coll(data, "users"), userId);
   if (!user?.projectIds?.length) return all;
