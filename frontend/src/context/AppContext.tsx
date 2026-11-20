@@ -23,6 +23,14 @@ const TAB_VIEW_LABEL: Partial<Record<TabKey, string>> = {
 };
 import { addRejected, parseRejected, REJECTED_KEY } from "../shared/rejected";
 
+// How often the 5s poll is allowed to pull the FULL board (dpr/qualityInspections/
+// events) in response to a revision change — every rev change still gets the
+// small `lite` refresh immediately, but the heavy collections only resync at
+// most this often, no matter how many revisions land in between. Collapsing
+// many potential ~9MB full-state downloads into one every minute was the
+// single largest source of this app's bandwidth (see server.js's
+// LITE_SKIP_COLLECTIONS doc comment for the same measurement).
+const HEAVY_REFRESH_MS = 60000;
 const LS_KEY = "neoteric_board_v5";
 const SESSION_KEY = "neoteric_session";
 const TOKEN_KEY = "neoteric_token";
@@ -522,6 +530,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
   }, [activeTab, loggedIn, currentUserId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Initial load + poll */
+  const lastHeavyRefreshRef = useRef(0);
   useEffect(() => {
     let stopped = false;
     (async () => {
@@ -538,6 +547,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
         // re-fetches when the revision has CHANGED, which it hasn't here
         // (same rev, just a smaller response), so this would otherwise never
         // happen until someone's next unrelated write bumped the revision.
+        lastHeavyRefreshRef.current = Date.now();
         fetchBoard().then((full) => {
           if (stopped || !acceptState(full)) return;
           const merged = mergeStableCollections(dataRef.current, full.data);
@@ -576,11 +586,31 @@ export function AppProvider({ children, publicRoute = false }: { children: React
           const r = await fetch(API_BASE + "/api/rev", { cache: "no-store" });
           const j = await r.json();
           if (j.rev !== revRef.current) {
-            const s = await fetchBoard();
+            // Every tab re-fetching the FULL ~9MB board on every single
+            // revision bump (literally any write by anyone) was most of
+            // this app's egress — measured at Render as tens of full
+            // fetches/hour across open tabs. dpr/qualityInspections/events
+            // don't need sub-minute freshness for other users (the author's
+            // own change already shows locally via the optimistic apply()
+            // update) — so a rev change always pulls the small `lite` state
+            // right away, and the heavy collections only get topped up at
+            // most once every HEAVY_REFRESH_MS, however many revisions
+            // passed in between.
+            const s = await fetchBoard(true);
             if (acceptState(s)) {
               const merged = mergeStableCollections(dataRef.current, s.data);
               setData(merged); dataRef.current = merged;
               setRev(s.rev); revRef.current = s.rev;
+            }
+            const now = Date.now();
+            if (now - lastHeavyRefreshRef.current >= HEAVY_REFRESH_MS) {
+              lastHeavyRefreshRef.current = now;
+              fetchBoard().then((full) => {
+                if (!acceptState(full)) return;
+                const mergedFull = mergeStableCollections(dataRef.current, full.data);
+                setData(mergedFull); dataRef.current = mergedFull;
+                setRev(full.rev); revRef.current = full.rev;
+              }).catch(() => {});
             }
           }
         } catch {
@@ -693,6 +723,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
             const merged = mergeStableCollections(dataRef.current, s.data);
             setData(merged); dataRef.current = merged;
             setRev(s.rev); revRef.current = s.rev;
+            lastHeavyRefreshRef.current = Date.now();
             fetchBoard().then((full) => {
               if (!full || !full.data || full.public) return;
               const mergedFull = mergeStableCollections(dataRef.current, full.data);

@@ -19,7 +19,21 @@
    (see the beforePhotos/afterPhotos note below, which used to drop real
    photos whenever this path happened to be the one that inserted a
    record, since VMS's `beforeImages`/`afterImages` were never read). */
-const { MongoClient } = require("mongodb");
+const { MongoClient, ObjectId } = require("mongodb");
+
+// This cycle used to re-download EVERY VMS dailyprogressreports doc, every
+// 30 minutes, forever — fine when the collection was small, but it's now
+// the single largest source of this app's "Service-Initiated" (backend
+// outbound) bandwidth on Render, scaling with VMS's entire history instead
+// of with how much could plausibly have been missed. Its own doc comment
+// above says what it actually needs to do: catch a report VMS's live push
+// missed (QC briefly unreachable, a project not yet mapped) — those gaps
+// surface within days, never months, given this already runs every 30 min.
+// Narrowing to a generous rolling window keeps that guarantee while cutting
+// the repeat scan to a small, bounded slice of the collection. Mongo
+// ObjectIds embed their creation time, so this needs no extra date field or
+// index on VMS's side.
+const RECONCILE_WINDOW_DAYS = 30;
 
 let cachedSourceClient = null;
 async function getSourceDb() {
@@ -165,8 +179,9 @@ async function syncVmsDpr(mongoDb, sourceDbOverride) {
 }
 
 async function syncVmsDprCycle(mongoDb, sourceDb) {
+  const windowStart = ObjectId.createFromTime(Math.floor(Date.now() / 1000) - RECONCILE_WINDOW_DAYS * 86400);
   const [vmsReports, vmsProjects, qcProjects, qcUsers, existingIds] = await Promise.all([
-    sourceDb.collection("dailyprogressreports").find({}, {
+    sourceDb.collection("dailyprogressreports").find({ _id: { $gte: windowStart } }, {
       projection: { projectId: 1, projectName: 1, date: 1, vendorCode: 1, vendorName: 1, shiftType: 1, labourCount: 1, workEntries: 1, driName: 1, isPublicSubmission: 1, qcId: 1 }
     }).toArray(),
     sourceDb.collection("projects").find({}, { projection: { id: 1, code: 1 } }).toArray(),
