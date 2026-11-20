@@ -934,7 +934,9 @@ async function getState(knownRev, opts) {
       ? Promise.resolve([])
       : mongoDb.collection(c).find({}, { projection: { _id: 0 } }).toArray()))),
     mongoDb.collection("progress").find({}).toArray(),
-    mongoDb.collection("events").find({}, { projection: { _id: 0 } }).sort({ ts: -1 }).limit(MAX_EVENTS).toArray()
+    // Audit Log / per-record "activity" history (Drawer.tsx) — not needed
+    // for the very first paint either, same reasoning as LITE_SKIP_COLLECTIONS.
+    (lite ? Promise.resolve([]) : mongoDb.collection("events").find({}, { projection: { _id: 0 } }).sort({ ts: -1 }).limit(MAX_EVENTS).toArray())
   ]);
 
   const data = {};
