@@ -52,9 +52,32 @@ export default function App() {
 
   if (!loggedIn) {
     if (hasSavedSession() && !data && mode === "connecting" && !gaveUpWaiting) {
+      // A plain "Restoring your session…" line on a blank page reads as
+      // hung on a slow connection — a shell that already looks like the
+      // real layout (sidebar + header + a few content blocks) makes the
+      // same wait feel like something is actually happening.
       return (
-        <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: 14 }}>
-          Restoring your session…
+        <div style={{ minHeight: "100vh", display: "flex" }}>
+          <div className="skeleton-sidebar" style={{ width: 220, flexShrink: 0, background: "var(--bg-card)", borderRight: "1px solid var(--border)", padding: 16 }}>
+            <div className="skeleton-bar" style={{ width: "70%", height: 20, marginBottom: 24 }} />
+            {Array.from({ length: 7 }).map((_, i) => (
+              <div key={i} className="skeleton-bar" style={{ width: "100%", height: 14, marginBottom: 14 }} />
+            ))}
+          </div>
+          <div style={{ flex: 1, padding: 24 }}>
+            <div className="skeleton-bar" style={{ width: 160, height: 24, marginBottom: 20 }} />
+            <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="skeleton-bar" style={{ flex: "1 1 160px", height: 72 }} />
+              ))}
+            </div>
+            <div className="skeleton-bar" style={{ width: "100%", height: 220, marginBottom: 16 }} />
+            <div className="skeleton-bar" style={{ width: "100%", height: 120 }} />
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 24, color: "var(--text-muted)", fontSize: 13 }}>
+              <span className="spinner" style={{ borderColor: "var(--border-strong)", borderTopColor: "var(--text-muted)" }} />
+              Restoring your session…
+            </div>
+          </div>
         </div>
       );
     }

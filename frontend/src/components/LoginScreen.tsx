@@ -106,9 +106,10 @@ export default function LoginScreen() {
           <button
             type="submit"
             className="btn btn-primary"
-            style={{ width: "100%", marginTop: 18, justifyContent: "center" }}
+            style={{ width: "100%", marginTop: 18, justifyContent: "center", gap: 8 }}
             disabled={!email.trim() || !password || submitting}
           >
+            {submitting && <span className="spinner" />}
             {submitting ? "Signing in…" : "Sign In"}
           </button>
         </form>
