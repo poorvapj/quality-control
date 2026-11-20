@@ -52,6 +52,21 @@ const activeNames = (rows: { name: string; seq?: number; active?: boolean; proje
 // (utility, dry balcony, etc.) not in this default list.
 const AREA_OPTIONS = ["Kitchen", "Bathroom 1", "Bathroom 2", "Bathroom 3", "Balcony 1", "Balcony 2"];
 
+// A slab is sometimes cast/inspected in sections. The chosen part(s) are
+// folded into the saved slab label itself (e.g. "Slab 3 — Part A & Part B")
+// so every existing place that just renders `slabs.join(", ")` (Execution,
+// ApprovalControls, PDF export, Slack, VMS sync) shows it correctly with no
+// changes there — no new top-level field needed.
+const SLAB_PARTS = ["Part A", "Part B", "Part C"];
+function encodeSlabLabel(name: string, parts: string[]): string {
+  return parts.length ? `${name} — ${parts.join(" & ")}` : name;
+}
+function decodeSlabLabel(label: string): { name: string; parts: string[] } {
+  const m = label.match(/^(.*) — ((?:Part [ABC])(?: & Part [ABC])*)$/);
+  if (!m) return { name: label, parts: [] };
+  return { name: m[1], parts: m[2].split(" & ") };
+}
+
 // A sentinel, non-real Stage id used ONLY to tag snags that originated from
 // a Work Quality Inspection failure — never a real progression Stage
 // record, so it never appears in / affects floor-release or gate
@@ -131,8 +146,11 @@ This cannot be undone.`)) return;
   const rowActions = (insp: QI, snag: Snag | null, row: boolean) => (
     <div className={row ? "flex flex-col gap-1.5 items-start" : "flex flex-wrap gap-1.5"} onClick={(e) => e.stopPropagation()}>
       <Btn label="History" color="secondary" size="sm" onClick={() => setHistoryFloor({ floorId: insp.floorId, floorLabel: insp.floorName })} />
-      {canCreate && insp.result !== "Pass" && (
+      {canCreate && insp.result !== "Pass" && snag?.status !== "Closed" && (!!insp.driAcknowledged || !!insp.driDisputed) && (
         <Btn label="Re-inspect" color="secondary" size="sm" onClick={() => { setReInspectOf(insp); setPanelOpen(true); }} />
+      )}
+      {canCreate && insp.result !== "Pass" && snag?.status !== "Closed" && !insp.driAcknowledged && !insp.driDisputed && (
+        <span className="text-[10.5px] text-[var(--text-sub)]">Waiting on DRI acknowledgement</span>
       )}
       {isAdmin && <Btn label="Delete" color="secondary" size="sm" onClick={() => deleteInspection(insp)} />}
     </div>
@@ -605,6 +623,11 @@ function InspectionForm({
   const [workType, setWorkType] = useState("");
   const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
   const [selectedSlabs, setSelectedSlabs] = useState<string[]>([]);
+  // A large slab is sometimes cast/inspected in sections — Part A/B/C — not
+  // the whole slab at once. Keyed by plain slab name (selectedSlabs entry),
+  // value is whichever of those parts this inspection covers for that slab;
+  // empty/absent means the whole slab (no part picked).
+  const [selectedSlabParts, setSelectedSlabParts] = useState<Record<string, string[]>>({});
   const [addingCustomSlab, setAddingCustomSlab] = useState(false);
   const [customSlabText, setCustomSlabText] = useState("");
   const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
@@ -682,12 +705,14 @@ function InspectionForm({
       setItemId(reInspectOf.itemId || "");
       setWorkType(reInspectOf.workType || "");
       setSelectedColumns(reInspectOf.columns || []);
-      setSelectedSlabs(reInspectOf.slabs || []);
+      const decodedSlabs = (reInspectOf.slabs || []).map(decodeSlabLabel);
+      setSelectedSlabs(decodedSlabs.map((d) => d.name));
+      setSelectedSlabParts(Object.fromEntries(decodedSlabs.filter((d) => d.parts.length).map((d) => [d.name, d.parts])));
       setSelectedAreas(reInspectOf.areas || []);
       setChecklist((reInspectOf.workType && QC_CHECKLISTS[reInspectOf.workType] || []).map((text) => ({ text, status: "", remarks: "" })));
     } else {
       setProjectId(""); setFloorIds([]); setUnitId(""); setWorkOrderNo(""); setItemId("");
-      setWorkType(""); setSelectedColumns([]); setSelectedSlabs([]); setSelectedAreas([]); setChecklist([]);
+      setWorkType(""); setSelectedColumns([]); setSelectedSlabs([]); setSelectedSlabParts({}); setSelectedAreas([]); setChecklist([]);
     }
     setInspectionDate(todayStr());
     setContractor(""); setCustomContractor(false);
@@ -705,7 +730,7 @@ function InspectionForm({
     if (!isFlatWise(wt)) setUnitId(""); // floor-level checklist: no flat
     const group = PHASE_LOOKUP.get(wt)?.group.name;
     if (wt !== "Column Inspection") setSelectedColumns([]);
-    if (wt !== "R.C.C. Slab Inspection") { setSelectedSlabs([]); setAddingCustomSlab(false); setCustomSlabText(""); }
+    if (wt !== "R.C.C. Slab Inspection") { setSelectedSlabs([]); setSelectedSlabParts({}); setAddingCustomSlab(false); setCustomSlabText(""); }
     if (group !== "Waterproofing Inspection") { setSelectedAreas([]); setAddingCustomArea(false); setCustomAreaText(""); }
     setChecklist((QC_CHECKLISTS[wt] || []).map((text) => ({ text, status: "", remarks: "" })));
   }
@@ -947,7 +972,7 @@ function InspectionForm({
         unit: itemEntry?.unit,
         workType,
         columns: workType === "Column Inspection" ? selectedColumns : undefined,
-        slabs: workType === "R.C.C. Slab Inspection" ? selectedSlabs : undefined,
+        slabs: workType === "R.C.C. Slab Inspection" ? selectedSlabs.map((name) => encodeSlabLabel(name, selectedSlabParts[name] || [])) : undefined,
         areas: requiresAreas(workType) ? selectedAreas : undefined,
         contractor: contractor.trim() || undefined,
         checklistItems: checklist.map((row) => ({ text: row.text, status: row.status as "OK" | "Not OK" | "N/A", remarks: row.remarks.trim() || undefined })),
@@ -1048,7 +1073,7 @@ function InspectionForm({
               // the old project would otherwise survive the switch and get
               // submitted against the new one, where it may not even exist.
               setSelectedColumns([]);
-              setSelectedSlabs([]); setAddingCustomSlab(false); setCustomSlabText("");
+              setSelectedSlabs([]); setSelectedSlabParts({}); setAddingCustomSlab(false); setCustomSlabText("");
             }}
             options={[{ value: "", label: "Select project…" }, ...allProjects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))]}
           />
@@ -1153,7 +1178,10 @@ function InspectionForm({
               multiValue={selectedSlabs}
               onChangeMulti={(vals) => {
                 if (vals.includes("__custom__")) { setAddingCustomSlab(true); setSelectedSlabs(vals.filter((v) => v !== "__custom__")); }
-                else setSelectedSlabs(vals);
+                else {
+                  setSelectedSlabs(vals);
+                  setSelectedSlabParts((prev) => Object.fromEntries(Object.entries(prev).filter(([name]) => vals.includes(name))));
+                }
               }}
               options={[...slabOptions.map((s) => ({ value: s, label: s })), { value: "__custom__", label: "Custom…" }]}
               onCreate={addCustomSlab}
@@ -1169,6 +1197,22 @@ function InspectionForm({
                   type="button" className="btn btn-secondary" style={{ flexShrink: 0 }}
                   onClick={() => { if (customSlabText.trim()) addCustomSlab(customSlabText.trim()); }}
                 >Add</button>
+              </div>
+            )}
+            {selectedSlabs.length > 0 && (
+              <div className="flex flex-col gap-2.5 mt-2">
+                {selectedSlabs.map((name) => (
+                  <div key={name}>
+                    <label className="text-[12px] font-medium">{name} — Part(s)</label>
+                    <SearchDropdown
+                      multi
+                      multiValue={selectedSlabParts[name] || []}
+                      onChangeMulti={(vals) => setSelectedSlabParts((prev) => ({ ...prev, [name]: vals }))}
+                      options={SLAB_PARTS.map((p) => ({ value: p, label: p }))}
+                    />
+                  </div>
+                ))}
+                <div className="text-[11px] text-[var(--text-muted)]">Optional — pick Part A/B/C only if that slab was cast/inspected in sections; leave unpicked to cover the whole slab.</div>
               </div>
             )}
             <div className="text-[11px] text-[var(--text-muted)] mt-1">{selectedSlabs.length} slab{selectedSlabs.length === 1 ? "" : "s"} selected.</div>

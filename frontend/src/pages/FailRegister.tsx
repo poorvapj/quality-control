@@ -166,7 +166,11 @@ export default function FailRegister() {
           {filtered.map((insp) => {
             const snag = insp.linkedSnagId ? byId(snags, insp.linkedSnagId) : null;
             const overdue = !!snag && snag.status !== "Closed" && !!snag.dueAt && snag.dueAt < Date.now();
-            const canReinspect = insp.result !== "Pass" && snag?.status !== "Closed";
+            // Quality can only re-inspect after the DRI has acknowledged (or
+            // disputed) the failure — re-inspecting before that would let
+            // Quality close the loop on a snag the DRI hasn't even seen yet.
+            const driResponded = !!insp.driAcknowledged || !!insp.driDisputed;
+            const canReinspect = insp.result !== "Pass" && snag?.status !== "Closed" && driResponded;
             return (
               <div
                 key={insp.id}
@@ -191,6 +195,9 @@ export default function FailRegister() {
                     <Badge color={snag.status === "Closed" ? "green" : overdue ? "red" : "amber"}>
                       <span className="whitespace-nowrap">{snag.status === "Closed" ? "Resolved" : overdue ? "Overdue" : snag.status}</span>
                     </Badge>
+                  )}
+                  {insp.result !== "Pass" && snag?.status !== "Closed" && !driResponded && (
+                    <Badge color="gray"><span className="whitespace-nowrap">Waiting on DRI acknowledgement</span></Badge>
                   )}
                 </div>
                 <div className="mt-2.5" onClick={(e) => e.stopPropagation()}>
@@ -223,7 +230,8 @@ export default function FailRegister() {
             {filtered.map((insp) => {
               const snag = insp.linkedSnagId ? byId(snags, insp.linkedSnagId) : null;
               const overdue = !!snag && snag.status !== "Closed" && !!snag.dueAt && snag.dueAt < Date.now();
-              const canReinspect = insp.result !== "Pass" && snag?.status !== "Closed";
+              const driResponded = !!insp.driAcknowledged || !!insp.driDisputed;
+              const canReinspect = insp.result !== "Pass" && snag?.status !== "Closed" && driResponded;
               return (
                 <TableRow
                   key={insp.id}
@@ -243,6 +251,9 @@ export default function FailRegister() {
                       <Badge color={snag.status === "Closed" ? "green" : overdue ? "red" : "amber"}>
                         <span className="whitespace-nowrap">{snag.status === "Closed" ? "Resolved" : overdue ? "Overdue" : snag.status}</span>
                       </Badge>
+                    )}
+                    {insp.result !== "Pass" && snag?.status !== "Closed" && !driResponded && (
+                      <div className="text-[10.5px] text-[var(--text-sub)] mt-0.5 whitespace-nowrap">Waiting on DRI ack</div>
                     )}
                   </TableCell>
                   <TableCell>

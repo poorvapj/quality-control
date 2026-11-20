@@ -1289,6 +1289,22 @@ async function assertOpAllowed(op, session) {
       op.rec.driDisputedByName = approver ? approver.name : null;
     }
   }
+  // Mirrors the snag-close rule below: Quality can't re-inspect a
+  // Fail/Rework until the site's own DRI has acknowledged or disputed it —
+  // otherwise re-inspecting is just a way to skip straight past that step.
+  if (op.op === "upsert" && op.coll === "qualityInspections" && op.create && op.rec && op.rec.reInspectionOf) {
+    const original = await mongoDb.collection("qualityInspections").findOne({ id: op.rec.reInspectionOf }, { projection: { driAcknowledged: 1, driDisputed: 1, linkedSnagId: 1 } });
+    if (!original) { const e = new Error("Original inspection not found"); e.status = 404; throw e; }
+    if (!original.driAcknowledged && !original.driDisputed) {
+      const e = new Error("This Fail/Rework hasn't been acknowledged (or disputed) by the project DRI yet");
+      e.status = 400;
+      throw e;
+    }
+    if (original.linkedSnagId) {
+      const snag = await mongoDb.collection("snags").findOne({ id: original.linkedSnagId }, { projection: { status: 1 } });
+      if (snag && snag.status === "Closed") { const e = new Error("That snag is already closed"); e.status = 400; throw e; }
+    }
+  }
   if (op.op === "upsert" && op.coll === "snags" && op.rec && op.rec.status === "Closed" && op.rec.closeReason === "Not Applicable") {
     // The DRI dismissing a quality-fail snag as not actually applicable
     // here — skips the normal fix-then-re-inspect path entirely, so only

@@ -128,7 +128,9 @@ export default function RoleDashboard() {
               <div className="py-6 px-5 text-center text-[var(--text-muted)] text-[13px]">You haven't logged an inspection yet.</div>
             ) : (
               myInspections.slice(0, 6).map((i) => {
-                const canReinspect = i.result !== "Pass";
+                const snag = i.linkedSnagId ? coll(data, "snags").find((s) => s.id === i.linkedSnagId) : null;
+                const driResponded = !!i.driAcknowledged || !!i.driDisputed;
+                const canReinspect = i.result !== "Pass" && snag?.status !== "Closed" && driResponded;
                 return (
                   <div
                     key={i.id}
