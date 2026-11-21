@@ -65,7 +65,11 @@ function QcDocument({ data: s }) {
           h(Text, { style: S.docMain }, "WORK QUALITY INSPECTION REPORT"),
           h(Text, { style: S.docSub }, `Scope: ${s.scopeLabel}`),
           h(Text, { style: S.docSub }, `Period: ${s.periodLabel}`),
-          h(Text, { style: S.docSub }, `Generated: ${new Date(s.generatedAt).toLocaleString("en-IN")} by ${s.generatedBy}`)
+          // Explicit timeZone — without it, toLocaleString falls back to the
+          // server process's own system timezone (not necessarily IST),
+          // which could make this stamp read as a confusing, even
+          // future-looking, time to anyone viewing it from India.
+          h(Text, { style: S.docSub }, `Generated: ${new Date(s.generatedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} by ${s.generatedBy}`)
         )
       ),
 
