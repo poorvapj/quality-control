@@ -56,8 +56,14 @@ function currentTokenUser(): string | null {
 // connection. Only ever used for that one first fetch — the caller follows
 // up with a normal (non-lite) fetchBoard() right after to fill the rest in;
 // every later poll already fetches the full board as before.
-async function fetchBoard(lite = false): Promise<any> {
-  const r = await fetch(API_BASE + "/api/state" + (lite ? "?lite=1" : ""), { cache: "no-store", headers: authHeaders() });
+// TEMPORARILY DISABLED (2026-11-21): the lite=1 fast-path plus its background
+// "top up heavy collections" fetch was leaving dpr/qualityInspections/events
+// empty live in production for real users — not just transiently (the retry
+// added right before this didn't fix it either), so correctness wins over the
+// bandwidth saving until the root cause is found. Every fetchBoard() call now
+// always gets the full board, same as before the lite-fetch work started.
+async function fetchBoard(_lite = false): Promise<any> {
+  const r = await fetch(API_BASE + "/api/state", { cache: "no-store", headers: authHeaders() });
   if (!r.ok) throw new Error("HTTP " + r.status);
   return r.json();
 }

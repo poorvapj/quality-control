@@ -929,9 +929,15 @@ const getStateGzip = () => stateBuilder.get();
 // across the app; deferring them risks real UI breakage for comparatively
 // little remaining bandwidth (the three collections below already account
 // for the overwhelming majority of a real board's byte size).
-const LITE_SKIP_COLLECTIONS = ["dpr", "qualityInspections", "purchaseOrders"];
+// TEMPORARILY DISABLED (2026-11-21): see the matching note on fetchBoard() in
+// frontend/src/context/AppContext.tsx — the lite path was leaving real users
+// with permanently empty dpr/qualityInspections/events in production, so this
+// is emptied out (not removed, so the lite plumbing below is a no-op rather
+// than deleted) until the root cause is found.
+const LITE_SKIP_COLLECTIONS = [];
 async function getState(knownRev, opts) {
-  const lite = !!(opts && opts.lite);
+  const lite = false; // TEMPORARILY DISABLED (2026-11-21) — see LITE_SKIP_COLLECTIONS note above
+  void opts; // opts.lite / opts.includeHeavy intentionally ignored while disabled
   // Lets a caller that skips the heavy collections still get ONE of them
   // back in full — used by POST /api/ops's own response (see
   // sendOpsStateResponse below): the collection a write just touched needs
