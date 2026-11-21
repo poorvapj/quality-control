@@ -920,9 +920,27 @@ const getStateGzip = () => stateBuilder.get();
 // them in moments later with no extra endpoint or caching path to keep in
 // sync. Never used for the cached/polled path, so the shared rev-cache
 // below is untouched by this.
-const LITE_SKIP_COLLECTIONS = ["dpr", "qualityInspections"];
+// purchaseOrders added as the next-largest collection after the two above —
+// shown on its own dedicated page (PurchaseOrders.tsx) and as a dashboard
+// stat count (RoleDashboard.tsx), same "momentarily stale count, corrected
+// within a poll cycle" trade-off already accepted for dpr/qualityInspections.
+// Deliberately NOT touching units/floors/projects here — those are read
+// synchronously and widely (every floor/unit picker, DRI scoring, Execution)
+// across the app; deferring them risks real UI breakage for comparatively
+// little remaining bandwidth (the three collections below already account
+// for the overwhelming majority of a real board's byte size).
+const LITE_SKIP_COLLECTIONS = ["dpr", "qualityInspections", "purchaseOrders"];
 async function getState(knownRev, opts) {
   const lite = !!(opts && opts.lite);
+  // Lets a caller that skips the heavy collections still get ONE of them
+  // back in full — used by POST /api/ops's own response (see
+  // sendOpsStateResponse below): the collection a write just touched needs
+  // to come back with whatever the server computed (approval status, auto
+  // ids, etc, that the client's optimistic local update can't know), but
+  // the other two heavy collections the write didn't touch are exactly as
+  // skippable as they are for the lite-on-login/poll case.
+  const includeHeavy = new Set((opts && opts.includeHeavy) || []);
+  const skipEvents = lite && !includeHeavy.has("events");
   const rev = knownRev !== undefined ? knownRev : await getRev(); // read BEFORE the data, never in parallel with it
   // Every collection fetch here is an independent round-trip to Atlas —
   // awaiting them one at a time in a loop made total load time the SUM of
@@ -930,13 +948,13 @@ async function getState(knownRev, opts) {
   // sign-in felt slow (this one call blocks the whole app on first load).
   // Promise.all runs them concurrently instead.
   const [collResults, progressDocs, events] = await Promise.all([
-    Promise.all(COLLECTIONS.map((c) => (lite && LITE_SKIP_COLLECTIONS.includes(c)
+    Promise.all(COLLECTIONS.map((c) => (lite && LITE_SKIP_COLLECTIONS.includes(c) && !includeHeavy.has(c)
       ? Promise.resolve([])
       : mongoDb.collection(c).find({}, { projection: { _id: 0 } }).toArray()))),
     mongoDb.collection("progress").find({}).toArray(),
     // Audit Log / per-record "activity" history (Drawer.tsx) — not needed
     // for the very first paint either, same reasoning as LITE_SKIP_COLLECTIONS.
-    (lite ? Promise.resolve([]) : mongoDb.collection("events").find({}, { projection: { _id: 0 } }).sort({ ts: -1 }).limit(MAX_EVENTS).toArray())
+    (skipEvents ? Promise.resolve([]) : mongoDb.collection("events").find({}, { projection: { _id: 0 } }).sort({ ts: -1 }).limit(MAX_EVENTS).toArray())
   ]);
 
   const data = {};
@@ -2329,20 +2347,39 @@ async function sendStateResponse(req, res) {
   return sendJson(res, 200, state);
 }
 
-// Only for POST /api/ops, and only when resolveTempIds() actually resolved
-// something — GET /api/state and every ops call with no temp id keep using
-// the cached-gzip sendStateResponse(). `resolvedIds` ({placeholder: realId})
-// rides alongside the normal {rev, data} body; AppContext.tsx's apply() uses
-// it to fix up the SAME rec objects the caller already built, so a toast
-// like "Ticket ${rec.ticketNo} created" shown right after a successful
-// save shows the real id, not the placeholder the browser never learns was
-// replaced any other way.
-async function sendStateResponseWithResolvedIds(req, res, resolvedIds) {
+function gzipJson(obj) {
+  return new Promise((resolve, reject) =>
+    zlib.gzip(JSON.stringify(obj), (err, buf) => (err ? reject(err) : resolve(buf))));
+}
+
+// POST /api/ops's own response used to be the full board (sendStateResponse)
+// on every single write — a one-line checklist tick paying for the same
+// ~9MB (gzipped) response as a full /api/state poll, every time. The caller
+// already has an optimistic local copy of its OWN change (AppContext.tsx's
+// apply()) — what it's actually missing is whatever the SERVER computed on
+// top of it (approval status, auto ids, timestamps…), which only ever lives
+// on the collection(s) this very batch wrote to. `touchedHeavy`: which of
+// LITE_SKIP_COLLECTIONS this batch's ops named as `coll` — those come back
+// in full; the other heavy collections (never touched by this write) are
+// skipped exactly like the lite-on-login/poll case, since nothing here
+// could have changed them.
+async function sendOpsStateResponse(req, res, touchedHeavy, resolvedIds) {
   if (PUBLIC_STATE_ENFORCE && !getSession(req)) {
     return sendJson(res, 200, await buildPublicState(mongoDb, COLLECTIONS, await getRev()));
   }
-  const state = await getState();
-  return sendJson(res, 200, { ...state, resolvedIds });
+  const state = await getState(undefined, { lite: true, includeHeavy: touchedHeavy });
+  const body = resolvedIds && Object.keys(resolvedIds).length ? { ...state, resolvedIds } : state;
+  if (String(req.headers["accept-encoding"] || "").includes("gzip")) {
+    const compressed = await gzipJson(body);
+    res.writeHead(200, {
+      "Content-Type": "application/json; charset=utf-8",
+      "Content-Encoding": "gzip",
+      "Content-Length": compressed.length,
+      "Cache-Control": "no-store"
+    });
+    return res.end(compressed);
+  }
+  return sendJson(res, 200, body);
 }
 
 function sendText(res, code, msg) {
@@ -2474,7 +2511,8 @@ async function handleApi(req, res, urlPath) {
         // opsBatch.js), or a retried-but-already-applied batch would show
         // it forever in a toast/returned value.
         const resolved = claim.resolvedIds || {};
-        return Object.keys(resolved).length ? sendStateResponseWithResolvedIds(req, res, resolved) : sendStateResponse(req, res);
+        const touchedHeavy = [...new Set(body.ops.filter((o) => o && o.coll).map((o) => o.coll).filter((c) => LITE_SKIP_COLLECTIONS.includes(c)))];
+        return sendOpsStateResponse(req, res, touchedHeavy, resolved);
       }
     }
     // Exchange any client-sent placeholder id (see idSeq.js) for a real,
@@ -2511,7 +2549,10 @@ async function handleApi(req, res, urlPath) {
       if (e.status) return sendJson(res, e.status, { error: e.message });
       throw e;
     }
-    return Object.keys(idRes.resolved).length ? sendStateResponseWithResolvedIds(req, res, idRes.resolved) : sendStateResponse(req, res);
+    {
+      const touchedHeavy = [...new Set(body.ops.filter((o) => o && o.coll).map((o) => o.coll).filter((c) => LITE_SKIP_COLLECTIONS.includes(c)))];
+      return sendOpsStateResponse(req, res, touchedHeavy, idRes.resolved);
+    }
   }
   const automationDecisionMatch = /^\/api\/automation\/drawing-requests\/([^/]+)\/decision$/.exec(urlPath);
   if (req.method === "POST" && automationDecisionMatch) {

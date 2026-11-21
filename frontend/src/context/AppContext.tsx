@@ -31,6 +31,11 @@ import { addRejected, parseRejected, REJECTED_KEY } from "../shared/rejected";
 // single largest source of this app's bandwidth (see server.js's
 // LITE_SKIP_COLLECTIONS doc comment for the same measurement).
 const HEAVY_REFRESH_MS = 60000;
+// Mirrors server.js's LITE_SKIP_COLLECTIONS (+ "events", which an ops batch
+// never names as `coll` — see eventLog.ts's `{ op: "event" }`, a separate
+// op kind). Used only to know which fields in an /api/ops response are
+// real vs. an intentionally-empty placeholder — see apply() below.
+const OPS_RESPONSE_SKIPPABLE = ["dpr", "qualityInspections", "purchaseOrders", "events"];
 const LS_KEY = "neoteric_board_v5";
 const SESSION_KEY = "neoteric_session";
 const TOKEN_KEY = "neoteric_token";
@@ -492,7 +497,26 @@ export function AppProvider({ children, publicRoute = false }: { children: React
         toast(j.error || "That action isn't allowed", 7000);
         return false;
       }
-      if (j.data && acceptState(j)) { setData(j.data); dataRef.current = j.data; setRev(j.rev); }
+      if (j.data && acceptState(j)) {
+        // The server's own response now only includes the heavy
+        // collections (dpr/qualityInspections) this very batch's ops
+        // actually named, plus events (always skipped) — see
+        // sendOpsStateResponse in server.js. Anything else in that set
+        // comes back as `[]`, NOT because it's actually empty, so patch
+        // those back from what's already in memory (the optimistic update
+        // above, or whatever the last full/lite fetch had) before merging,
+        // or this would silently wipe out real local data for every batch
+        // that didn't happen to touch it.
+        const touched = new Set(ops.filter((o): o is typeof o & { coll: string } => "coll" in o).map((o) => o.coll));
+        const patched: any = { ...j.data };
+        for (const c of OPS_RESPONSE_SKIPPABLE) {
+          if (!touched.has(c) && dataRef.current && (dataRef.current as any)[c] !== undefined) {
+            patched[c] = (dataRef.current as any)[c];
+          }
+        }
+        const merged = mergeStableCollections(dataRef.current, patched);
+        setData(merged); dataRef.current = merged; setRev(j.rev); revRef.current = j.rev;
+      }
       // A record created with makeTempId() (shared/helpers.ts) got its real
       // id from the server just now — fix up the SAME ops/rec objects the
       // caller built so its own closure (a toast, a returned ticket number)
