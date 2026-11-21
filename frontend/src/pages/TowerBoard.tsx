@@ -71,7 +71,7 @@ export default function TowerBoard() {
   // Measurement people are held to their own lens; everyone else (Admin, DRI,
   // CRM…) sees the combined board and can flip between the lenses.
   const roleLens = boardLensFor(data, myRole());
-  const [lensChoice, setLensChoice] = useState<BoardLens>("all");
+  const [lensChoice, setLensChoice] = useState<BoardLens>("quality");
   const lens: BoardLens = roleLens !== "all" ? roleLens : lensChoice;
   const stageLens = lens === "all" || lens === "execution"; // the original stage-progress colouring
   const inspectionsColl = coll(data, "qualityInspections");
