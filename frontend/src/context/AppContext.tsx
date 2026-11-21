@@ -91,6 +91,27 @@ export function notifySessionExpired(): void {
  * per-collection when its content is unchanged lets those memos actually
  * skip recomputation. Cheap: runs once per poll (every 5s, only when the
  * revision changed), not on every render. */
+// The background full-state fetch (tops up dpr/qualityInspections/purchaseOrders/events
+// after the initial/login/poll lite fetch) used to be a single try with a silent
+// `.catch(() => {})` — one network blip or slow-server hiccup and those collections
+// stayed empty (grey Tower Board cells, "0 logs" Audit Logs) until the next
+// rev-changing poll tick happened to land within the heavy-refresh window, which
+// could be minutes or never on a quiet board. Retry a few times with a short
+// backoff before giving up — the next poll tick (throttled to HEAVY_REFRESH_MS)
+// will still pick it up eventually either way, but this closes the common case.
+async function fetchBoardWithRetry(attempts = 3): Promise<any> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fetchBoard();
+    } catch (e) {
+      lastErr = e;
+      if (i < attempts - 1) await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 function mergeStableCollections(prev: BoardData | null, next: BoardData): BoardData {
   if (!prev) return next;
   const merged: any = { ...next };
@@ -572,7 +593,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
         // (same rev, just a smaller response), so this would otherwise never
         // happen until someone's next unrelated write bumped the revision.
         lastHeavyRefreshRef.current = Date.now();
-        fetchBoard().then((full) => {
+        fetchBoardWithRetry().then((full) => {
           if (stopped || !acceptState(full)) return;
           const merged = mergeStableCollections(dataRef.current, full.data);
           setData(merged); dataRef.current = merged;
@@ -629,7 +650,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
             const now = Date.now();
             if (now - lastHeavyRefreshRef.current >= HEAVY_REFRESH_MS) {
               lastHeavyRefreshRef.current = now;
-              fetchBoard().then((full) => {
+              fetchBoardWithRetry().then((full) => {
                 if (!acceptState(full)) return;
                 const mergedFull = mergeStableCollections(dataRef.current, full.data);
                 setData(mergedFull); dataRef.current = mergedFull;
@@ -748,7 +769,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
             setData(merged); dataRef.current = merged;
             setRev(s.rev); revRef.current = s.rev;
             lastHeavyRefreshRef.current = Date.now();
-            fetchBoard().then((full) => {
+            fetchBoardWithRetry().then((full) => {
               if (!full || !full.data || full.public) return;
               const mergedFull = mergeStableCollections(dataRef.current, full.data);
               setData(mergedFull); dataRef.current = mergedFull;
