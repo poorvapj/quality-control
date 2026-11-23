@@ -56,27 +56,22 @@ function currentTokenUser(): string | null {
 // connection. Only ever used for that one first fetch — the caller follows
 // up with a normal (non-lite) fetchBoard() right after to fill the rest in;
 // every later poll already fetches the full board as before.
-// RE-ENABLED (2026-11-23): was temporarily disabled on 2026-11-21 because the
-// background "top up heavy collections" full fetch was leaving
-// dpr/qualityInspections/events permanently empty for real users — adding a
-// retry (fetchBoardWithRetry, below) didn't fix it either. Root cause: plain
-// `fetch()` has no timeout of its own — a stalled/slow connection (exactly
-// the kind of connection this whole lite-fetch feature exists for) could hang
-// the full-board request indefinitely instead of rejecting, so it never hit
-// the retry's `catch` at all and just silently never finished. Every
-// fetchBoard() call now aborts and rejects after FETCH_TIMEOUT_MS, which
-// lets fetchBoardWithRetry's catch actually fire and try again.
-const FETCH_TIMEOUT_MS = 30000;
-async function fetchBoard(lite = false): Promise<any> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const r = await fetch(API_BASE + "/api/state" + (lite ? "?lite=1" : ""), { cache: "no-store", headers: authHeaders(), signal: controller.signal });
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    return await r.json();
-  } finally {
-    clearTimeout(timer);
-  }
+// TEMPORARILY DISABLED AGAIN (2026-11-23): re-enabled earlier today with a
+// client-side fetch timeout (see git history), on the theory that a hung,
+// timeout-less fetch was the whole problem — but dpr/qualityInspections/
+// events still came back permanently empty live (the Quality Inspection page
+// stuck at 0 records even 10+ minutes after deploy, across a hard refresh),
+// so the timeout fix alone did not fix it. Disabling again: correctness over
+// the bandwidth saving until the REAL root cause is confirmed (candidate:
+// the full, non-lite /api/state build itself failing/timing out server-side
+// on Render's small instance now that the board is 17+ MB, independent of
+// anything the client does — needs investigating with real server-side
+// visibility, not another guess-and-redeploy). Every fetchBoard() call again
+// always gets the full board, same as before any of the lite-fetch work.
+async function fetchBoard(_lite = false): Promise<any> {
+  const r = await fetch(API_BASE + "/api/state", { cache: "no-store", headers: authHeaders() });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return r.json();
 }
 
 export function authHeaders(): Record<string, string> {
