@@ -129,11 +129,17 @@ export function notifySessionExpired(): void {
 // FULL_FETCH_TIMEOUT_MS (240s, see fetchBoard) — a real production full
 // rebuild takes 113-118s, so a 2nd attempt is a reasonable safety net
 // without piling on a 3rd multi-minute wait for no real extra benefit.
-async function fetchBoardWithRetry(attempts = 2): Promise<any> {
+// Also used for the INITIAL load's lite fetch (2026-11-23): that one single
+// attempt had no retry at all — one slow/dropped lite request and a FRESH
+// session (nothing in localStorage yet) fell straight through to full
+// "offline" mode, not just a slow load. A lite attempt is cheap (~10-25s
+// measured in production) so 2 attempts here costs little even in the worst
+// case, and closes that gap.
+async function fetchBoardWithRetry(attempts = 2, lite = false): Promise<any> {
   let lastErr: unknown;
   for (let i = 0; i < attempts; i++) {
     try {
-      return await fetchBoard();
+      return await fetchBoard(lite);
     } catch (e) {
       lastErr = e;
       if (i < attempts - 1) await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
@@ -617,7 +623,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
     let stopped = false;
     (async () => {
       try {
-        const j = await fetchBoard(true);
+        const j = await fetchBoardWithRetry(2, true);
         if (stopped) return;
         acceptState(j); // first load: always shown (sign-in screen needs data) but a stale token is dropped
         setData(j.data); dataRef.current = j.data;
@@ -811,7 +817,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
       // background full fetch below tops them up moments later.
       if (needsFullBoardAfterLogin(lastStatePublicRef.current)) {
         try {
-          const s = await fetchBoard(true);
+          const s = await fetchBoardWithRetry(2, true);
           if (s && s.data && !s.public) {
             lastStatePublicRef.current = false;
             const merged = mergeStableCollections(dataRef.current, s.data);
