@@ -3281,6 +3281,20 @@ connectMongo()
       console.log(`\n  Shared store: MongoDB   ·   Ctrl+C to stop.\n`);
     });
 
+    // Keep the full-board cache warm (2026-11-23) — a real full rebuild
+    // takes 113-118s (measured in production, see the [stateBuilder] log),
+    // so whoever's request happens to be the first one after the TTL
+    // (STATE_CACHE_TTL_MS, 5 min) lapses pays that cost in full: this is
+    // exactly why the background "top up heavy collections" fetch after a
+    // lite login/poll could still take 1-2 minutes even though the lite
+    // part itself was fast. Proactively rebuilding on a shorter cadence than
+    // the TTL means a real user's request almost always lands on an
+    // already-warm cache (near-instant) instead of triggering the build
+    // itself. getStateGzip() already no-ops cheaply (just a getRev() check)
+    // when the cache is still fresh for the current revision, so calling it
+    // this often costs nothing extra beyond that single read on most ticks.
+    setInterval(() => { getStateGzip().catch((e) => console.error("  [cache-warm] failed:", e && e.message ? e.message : e)); }, 2 * 60 * 1000);
+
     // Pull in any new VMS daily progress reports periodically — additive
     // only, never touches existing records. No-ops entirely when
     // SOURCE_MONGO_URI isn't configured (e.g. local dev without VMS access).
