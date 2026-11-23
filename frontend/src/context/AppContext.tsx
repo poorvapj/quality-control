@@ -629,7 +629,15 @@ export function AppProvider({ children, publicRoute = false }: { children: React
       }
     })();
 
-    const iv = window.setInterval(async () => {
+    // A background/inactive tab polling /api/rev every 5s forever was pure
+    // waste — request COUNT (not just payload size) kept climbing with every
+    // extra tab left open, whether or not anyone was looking at it. Skipping
+    // the tick entirely while the tab is hidden costs nothing: nothing the
+    // user does in a hidden tab needs sub-5s freshness, and the moment the
+    // tab becomes visible again the visibilitychange listener below fires an
+    // immediate tick instead of waiting up to 5s for the next one.
+    const pollTick = async () => {
+      if (typeof document !== "undefined" && document.hidden) return;
       // A save that only got queued because the session had expired mid-use
       // (a 401, not a network failure — see apply()'s !r.ok branch) never
       // flips mode to "offline", so it would otherwise sit queued forever:
@@ -693,9 +701,13 @@ export function AppProvider({ children, publicRoute = false }: { children: React
       } catch {
         // still offline, try again next tick
       }
-    }, 5000);
+    };
 
-    return () => { stopped = true; window.clearInterval(iv); };
+    const iv = window.setInterval(pollTick, 5000);
+    const onVisible = () => { if (!document.hidden) pollTick(); };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => { stopped = true; window.clearInterval(iv); document.removeEventListener("visibilitychange", onVisible); };
   }, []);
 
   /* Pick a default user/project once data first arrives */
