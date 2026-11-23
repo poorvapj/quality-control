@@ -804,6 +804,7 @@ async function connectMongo() {
     mongoDb.collection("users").createIndex({ email: 1 }, { unique: true, sparse: true }),
     mongoDb.collection("backups").createIndex({ id: 1 }, { unique: true }),
     mongoDb.collection("backups").createIndex({ createdAt: -1 }),
+    mongoDb.collection("backupChunks").createIndex({ backupId: 1, seq: 1 }),
     // The only real filtered (non-find({})) queries in the app today: a
     // project delete cascades by scanning floors/units for that projectId
     // (line ~1237), and the VMS-link report scans workMeasurements for any
@@ -2245,7 +2246,7 @@ async function takeSafetyBackup(kind, actorUserId, opts) {
 }
 
 async function restoreBackup(id, actorUserId, opts) {
-  const doc = await mongoDb.collection("backups").findOne({ id });
+  const doc = await backups.loadBackupDoc(mongoDb, id);
   if (!doc) { const e = new Error("Backup not found"); e.status = 404; throw e; }
   const safetyId = await takeSafetyBackup("pre-restore", actorUserId, opts);
   const skipped = [];
@@ -3027,7 +3028,9 @@ async function handleApi(req, res, urlPath) {
     const session = getSession(req);
     if (!session) return sendJson(res, 401, { error: "Sign-in required" });
     if (!session.isAdmin) return sendJson(res, 403, { error: "Admin access required" });
-    const doc = await mongoDb.collection("backups").findOne({ id: backupIdMatch[1] });
+    let doc;
+    try { doc = await backups.loadBackupDoc(mongoDb, backupIdMatch[1]); }
+    catch (e) { if (e.status) return sendJson(res, e.status, { error: e.message }); throw e; }
     if (!doc) return sendJson(res, 404, { error: "Backup not found" });
     const { _id, ...safe } = stripBackupPasswords(doc);
     return sendJson(res, 200, safe);
@@ -3050,7 +3053,7 @@ async function handleApi(req, res, urlPath) {
     const session = getSession(req);
     if (!session) return sendJson(res, 401, { error: "Sign-in required" });
     if (!session.isAdmin) return sendJson(res, 403, { error: "Admin access required" });
-    const result = await mongoDb.collection("backups").deleteOne({ id: backupIdMatch[1] });
+    const result = await backups.deleteBackup(mongoDb, backupIdMatch[1]);
     if (result.deletedCount === 0) return sendJson(res, 404, { error: "Backup not found" });
     return sendJson(res, 200, { ok: true });
   }
