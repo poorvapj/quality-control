@@ -890,21 +890,35 @@ async function getRev() {
 // it independently even when nothing changed between their requests. Cache
 // the last gzip buffer keyed by `rev`: every real write already calls
 // bumpRev(), so a rev match guarantees identical data — no staleness risk
-// from normal use. The short TTL is only a safety net for the rare
-// out-of-band write that bypasses bumpRev entirely (e.g. an ad-hoc cleanup
-// script run directly against Mongo) — such a change still surfaces within
-// 3s, no worse than today's 5s client poll interval already allows.
-// The cache AND the rebuild are now owned by stateBuilder.js: concurrent requests for the same revision
-// share ONE rebuild (previously each client's request rebuilt the whole board on its own — measured at
-// ~11 s / ~2 GB for 40 clients at 10x data), and the revision is always read first. Rules + tests there.
-const STATE_CACHE_TTL_MS = 3000;
+// from normal use. The TTL is only a safety net for the rare out-of-band
+// write that bypasses bumpRev entirely (e.g. an ad-hoc cleanup script run
+// directly against Mongo) — such a change surfaces within the TTL window
+// below at the latest.
+// RAISED 2026-11-23 from 3000ms: at today's board size (17+ MB) a full
+// rebuild (read every collection + JSON.stringify + gzip, on Render's
+// smallest instance) can itself take well over the old 3s TTL and even over
+// the old 30s join window below — meaning almost every request more than 3s
+// apart rebuilt from scratch, and a build slow enough to miss BOTH windows
+// just kept restarting forever instead of ever finishing. A correctness-safe
+// rev check still invalidates this on every real write; the TTL only bounds
+// how stale an out-of-band, non-bumpRev change could look, and 60s costs
+// nothing extra here since every real write already bypasses the cache the
+// moment it bumps the revision.
+const STATE_CACHE_TTL_MS = 60000;
+// How long a request will wait to join an ALREADY-RUNNING build for the
+// revision it just read, instead of starting its own. Raised alongside the
+// TTL above for the same reason — a build that takes close to (or over) the
+// old 30s window caused every retry/poll tick to restart it from scratch
+// rather than share the one already in flight.
+const STATE_BUILD_JOIN_MS = 120000;
 const stateBuilder = createStateBuilder({
   getRev,
   readState: (rev) => getState(rev),
   serialize: (state) => new Promise((resolve, reject) =>
     zlib.gzip(JSON.stringify(state), (err, buf) => (err ? reject(err) : resolve(buf)))
   ),
-  ttlMs: STATE_CACHE_TTL_MS
+  ttlMs: STATE_CACHE_TTL_MS,
+  maxJoinMs: STATE_BUILD_JOIN_MS
 });
 const getStateGzip = () => stateBuilder.get();
 

@@ -30,7 +30,7 @@
    7. The short TTL stays as a safety net for out-of-band writes that bypass the
       revision counter (unchanged behaviour). */
 
-function createStateBuilder({ getRev, readState, serialize, ttlMs = 3000, maxJoinMs = 30000, now = () => Date.now() }) {
+function createStateBuilder({ getRev, readState, serialize, ttlMs = 3000, maxJoinMs = 30000, now = () => Date.now(), log = console }) {
   let cache = null;    // { rev, body, builtAt }
   let inflight = null; // { rev, promise }
 
@@ -40,8 +40,16 @@ function createStateBuilder({ getRev, readState, serialize, ttlMs = 3000, maxJoi
     if (inflight && inflight.rev === rev && now() - inflight.startedAt < maxJoinMs) return inflight.promise; // rules 2 and 6
     const entry = { rev, startedAt: now(), promise: null };
     entry.promise = (async () => {
+      const t0 = now();
       const state = await readState(rev);                               // rule 3: stamped with `rev`, read first
+      const tRead = now();
       const body = await serialize(state);
+      const tDone = now();
+      // Visibility into how long a full rebuild actually takes in production —
+      // added 2026-11-23 after two guessed-and-failed attempts at a
+      // lite-fetch optimization whose real cause turned out to be this
+      // rebuild taking longer than the TTL/join window ever assumed.
+      log.log(`[stateBuilder] rev ${rev}: read ${tRead - t0}ms, serialize ${tDone - tRead}ms, total ${tDone - t0}ms, ${(body.length / 1048576).toFixed(2)} MB gzipped`);
       const newer = !cache || cache.rev < rev || (cache.rev === rev && cache.startedAt <= entry.startedAt) || now() - cache.builtAt >= ttlMs;
       if (newer) cache = { rev, body, builtAt: now(), startedAt: entry.startedAt }; // rule 5: never replace newer data with older
       return { rev, body };
