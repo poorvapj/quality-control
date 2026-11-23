@@ -56,16 +56,27 @@ function currentTokenUser(): string | null {
 // connection. Only ever used for that one first fetch — the caller follows
 // up with a normal (non-lite) fetchBoard() right after to fill the rest in;
 // every later poll already fetches the full board as before.
-// TEMPORARILY DISABLED (2026-11-21): the lite=1 fast-path plus its background
-// "top up heavy collections" fetch was leaving dpr/qualityInspections/events
-// empty live in production for real users — not just transiently (the retry
-// added right before this didn't fix it either), so correctness wins over the
-// bandwidth saving until the root cause is found. Every fetchBoard() call now
-// always gets the full board, same as before the lite-fetch work started.
-async function fetchBoard(_lite = false): Promise<any> {
-  const r = await fetch(API_BASE + "/api/state", { cache: "no-store", headers: authHeaders() });
-  if (!r.ok) throw new Error("HTTP " + r.status);
-  return r.json();
+// RE-ENABLED (2026-11-23): was temporarily disabled on 2026-11-21 because the
+// background "top up heavy collections" full fetch was leaving
+// dpr/qualityInspections/events permanently empty for real users — adding a
+// retry (fetchBoardWithRetry, below) didn't fix it either. Root cause: plain
+// `fetch()` has no timeout of its own — a stalled/slow connection (exactly
+// the kind of connection this whole lite-fetch feature exists for) could hang
+// the full-board request indefinitely instead of rejecting, so it never hit
+// the retry's `catch` at all and just silently never finished. Every
+// fetchBoard() call now aborts and rejects after FETCH_TIMEOUT_MS, which
+// lets fetchBoardWithRetry's catch actually fire and try again.
+const FETCH_TIMEOUT_MS = 30000;
+async function fetchBoard(lite = false): Promise<any> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const r = await fetch(API_BASE + "/api/state" + (lite ? "?lite=1" : ""), { cache: "no-store", headers: authHeaders(), signal: controller.signal });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return await r.json();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function authHeaders(): Record<string, string> {
