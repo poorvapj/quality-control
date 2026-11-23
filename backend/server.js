@@ -2396,7 +2396,14 @@ async function sendOpsStateResponse(req, res, touchedHeavy, resolvedIds) {
   if (PUBLIC_STATE_ENFORCE && !getSession(req)) {
     return sendJson(res, 200, await buildPublicState(mongoDb, COLLECTIONS, await getRev()));
   }
+  const t0 = Date.now();
   const state = await getState(undefined, { lite: true, includeHeavy: touchedHeavy });
+  // Timing visibility (2026-11-23) — a save's own response never hits the
+  // stateBuilder cache (it must always reflect this very write), so every
+  // save pays this read cost fresh, unlike a poll. Logged to confirm whether
+  // "saving feels slow" is this same Atlas-read bottleneck (see the
+  // stateBuilder timing log) touching a heavy collection, or something else.
+  console.log(`[ops-response] touchedHeavy=[${touchedHeavy.join(",")}]: read ${Date.now() - t0}ms`);
   const body = resolvedIds && Object.keys(resolvedIds).length ? { ...state, resolvedIds } : state;
   if (String(req.headers["accept-encoding"] || "").includes("gzip")) {
     const compressed = await gzipJson(body);
