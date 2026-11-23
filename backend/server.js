@@ -951,14 +951,13 @@ const getStateGzip = () => stateBuilder.get();
 // across the app; deferring them risks real UI breakage for comparatively
 // little remaining bandwidth (the three collections below already account
 // for the overwhelming majority of a real board's byte size).
-// RE-ENABLED AGAIN 2026-11-23 (3rd attempt), this time backed by real
-// production numbers: stateBuilder's own timing log shows a full rebuild's
-// READ step alone taking 113-118s consistently — a client-side timeout
-// shorter than that (the previous attempt used 30s) can never succeed, no
-// matter how many times it retries. See the matching note on fetchBoard()
-// in frontend/src/context/AppContext.tsx for the corrected, much longer
-// timeout that goes with this.
-const LITE_SKIP_COLLECTIONS = ["dpr", "qualityInspections", "purchaseOrders"];
+// DISABLED AGAIN 2026-11-23 (final call after 3 attempts) — see the matching,
+// more detailed note on fetchBoard() in frontend/src/context/AppContext.tsx.
+// This is specifically the `/api/state` (login/poll) lite path; the
+// `onlyColls` mechanism a write's own /api/ops response uses (below) is
+// unrelated and stays enabled — it has caused no incidents and production
+// numbers confirmed it works (a plain save: ~113s -> 2-3s).
+const LITE_SKIP_COLLECTIONS = [];
 async function getState(knownRev, opts) {
   const lite = !!(opts && opts.lite);
   // Lets a caller that skips the heavy collections still get ONE of them
