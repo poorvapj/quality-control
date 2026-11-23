@@ -2361,7 +2361,14 @@ async function sendStateResponse(req, res) {
   let lite = false;
   try { lite = new URL(req.url, "http://localhost").searchParams.get("lite") === "1"; } catch {}
   if (lite) {
+    const tLite0 = Date.now();
     const state = await getState(undefined, { lite: true });
+    // Timing visibility (2026-11-23) — the lite path had no timing log of its
+    // own (only the cached/full path did, via stateBuilder), so when it was
+    // slow enough to blow past the client's lite timeout and drop the whole
+    // app into "offline" mode on first load, there was no way to tell how
+    // slow it actually was. Logged so the next occurrence is measured.
+    console.log(`[lite-state] read ${Date.now() - tLite0}ms`);
     if (String(req.headers["accept-encoding"] || "").includes("gzip")) {
       const compressed = await new Promise((resolve, reject) =>
         zlib.gzip(JSON.stringify(state), (err, buf) => (err ? reject(err) : resolve(buf))));

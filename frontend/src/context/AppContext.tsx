@@ -66,7 +66,16 @@ const LITE_FETCH_DISABLED = false;
 // background and never blocks the UI, so a long timeout here costs nothing
 // but correctness.
 const FULL_FETCH_TIMEOUT_MS = 240000;
-const LITE_FETCH_TIMEOUT_MS = 30000;
+// RAISED 2026-11-23: 30s was too tight — on a fresh/incognito session (no
+// localStorage fallback) a lite fetch this slow doesn't just feel slow, it
+// drops the WHOLE APP into offline mode on first load (the initial-load
+// effect's catch block falls back to localStorage, then to "offline" if
+// there's nothing there — see below). The lite path had no timing log of
+// its own until now (see server.js's `[lite-state]` log added alongside
+// this), so there's no real number yet for how slow it actually gets — this
+// is a safe interim ceiling, not a measured value like FULL_FETCH_TIMEOUT_MS
+// above. Tighten it again once real `[lite-state]` numbers come in.
+const LITE_FETCH_TIMEOUT_MS = 90000;
 async function fetchBoard(lite = false): Promise<any> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), lite ? LITE_FETCH_TIMEOUT_MS : FULL_FETCH_TIMEOUT_MS);
