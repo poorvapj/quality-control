@@ -31,6 +31,27 @@ import { addRejected, parseRejected, REJECTED_KEY } from "../shared/rejected";
 // single largest source of this app's bandwidth (see server.js's
 // LITE_SKIP_COLLECTIONS doc comment for the same measurement).
 const HEAVY_REFRESH_MS = 60000;
+// The real bug behind every "data was there, then disappeared again"
+// report this session (2026-11-23): a `lite=1` response's dpr/
+// qualityInspections/purchaseOrders/events are genuinely `[]` — not because
+// they're empty, but because the server was told to skip them — but
+// mergeStableCollections has no way to know that. It only keeps the
+// PREVIOUS value when the two are byte-identical, so the very next
+// rev-changing poll (or a login) merged that `[]` straight over whatever
+// real data the earlier background top-up fetch had just loaded, silently
+// erasing it. apply()'s /api/ops patch-back loop already solved this for
+// save responses; it was never applied to a lite /api/state response
+// merged directly into state (the poll tick, and login) — see
+// patchLiteResponse below, now used at both of those call sites.
+const LITE_RESPONSE_PLACEHOLDER_COLLS = ["dpr", "qualityInspections", "purchaseOrders", "events"];
+function patchLiteResponse(liteData: any, prev: BoardData | null): any {
+  if (!prev) return liteData;
+  const patched = { ...liteData };
+  for (const c of LITE_RESPONSE_PLACEHOLDER_COLLS) {
+    if ((prev as any)[c] !== undefined) patched[c] = (prev as any)[c];
+  }
+  return patched;
+}
 const LS_KEY = "neoteric_board_v5";
 const SESSION_KEY = "neoteric_session";
 const TOKEN_KEY = "neoteric_token";
@@ -694,7 +715,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
             // passed in between.
             const s = await fetchBoard(true);
             if (acceptState(s)) {
-              const merged = mergeStableCollections(dataRef.current, s.data);
+              const merged = mergeStableCollections(dataRef.current, patchLiteResponse(s.data, dataRef.current));
               setData(merged); dataRef.current = merged;
               setRev(s.rev); revRef.current = s.rev;
             }
@@ -820,7 +841,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
           const s = await fetchBoardWithRetry(2, true);
           if (s && s.data && !s.public) {
             lastStatePublicRef.current = false;
-            const merged = mergeStableCollections(dataRef.current, s.data);
+            const merged = mergeStableCollections(dataRef.current, patchLiteResponse(s.data, dataRef.current));
             setData(merged); dataRef.current = merged;
             setRev(s.rev); revRef.current = s.rev;
             lastHeavyRefreshRef.current = Date.now();
