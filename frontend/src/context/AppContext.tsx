@@ -31,11 +31,6 @@ import { addRejected, parseRejected, REJECTED_KEY } from "../shared/rejected";
 // single largest source of this app's bandwidth (see server.js's
 // LITE_SKIP_COLLECTIONS doc comment for the same measurement).
 const HEAVY_REFRESH_MS = 60000;
-// Mirrors server.js's LITE_SKIP_COLLECTIONS (+ "events", which an ops batch
-// never names as `coll` — see eventLog.ts's `{ op: "event" }`, a separate
-// op kind). Used only to know which fields in an /api/ops response are
-// real vs. an intentionally-empty placeholder — see apply() below.
-const OPS_RESPONSE_SKIPPABLE = ["dpr", "qualityInspections", "purchaseOrders", "events"];
 const LS_KEY = "neoteric_board_v5";
 const SESSION_KEY = "neoteric_session";
 const TOKEN_KEY = "neoteric_token";
@@ -545,18 +540,25 @@ export function AppProvider({ children, publicRoute = false }: { children: React
         return false;
       }
       if (j.data && acceptState(j)) {
-        // The server's own response now only includes the heavy
-        // collections (dpr/qualityInspections) this very batch's ops
-        // actually named, plus events (always skipped) — see
-        // sendOpsStateResponse in server.js. Anything else in that set
-        // comes back as `[]`, NOT because it's actually empty, so patch
-        // those back from what's already in memory (the optimistic update
-        // above, or whatever the last full/lite fetch had) before merging,
-        // or this would silently wipe out real local data for every batch
-        // that didn't happen to touch it.
+        // The server's own response (2026-11-23: generalized from just the
+        // heavy collections to ALL of them) now only includes the
+        // collection(s) this very batch's ops actually named via `coll` —
+        // see sendOpsStateResponse/getState's `onlyColls` in server.js.
+        // Everything else comes back as `[]`, NOT because it's actually
+        // empty, so patch every one of those back from what's already in
+        // memory (the optimistic update above, or whatever the last
+        // full/lite fetch had) before merging, or this would silently wipe
+        // out real local data for every collection a batch didn't touch.
         const touched = new Set(ops.filter((o): o is typeof o & { coll: string } => "coll" in o).map((o) => o.coll));
         const patched: any = { ...j.data };
-        for (const c of OPS_RESPONSE_SKIPPABLE) {
+        for (const c of Object.keys(patched)) {
+          // "progress" is a special case: server.js's getState() always reads
+          // it in full regardless of `onlyColls` (it's small, and a plain
+          // "progress" op — see eventLog.ts/server.js — never shows up in
+          // `touched` since it isn't an upsert-with-coll). Patching it back
+          // from local state here would silently throw away genuinely fresh
+          // server data for no reason, so it's never eligible to be patched.
+          if (c === "progress") continue;
           if (!touched.has(c) && dataRef.current && (dataRef.current as any)[c] !== undefined) {
             patched[c] = (dataRef.current as any)[c];
           }

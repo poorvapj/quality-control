@@ -969,7 +969,19 @@ async function getState(knownRev, opts) {
   // the other two heavy collections the write didn't touch are exactly as
   // skippable as they are for the lite-on-login/poll case.
   const includeHeavy = new Set((opts && opts.includeHeavy) || []);
-  const skipEvents = lite && !includeHeavy.has("events");
+  // `onlyColls` (2026-11-23): a write's own response (sendOpsStateResponse)
+  // used to still read every NON-heavy collection in full on every save —
+  // ~30 collections, cheap individually but all real Atlas round-trips, and
+  // with the same slow-Atlas-connection bottleneck the stateBuilder timing
+  // log exposed for sign-in, this was most of why "saving feels slow" too.
+  // When provided, this completely overrides `lite`/`includeHeavy`: ONLY the
+  // collections actually named here come back in full (used for the
+  // collection(s) a write's own ops touched), everything else — heavy or
+  // not, events included — comes back as `[]`, same "the client already has
+  // this, no need to re-read it" reasoning LITE_SKIP_COLLECTIONS already
+  // relies on, just applied to the whole board instead of 3 collections.
+  const onlyColls = opts && opts.onlyColls;
+  const skipEvents = onlyColls ? !onlyColls.has("events") : (lite && !includeHeavy.has("events"));
   const rev = knownRev !== undefined ? knownRev : await getRev(); // read BEFORE the data, never in parallel with it
   // Every collection fetch here is an independent round-trip to Atlas —
   // awaiting them one at a time in a loop made total load time the SUM of
@@ -977,9 +989,10 @@ async function getState(knownRev, opts) {
   // sign-in felt slow (this one call blocks the whole app on first load).
   // Promise.all runs them concurrently instead.
   const [collResults, progressDocs, events] = await Promise.all([
-    Promise.all(COLLECTIONS.map((c) => (lite && LITE_SKIP_COLLECTIONS.includes(c) && !includeHeavy.has(c)
-      ? Promise.resolve([])
-      : mongoDb.collection(c).find({}, { projection: { _id: 0 } }).toArray()))),
+    Promise.all(COLLECTIONS.map((c) => {
+      const skip = onlyColls ? !onlyColls.has(c) : (lite && LITE_SKIP_COLLECTIONS.includes(c) && !includeHeavy.has(c));
+      return skip ? Promise.resolve([]) : mongoDb.collection(c).find({}, { projection: { _id: 0 } }).toArray();
+    })),
     mongoDb.collection("progress").find({}).toArray(),
     // Audit Log / per-record "activity" history (Drawer.tsx) — not needed
     // for the very first paint either, same reasoning as LITE_SKIP_COLLECTIONS.
@@ -2387,23 +2400,24 @@ function gzipJson(obj) {
 // already has an optimistic local copy of its OWN change (AppContext.tsx's
 // apply()) — what it's actually missing is whatever the SERVER computed on
 // top of it (approval status, auto ids, timestamps…), which only ever lives
-// on the collection(s) this very batch wrote to. `touchedHeavy`: which of
-// LITE_SKIP_COLLECTIONS this batch's ops named as `coll` — those come back
-// in full; the other heavy collections (never touched by this write) are
-// skipped exactly like the lite-on-login/poll case, since nothing here
-// could have changed them.
-async function sendOpsStateResponse(req, res, touchedHeavy, resolvedIds) {
+// on the collection(s) this very batch wrote to. `touchedColls`: every
+// collection this batch's ops actually named via `coll` — those come back in
+// full; literally everything else (every other collection, not just the
+// other 2 heavy ones) comes back as `[]`, since nothing here could have
+// changed them and the client already has them from its last poll/optimistic
+// update (see the generalized patch-back loop in AppContext.tsx's apply()).
+async function sendOpsStateResponse(req, res, touchedColls, resolvedIds) {
   if (PUBLIC_STATE_ENFORCE && !getSession(req)) {
     return sendJson(res, 200, await buildPublicState(mongoDb, COLLECTIONS, await getRev()));
   }
   const t0 = Date.now();
-  const state = await getState(undefined, { lite: true, includeHeavy: touchedHeavy });
+  const state = await getState(undefined, { onlyColls: new Set(touchedColls) });
   // Timing visibility (2026-11-23) — a save's own response never hits the
   // stateBuilder cache (it must always reflect this very write), so every
   // save pays this read cost fresh, unlike a poll. Logged to confirm whether
   // "saving feels slow" is this same Atlas-read bottleneck (see the
   // stateBuilder timing log) touching a heavy collection, or something else.
-  console.log(`[ops-response] touchedHeavy=[${touchedHeavy.join(",")}]: read ${Date.now() - t0}ms`);
+  console.log(`[ops-response] touchedColls=[${touchedColls.join(",")}]: read ${Date.now() - t0}ms`);
   const body = resolvedIds && Object.keys(resolvedIds).length ? { ...state, resolvedIds } : state;
   if (String(req.headers["accept-encoding"] || "").includes("gzip")) {
     const compressed = await gzipJson(body);
@@ -2547,8 +2561,8 @@ async function handleApi(req, res, urlPath) {
         // opsBatch.js), or a retried-but-already-applied batch would show
         // it forever in a toast/returned value.
         const resolved = claim.resolvedIds || {};
-        const touchedHeavy = [...new Set(body.ops.filter((o) => o && o.coll).map((o) => o.coll).filter((c) => LITE_SKIP_COLLECTIONS.includes(c)))];
-        return sendOpsStateResponse(req, res, touchedHeavy, resolved);
+        const touchedColls = [...new Set(body.ops.filter((o) => o && o.coll).map((o) => o.coll))];
+        return sendOpsStateResponse(req, res, touchedColls, resolved);
       }
     }
     // Exchange any client-sent placeholder id (see idSeq.js) for a real,
@@ -2586,8 +2600,8 @@ async function handleApi(req, res, urlPath) {
       throw e;
     }
     {
-      const touchedHeavy = [...new Set(body.ops.filter((o) => o && o.coll).map((o) => o.coll).filter((c) => LITE_SKIP_COLLECTIONS.includes(c)))];
-      return sendOpsStateResponse(req, res, touchedHeavy, idRes.resolved);
+      const touchedColls = [...new Set(body.ops.filter((o) => o && o.coll).map((o) => o.coll))];
+      return sendOpsStateResponse(req, res, touchedColls, idRes.resolved);
     }
   }
   const automationDecisionMatch = /^\/api\/automation\/drawing-requests\/([^/]+)\/decision$/.exec(urlPath);
