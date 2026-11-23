@@ -904,13 +904,20 @@ async function getRev() {
 // how stale an out-of-band, non-bumpRev change could look, and 60s costs
 // nothing extra here since every real write already bypasses the cache the
 // moment it bumps the revision.
-const STATE_CACHE_TTL_MS = 60000;
+// RAISED AGAIN 2026-11-23, with real numbers this time: production logs
+// (stateBuilder's own timing line) show a full rebuild's READ step alone
+// consistently taking 113-118 SECONDS (serialize is fast, 2-7s) — this is a
+// slow Atlas round-trip for the full board, not something code can speed up
+// directly. 5 minutes of reuse for a rebuild this expensive is cheap
+// insurance; the rev check still makes this fully correctness-safe for
+// every real write regardless of the TTL.
+const STATE_CACHE_TTL_MS = 300000;
 // How long a request will wait to join an ALREADY-RUNNING build for the
-// revision it just read, instead of starting its own. Raised alongside the
-// TTL above for the same reason — a build that takes close to (or over) the
-// old 30s window caused every retry/poll tick to restart it from scratch
-// rather than share the one already in flight.
-const STATE_BUILD_JOIN_MS = 120000;
+// revision it just read, instead of starting its own. Must stay safely above
+// the real observed build time (up to ~121s in production logs) — 120000 was
+// cutting it dangerously close to that observed max; raised further for
+// headroom.
+const STATE_BUILD_JOIN_MS = 180000;
 const stateBuilder = createStateBuilder({
   getRev,
   readState: (rev) => getState(rev),
@@ -944,15 +951,16 @@ const getStateGzip = () => stateBuilder.get();
 // across the app; deferring them risks real UI breakage for comparatively
 // little remaining bandwidth (the three collections below already account
 // for the overwhelming majority of a real board's byte size).
-// TEMPORARILY DISABLED AGAIN (2026-11-23): see the matching note on
-// fetchBoard() in frontend/src/context/AppContext.tsx — a client-side fetch
-// timeout was tried as the fix and did NOT resolve it (dpr/qualityInspections/
-// events still came back empty live), so this stays off until the real server-
-// side cause is confirmed.
-const LITE_SKIP_COLLECTIONS = [];
+// RE-ENABLED AGAIN 2026-11-23 (3rd attempt), this time backed by real
+// production numbers: stateBuilder's own timing log shows a full rebuild's
+// READ step alone taking 113-118s consistently — a client-side timeout
+// shorter than that (the previous attempt used 30s) can never succeed, no
+// matter how many times it retries. See the matching note on fetchBoard()
+// in frontend/src/context/AppContext.tsx for the corrected, much longer
+// timeout that goes with this.
+const LITE_SKIP_COLLECTIONS = ["dpr", "qualityInspections", "purchaseOrders"];
 async function getState(knownRev, opts) {
-  const lite = false; // TEMPORARILY DISABLED (2026-11-23) — see LITE_SKIP_COLLECTIONS note above
-  void opts;
+  const lite = !!(opts && opts.lite);
   // Lets a caller that skips the heavy collections still get ONE of them
   // back in full — used by POST /api/ops's own response (see
   // sendOpsStateResponse below): the collection a write just touched needs

@@ -56,32 +56,32 @@ function currentTokenUser(): string | null {
 // connection. Only ever used for that one first fetch — the caller follows
 // up with a normal (non-lite) fetchBoard() right after to fill the rest in;
 // every later poll already fetches the full board as before.
-// TEMPORARILY DISABLED AGAIN (2026-11-23): re-enabled earlier today with a
-// client-side fetch timeout (see git history), on the theory that a hung,
-// timeout-less fetch was the whole problem — but dpr/qualityInspections/
-// events still came back permanently empty live (the Quality Inspection page
-// stuck at 0 records even 10+ minutes after deploy, across a hard refresh),
-// so the timeout fix alone did not fix it. Disabling again: correctness over
-// the bandwidth saving until the REAL root cause is confirmed (candidate:
-// the full, non-lite /api/state build itself failing/timing out server-side
-// on Render's small instance now that the board is 17+ MB, independent of
-// anything the client does — needs investigating with real server-side
-// visibility, not another guess-and-redeploy). Every fetchBoard() call again
-// always gets the full board, same as before any of the lite-fetch work.
-//
-// Because fetchBoard() ignores `lite` while this is true, the three
-// "fetchBoard(true) now, fetchBoardWithRetry() to top up the heavy
-// collections moments later" call sites below would otherwise fetch the
-// SAME full board twice in a row for nothing — the first (nominally "lite")
-// call already got everything. Guarding the redundant second fetch with this
-// flag removes that waste without touching any of that call-site logic, so
-// it needs no changes at all the day lite-fetch is re-enabled (this just
-// flips back to false).
-const LITE_FETCH_DISABLED = true;
-async function fetchBoard(_lite = false): Promise<any> {
-  const r = await fetch(API_BASE + "/api/state", { cache: "no-store", headers: authHeaders() });
-  if (!r.ok) throw new Error("HTTP " + r.status);
-  return r.json();
+// RE-ENABLED AGAIN (2026-11-23, 3rd attempt) — this time backed by real
+// production numbers instead of a guess. Render's own stateBuilder timing
+// log showed a full rebuild's READ step consistently taking 113-118 SECONDS
+// (serialize is fast, 2-7s) — the first re-enable attempt used a 30s client
+// timeout, which could never succeed against a build that slow no matter how
+// many times it retried; that explains why it kept coming back empty. The
+// `lite` fetch itself (skipping dpr/qualityInspections/purchaseOrders — the
+// collections responsible for nearly all of that read time) stays fast; only
+// the FULL fetch needs the long timeout below.
+const LITE_FETCH_DISABLED = false;
+// Comfortably above the worst full-rebuild time seen in production logs
+// (~121s) — used only for the non-lite (full) fetch, which runs in the
+// background and never blocks the UI, so a long timeout here costs nothing
+// but correctness.
+const FULL_FETCH_TIMEOUT_MS = 240000;
+const LITE_FETCH_TIMEOUT_MS = 30000;
+async function fetchBoard(lite = false): Promise<any> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), lite ? LITE_FETCH_TIMEOUT_MS : FULL_FETCH_TIMEOUT_MS);
+  try {
+    const r = await fetch(API_BASE + "/api/state" + (lite ? "?lite=1" : ""), { cache: "no-store", headers: authHeaders(), signal: controller.signal });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return await r.json();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function authHeaders(): Record<string, string> {
@@ -121,7 +121,11 @@ export function notifySessionExpired(): void {
 // could be minutes or never on a quiet board. Retry a few times with a short
 // backoff before giving up — the next poll tick (throttled to HEAVY_REFRESH_MS)
 // will still pick it up eventually either way, but this closes the common case.
-async function fetchBoardWithRetry(attempts = 3): Promise<any> {
+// Only 2 attempts (not 3) now that each one can itself take up to
+// FULL_FETCH_TIMEOUT_MS (240s, see fetchBoard) — a real production full
+// rebuild takes 113-118s, so a 2nd attempt is a reasonable safety net
+// without piling on a 3rd multi-minute wait for no real extra benefit.
+async function fetchBoardWithRetry(attempts = 2): Promise<any> {
   let lastErr: unknown;
   for (let i = 0; i < attempts; i++) {
     try {
