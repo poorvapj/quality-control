@@ -51,29 +51,41 @@ function currentTokenUser(): string | null {
 // connection. Only ever used for that one first fetch — the caller follows
 // up with a normal (non-lite) fetchBoard() right after to fill the rest in;
 // every later poll already fetches the full board as before.
-// DISABLED AGAIN (2026-11-23, final call after 3 attempts): the `/api/state`
-// lite path (login/poll's "small payload now, top up heavy collections
-// moments later" dance) was the direct cause of two separate live incidents
-// — permanently empty dpr/qualityInspections/events, and later a fresh
-// session being dropped into full "offline" mode on first load — even after
-// fixing the specific issue found each time (a silent catch with no retry,
-// then a too-short timeout). Real production numbers did confirm the lite
-// read itself is much faster than a full one (10-25s vs 113-118s), but not
-// reliably fast enough to risk a 3rd live incident over. Every fetchBoard()
-// call goes back to always fetching the full board — slower (everyone pays
-// the 113s+ full-rebuild cost), but it has never once caused a data-loss or
-// offline-mode incident, unlike the lite path twice in a row.
-//
-// NOTE: this is specifically about `/api/state` (login/poll). The SEPARATE
-// `onlyColls` optimization for a write's OWN `/api/ops` response (see
-// server.js's sendOpsStateResponse) is NOT part of this and stays enabled —
-// production logs confirmed it works correctly (a plain save dropped from
-// ~113s to 2-3s) with no incidents of its own.
-const LITE_FETCH_DISABLED = true;
-async function fetchBoard(_lite = false): Promise<any> {
-  const r = await fetch(API_BASE + "/api/state", { cache: "no-store", headers: authHeaders() });
-  if (!r.ok) throw new Error("HTTP " + r.status);
-  return r.json();
+// RE-ENABLED AGAIN (2026-11-23, 3rd attempt) — this time backed by real
+// production numbers instead of a guess. Render's own stateBuilder timing
+// log showed a full rebuild's READ step consistently taking 113-118 SECONDS
+// (serialize is fast, 2-7s) — the first re-enable attempt used a 30s client
+// timeout, which could never succeed against a build that slow no matter how
+// many times it retried; that explains why it kept coming back empty. The
+// `lite` fetch itself (skipping dpr/qualityInspections/purchaseOrders — the
+// collections responsible for nearly all of that read time) stays fast; only
+// the FULL fetch needs the long timeout below.
+const LITE_FETCH_DISABLED = false;
+// Comfortably above the worst full-rebuild time seen in production logs
+// (~121s) — used only for the non-lite (full) fetch, which runs in the
+// background and never blocks the UI, so a long timeout here costs nothing
+// but correctness.
+const FULL_FETCH_TIMEOUT_MS = 240000;
+// RAISED 2026-11-23: 30s was too tight — on a fresh/incognito session (no
+// localStorage fallback) a lite fetch this slow doesn't just feel slow, it
+// drops the WHOLE APP into offline mode on first load (the initial-load
+// effect's catch block falls back to localStorage, then to "offline" if
+// there's nothing there — see below). The lite path had no timing log of
+// its own until now (see server.js's `[lite-state]` log added alongside
+// this), so there's no real number yet for how slow it actually gets — this
+// is a safe interim ceiling, not a measured value like FULL_FETCH_TIMEOUT_MS
+// above. Tighten it again once real `[lite-state]` numbers come in.
+const LITE_FETCH_TIMEOUT_MS = 90000;
+async function fetchBoard(lite = false): Promise<any> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), lite ? LITE_FETCH_TIMEOUT_MS : FULL_FETCH_TIMEOUT_MS);
+  try {
+    const r = await fetch(API_BASE + "/api/state" + (lite ? "?lite=1" : ""), { cache: "no-store", headers: authHeaders(), signal: controller.signal });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return await r.json();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function authHeaders(): Record<string, string> {
