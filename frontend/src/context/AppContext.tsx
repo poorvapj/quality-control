@@ -755,7 +755,14 @@ export function AppProvider({ children, publicRoute = false }: { children: React
       }
     };
 
-    const iv = window.setInterval(pollTick, 5000);
+    // Raised from 5s (2026-11-23) — Atlas dashboard confirmed the free (M0)
+    // cluster is under real connection/load pressure (~150-200 concurrent
+    // connections); every open tab's own poll is part of that load. 10s
+    // roughly halves how often every tab hits the server, at the cost of
+    // real-time updates feeling a little less instant — a worthwhile trade
+    // while on a free tier (see the tab-hidden pause above, which already
+    // skips this entirely for backgrounded tabs).
+    const iv = window.setInterval(pollTick, 10000);
     const onVisible = () => { if (!document.hidden) pollTick(); };
     document.addEventListener("visibilitychange", onVisible);
 

@@ -787,7 +787,14 @@ let mongoClient = null; // kept module-level (not just local to connectMongo) so
 async function connectMongo() {
   const uri = process.env.MONGODB_URI;
   if (!uri) throw new Error("MONGODB_URI is not set — see .env.example");
-  const client = new MongoClient(uri);
+  // Explicit, conservative maxPoolSize (2026-11-23) — the driver's default is
+  // 100; on a free/shared Atlas tier (confirmed via the Atlas dashboard:
+  // ~150-200 concurrent connections, far beyond what an M0 cluster handles
+  // smoothly) this server alone could, in the worst case, open up to 100 of
+  // its own connections. Capping it here can't fix the underlying free-tier
+  // resource limit, but it stops this one process from being a bigger part
+  // of the problem than it needs to be.
+  const client = new MongoClient(uri, { maxPoolSize: 20 });
   await client.connect();
   mongoClient = client;
   mongoDb = client.db(process.env.MONGODB_DB || undefined);
