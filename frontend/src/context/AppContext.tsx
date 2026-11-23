@@ -68,6 +68,16 @@ function currentTokenUser(): string | null {
 // anything the client does — needs investigating with real server-side
 // visibility, not another guess-and-redeploy). Every fetchBoard() call again
 // always gets the full board, same as before any of the lite-fetch work.
+//
+// Because fetchBoard() ignores `lite` while this is true, the three
+// "fetchBoard(true) now, fetchBoardWithRetry() to top up the heavy
+// collections moments later" call sites below would otherwise fetch the
+// SAME full board twice in a row for nothing — the first (nominally "lite")
+// call already got everything. Guarding the redundant second fetch with this
+// flag removes that waste without touching any of that call-site logic, so
+// it needs no changes at all the day lite-fetch is re-enabled (this just
+// flips back to false).
+const LITE_FETCH_DISABLED = true;
 async function fetchBoard(_lite = false): Promise<any> {
   const r = await fetch(API_BASE + "/api/state", { cache: "no-store", headers: authHeaders() });
   if (!r.ok) throw new Error("HTTP " + r.status);
@@ -605,7 +615,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
         // (same rev, just a smaller response), so this would otherwise never
         // happen until someone's next unrelated write bumped the revision.
         lastHeavyRefreshRef.current = Date.now();
-        fetchBoardWithRetry().then((full) => {
+        if (!LITE_FETCH_DISABLED) fetchBoardWithRetry().then((full) => {
           if (stopped || !acceptState(full)) return;
           const merged = mergeStableCollections(dataRef.current, full.data);
           setData(merged); dataRef.current = merged;
@@ -668,7 +678,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
               setRev(s.rev); revRef.current = s.rev;
             }
             const now = Date.now();
-            if (now - lastHeavyRefreshRef.current >= HEAVY_REFRESH_MS) {
+            if (!LITE_FETCH_DISABLED && now - lastHeavyRefreshRef.current >= HEAVY_REFRESH_MS) {
               lastHeavyRefreshRef.current = now;
               fetchBoardWithRetry().then((full) => {
                 if (!acceptState(full)) return;
@@ -793,7 +803,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
             setData(merged); dataRef.current = merged;
             setRev(s.rev); revRef.current = s.rev;
             lastHeavyRefreshRef.current = Date.now();
-            fetchBoardWithRetry().then((full) => {
+            if (!LITE_FETCH_DISABLED) fetchBoardWithRetry().then((full) => {
               if (!full || !full.data || full.public) return;
               const mergedFull = mergeStableCollections(dataRef.current, full.data);
               setData(mergedFull); dataRef.current = mergedFull;
