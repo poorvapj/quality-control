@@ -18,7 +18,7 @@ import StatTile from "../components/StatTile";
 import Card from "../ui/tw/Card";
 import Btn from "../ui/tw/Btn";
 import Badge from "../ui/tw/Badge";
-import Table, { TableRow, TableCell, LoadingEmpty } from "../ui/tw/Table";
+import Table, { TableRow, TableCell, LoadingEmpty, InlineSpinner } from "../ui/tw/Table";
 import type { Op, Photo, QualityInspection as QI, QualityInspectionResult, Severity, Snag, TabKey } from "../types";
 
 interface VmsWorkItem { itemId: string; itemType: "scopeItem" | "subItem"; parentItemId: string | null; description: string; unit: string }
@@ -394,23 +394,23 @@ This cannot be undone.`)) return;
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
         <StatTile
-          label="Total Inspections" value={filtered.length} icon="eye"
+          label="Total Inspections" value={isHeavyLoaded(["qualityInspections"]) ? filtered.length : <InlineSpinner />} icon="eye"
           onClick={() => { setFResult(""); setFSnagStatus(""); }}
         />
         <StatTile
-          label="Open Quality Issues" value={openIssues} icon="bug" valueClassName={openIssues > 0 ? "text-[var(--color-fail)]" : undefined}
+          label="Open Quality Issues" value={isHeavyLoaded(["qualityInspections"]) ? openIssues : <InlineSpinner />} icon="bug" valueClassName={openIssues > 0 ? "text-[var(--color-fail)]" : undefined}
           onClick={() => { setFResult(""); setFSnagStatus("open"); }}
         />
         <StatTile
-          label="Failed Inspections" value={failedCount} icon="bug"
+          label="Failed Inspections" value={isHeavyLoaded(["qualityInspections"]) ? failedCount : <InlineSpinner />} icon="bug"
           onClick={() => { setFResult("Fail"); setFSnagStatus(""); }}
         />
         <StatTile
-          label="Overdue Corrective Actions" value={overdueCount} icon="clock" valueClassName={overdueCount > 0 ? "text-[var(--color-fail)]" : undefined}
+          label="Overdue Corrective Actions" value={isHeavyLoaded(["qualityInspections"]) ? overdueCount : <InlineSpinner />} icon="clock" valueClassName={overdueCount > 0 ? "text-[var(--color-fail)]" : undefined}
           onClick={() => { setFResult(""); setFSnagStatus("overdue"); }}
         />
         <StatTile
-          label="Resolved Issues" value={resolvedCount} icon="award"
+          label="Resolved Issues" value={isHeavyLoaded(["qualityInspections"]) ? resolvedCount : <InlineSpinner />} icon="award"
           onClick={() => { setFResult(""); setFSnagStatus("closed"); }}
         />
       </div>

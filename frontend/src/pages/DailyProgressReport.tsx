@@ -12,7 +12,7 @@ import SidePanel from "../components/SidePanel";
 import DprForm from "../components/DprForm";
 import { WORK_CATEGORIES } from "../services/config";
 import DrawingRequestForm from "../components/DrawingRequestForm";
-import { LoadingEmpty } from "../ui/tw/Table";
+import { LoadingEmpty, InlineSpinner } from "../ui/tw/Table";
 
 type DprTab = "work" | "drawing" | "summary";
 
@@ -551,12 +551,12 @@ export default function DailyProgressReportPage() {
             Board's stage-completion progress. */}
         <div className="stat-card" style={{ cursor: "pointer" }} onClick={() => setTab("work")}>
           <div className="stat-label">Total Labour ({rangeLabel})</div>
-          <div className="stat-val">{totalLabour}</div>
+          <div className="stat-val">{isHeavyLoaded(["dpr"]) ? totalLabour : <InlineSpinner />}</div>
           <div className="stat-icon"><NavIcon name="team" size={15} /></div>
         </div>
         <div className="stat-card ok" style={{ cursor: "pointer" }} onClick={() => setTab("work")}>
           <div className="stat-label">Work Progress (Overall)</div>
-          <div className="stat-val">{overallProgress}%</div>
+          <div className="stat-val">{isHeavyLoaded(["dpr"]) ? `${overallProgress}%` : <InlineSpinner />}</div>
           <div className="stat-icon"><NavIcon name="trend" size={15} /></div>
         </div>
         <div className="stat-card" style={{ cursor: "pointer" }} onClick={() => setTab("drawing")}>
@@ -572,7 +572,7 @@ export default function DailyProgressReportPage() {
         {isDri && (
           <div className="stat-card" style={{ cursor: "pointer" }} onClick={() => setTab("summary")}>
             <div className="stat-label">My DPR Submissions (All Time)</div>
-            <div className="stat-val">{allDpr.filter((r) => r.submittedByUserId === currentUserId).length}</div>
+            <div className="stat-val">{isHeavyLoaded(["dpr"]) ? allDpr.filter((r) => r.submittedByUserId === currentUserId).length : <InlineSpinner />}</div>
             <div className="stat-icon"><NavIcon name="dpr" size={15} /></div>
           </div>
         )}

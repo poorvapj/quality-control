@@ -68,19 +68,25 @@ export default function Table({
  *  qualityInspections/etc.) is still loading on-demand — pass it only while
  *  `!isHeavyLoaded([...])`, falling back to the Table's own default "No
  *  records found." once it resolves either way. */
+// Not the existing `.spinner` class — that one's white-on-transparent,
+// built for sitting on a colored button; this needs to read on the page's
+// own background instead, light or dark theme.
+export function InlineSpinner({ size = 14 }: { size?: number }) {
+  return (
+    <span
+      style={{
+        display: "inline-block", width: size, height: size,
+        border: "2px solid var(--border)", borderTopColor: "var(--text-muted)",
+        borderRadius: "50%", animation: "spin 0.7s linear infinite", flexShrink: 0
+      }}
+    />
+  );
+}
+
 export function LoadingEmpty({ label = "Loading…" }: { label?: string }) {
-  // Not the existing `.spinner` class — that one's white-on-transparent,
-  // built for sitting on a colored button; this needs to read on the
-  // page's own background instead, light or dark theme.
   return (
     <span className="inline-flex items-center gap-2 text-[var(--text-muted)]">
-      <span
-        style={{
-          display: "inline-block", width: 14, height: 14,
-          border: "2px solid var(--border)", borderTopColor: "var(--text-muted)",
-          borderRadius: "50%", animation: "spin 0.7s linear infinite", flexShrink: 0
-        }}
-      />
+      <InlineSpinner />
       {label}
     </span>
   );
