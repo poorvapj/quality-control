@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import { coll } from "../shared/rules";
 import SnagRow from "./SnagRow";
@@ -11,7 +11,8 @@ import NavIcon from "./NavIcon";
    not a mark. (The score maths still exists in shared/driQuality.ts and can
    be switched back on with SHOW_QUALITY_SCORE.) */
 export default function QualityFailures() {
-  const { data, currentUserId } = useApp();
+  const { data, currentUserId, ensureHeavy } = useApp();
+  useEffect(() => { ensureHeavy(["qualityInspections"]); }, [ensureHeavy]);
   const snags = coll(data, "snags");
   const rows = coll(data, "qualityInspections")
     .filter((i) => i.result !== "Pass" && i.correctiveAction?.assignedToUserId === currentUserId)

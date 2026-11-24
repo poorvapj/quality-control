@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import { myAssignments, mySnags, myReleases, assignmentsByMe, snagsByMe, refLabel, snagTarget, myProjects, coll, byId } from "../shared/rules";
 import { ago, dueLabel } from "../shared/helpers";
@@ -18,7 +18,8 @@ function SectionLabel({ icon, children }: { icon: string; children: React.ReactN
 }
 
 export default function MyWork() {
-  const { data, currentUserId, openAssignModal, openDrawer } = useApp();
+  const { data, currentUserId, openAssignModal, openDrawer, ensureHeavy } = useApp();
+  useEffect(() => { ensureHeavy(["qualityInspections"]); }, [ensureHeavy]);
   const isAdmin = currentUserId === "U-ADMIN";
   // "My Work" is personal — whatever's assigned to me, on any project —
   // not scoped to whichever project happens to be selected elsewhere.

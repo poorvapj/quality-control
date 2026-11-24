@@ -18,7 +18,8 @@ import type { TabKey } from "../types";
  * which is meant for day-to-day filtering rather than "show me the whole
  * history of what's gone wrong". */
 export default function FailRegister() {
-  const { data, currentUserId, setActiveTab, setReInspectQualityId, setCaseStudyDraft } = useApp();
+  const { data, currentUserId, setActiveTab, setReInspectQualityId, setCaseStudyDraft, ensureHeavy } = useApp();
+  useEffect(() => { ensureHeavy(["qualityInspections"]); }, [ensureHeavy]);
   const allProjects = myProjects(data, currentUserId);
   const allowedProjectCodes = new Set(allProjects.map((p) => p.code));
   const inspections = coll(data, "qualityInspections").filter((i) => allowedProjectCodes.has(i.projectCode));

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, myProjects } from "../shared/rules";
 import NavIcon from "../components/NavIcon";
@@ -14,7 +14,8 @@ import Table, { TableRow, TableCell } from "../ui/tw/Table";
  * per-user/per-role via Permission Matrix (module "userMis"), same as
  * Quality MIS — not hardcoded admin-only. */
 export default function UserMIS() {
-  const { data, currentUserId } = useApp();
+  const { data, currentUserId, ensureHeavy } = useApp();
+  useEffect(() => { ensureHeavy(["qualityInspections"]); }, [ensureHeavy]);
   const projectIds = myProjects(data, currentUserId).map((p) => p.id);
   const allUsers = coll(data, "users").filter((u) => u.active !== false);
   const teams = coll(data, "teams");

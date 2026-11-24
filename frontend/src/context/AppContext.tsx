@@ -65,27 +65,29 @@ function currentTokenUser(): string | null {
 
 // Every board fetch carries the session token when there is one, so the server can tell a signed-in user
 // from an anonymous caller (public forms / sign-in screen), who may be given a reduced public snapshot.
-// `lite`: skips the server's heaviest collections (dpr, qualityInspections —
-// measured as most of the whole board's byte size on a real project) so the
-// very first load after sign-in renders almost everything immediately
-// instead of waiting on a multi-MB payload over a slow site/mobile
-// connection. Only ever used for that one first fetch — the caller follows
-// up with a normal (non-lite) fetchBoard() right after to fill the rest in;
-// every later poll already fetches the full board as before.
-// RE-ENABLED AGAIN (2026-11-23, 3rd attempt) — this time backed by real
-// production numbers instead of a guess. Render's own stateBuilder timing
-// log showed a full rebuild's READ step consistently taking 113-118 SECONDS
-// (serialize is fast, 2-7s) — the first re-enable attempt used a 30s client
-// timeout, which could never succeed against a build that slow no matter how
-// many times it retried; that explains why it kept coming back empty. The
-// `lite` fetch itself (skipping dpr/qualityInspections/purchaseOrders — the
-// collections responsible for nearly all of that read time) stays fast; only
-// the FULL fetch needs the long timeout below.
-const LITE_FETCH_DISABLED = false;
-// Comfortably above the worst full-rebuild time seen in production logs
-// (~121s) — used only for the non-lite (full) fetch, which runs in the
-// background and never blocks the UI, so a long timeout here costs nothing
-// but correctness.
+// `lite`: skips the server's heaviest collections (dpr, qualityInspections,
+// purchaseOrders, events — measured as most of the whole board's byte size
+// on a real project) — see ensureHeavy() below for how/when those actually
+// get loaded.
+//
+// RE-ARCHITECTED 2026-11-24 after 3 separate live incidents from the old
+// "fetch lite now, automatically fetch the FULL board moments later" design
+// (permanently-empty heavy collections from a silent no-retry; a too-short
+// timeout against a 113-118s real full-rebuild; a fresh session dropped into
+// full offline mode). That automatic full-board top-up is GONE — lite is now
+// the only thing ever fetched automatically (login, initial load, poll).
+// Heavy collections load on demand instead: a page that actually needs
+// dpr/qualityInspections/purchaseOrders/events calls ensureHeavy([...]),
+// which fetches ONLY those specific collections (via `?include=`, not the
+// whole board) and only once per collection per session unless the poll's
+// own throttled refresh (HEAVY_REFRESH_MS) sees a rev change and tops up
+// whichever ones are already loaded.
+//
+// A plain (non-lite, no include) fetchBoard() still exists for the handful
+// of rare, non-routine full-board reads (recovering from a rejected op,
+// flushing queued offline ops, reconnecting after being offline) — those
+// are correctness-critical one-offs, not routine background noise, so they
+// keep the long timeout below.
 const FULL_FETCH_TIMEOUT_MS = 240000;
 // RAISED 2026-11-23: 30s was too tight — on a fresh/incognito session (no
 // localStorage fallback) a lite fetch this slow doesn't just feel slow, it
@@ -97,11 +99,21 @@ const FULL_FETCH_TIMEOUT_MS = 240000;
 // is a safe interim ceiling, not a measured value like FULL_FETCH_TIMEOUT_MS
 // above. Tighten it again once real `[lite-state]` numbers come in.
 const LITE_FETCH_TIMEOUT_MS = 90000;
-async function fetchBoard(lite = false): Promise<any> {
+// `includeHeavy` (2026-11-24): asks the lite endpoint to also include one or
+// more specific normally-skipped heavy collections (dpr/qualityInspections/
+// purchaseOrders/events) — see ensureHeavy() below, the on-demand loader
+// that uses this instead of ever fetching the whole board just to top up
+// heavy data. Only meaningful together with `lite`.
+async function fetchBoard(lite = false, includeHeavy?: string[]): Promise<any> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), lite ? LITE_FETCH_TIMEOUT_MS : FULL_FETCH_TIMEOUT_MS);
   try {
-    const r = await fetch(API_BASE + "/api/state" + (lite ? "?lite=1" : ""), { cache: "no-store", headers: authHeaders(), signal: controller.signal });
+    let url = API_BASE + "/api/state";
+    const qs: string[] = [];
+    if (lite) qs.push("lite=1");
+    if (lite && includeHeavy && includeHeavy.length) qs.push("include=" + includeHeavy.map(encodeURIComponent).join(","));
+    if (qs.length) url += "?" + qs.join("&");
+    const r = await fetch(url, { cache: "no-store", headers: authHeaders(), signal: controller.signal });
     if (!r.ok) throw new Error("HTTP " + r.status);
     return await r.json();
   } finally {
@@ -156,11 +168,11 @@ export function notifySessionExpired(): void {
 // "offline" mode, not just a slow load. A lite attempt is cheap (~10-25s
 // measured in production) so 2 attempts here costs little even in the worst
 // case, and closes that gap.
-async function fetchBoardWithRetry(attempts = 2, lite = false): Promise<any> {
+async function fetchBoardWithRetry(attempts = 2, lite = false, includeHeavy?: string[]): Promise<any> {
   let lastErr: unknown;
   for (let i = 0; i < attempts; i++) {
     try {
-      return await fetchBoard(lite);
+      return await fetchBoard(lite, includeHeavy);
     } catch (e) {
       lastErr = e;
       if (i < attempts - 1) await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
@@ -245,6 +257,11 @@ interface AppContextValue {
   login: (email: string, password: string) => Promise<string | null>;
   logout: () => void;
   toast: (msg: string) => void;
+  // On-demand loader for a normally-lite-skipped heavy collection
+  // ("dpr" | "qualityInspections" | "purchaseOrders" | "events") — call once
+  // in a page's own mount effect for whatever it actually reads. A no-op
+  // once that collection has already been loaded this session.
+  ensureHeavy: (names: string[]) => void;
   // Resolves true once the change actually reached the server, false if it
   // was only queued (offline) or rejected — see apply()'s own comment.
   apply: (ops: Op[]) => Promise<boolean>;
@@ -352,6 +369,117 @@ export function AppProvider({ children, publicRoute = false }: { children: React
     }
     return v.use;
   }, [toast]);
+
+  // Per-collection revision safety (2026-11-24, fixing a race a regression
+  // audit confirmed): every merge site below is an async response that can
+  // resolve out of order — a slower request started earlier can resolve
+  // AFTER a faster one that started later and already reflects a newer
+  // revision. Blindly overwriting dataRef.current/revRef.current with
+  // whatever arrives last can regress both.
+  //
+  // Checking the response's own `rev` against a single global "last
+  // applied" number is NOT enough on its own: two concurrent requests for
+  // DIFFERENT collections (e.g. one ensureHeavy batch for "dpr", another for
+  // "qualityInspections") can legitimately resolve in either order without
+  // either being stale relative to the other — only a request for the SAME
+  // collection reporting an OLDER revision than one already applied to it
+  // is truly stale. collectionRevRef tracks that per collection key.
+  //
+  // "progress" is exempt from the per-collection check (not from the global
+  // monotonic one) — matches apply()'s own pre-existing reasoning: server.js
+  // always reads it in full regardless of lite/onlyColls, so it is never a
+  // stale partial read and should always be trusted as-is.
+  //
+  // Every merge site passes its own already-patched data (placeholder
+  // collections already restored from dataRef.current by patchLiteResponse/
+  // the touched-set logic, exactly as before this fix) — this only adds the
+  // monotonic safety net on top, it does not change what each site
+  // considers "real" vs "placeholder" data.
+  const collectionRevRef = useRef<Record<string, number>>({});
+  const applyStateSafely = useCallback((incomingRev: number, incomingData: any): any => {
+    const safe: any = { ...incomingData };
+    for (const key of Object.keys(incomingData)) {
+      if (key === "progress") continue;
+      const lastRev = collectionRevRef.current[key] ?? -1;
+      if (incomingRev < lastRev) {
+        // Stale for THIS collection specifically — keep whatever's already
+        // there rather than regress it; the global rev below still only
+        // ever moves forward regardless.
+        if (dataRef.current && (dataRef.current as any)[key] !== undefined) safe[key] = (dataRef.current as any)[key];
+      } else {
+        collectionRevRef.current[key] = incomingRev;
+      }
+    }
+    const merged = mergeStableCollections(dataRef.current, safe);
+    setData(merged); dataRef.current = merged;
+    const nextRev = Math.max(revRef.current, incomingRev);
+    setRev(nextRev); revRef.current = nextRev;
+    return merged;
+  }, []);
+
+  // On-demand heavy-collection loader (2026-11-24) — see the fetchBoard()
+  // doc comment above for why this replaced the old automatic full-board
+  // top-up. A page that needs dpr/qualityInspections/purchaseOrders/events
+  // calls ensureHeavy([...]) on mount; this fetches ONLY the collections not
+  // already loaded this session, via `?include=`, never the whole board.
+  //
+  // True single-flight per collection name (2026-11-24, fixing a gap a
+  // regression review found): the original version only batched calls
+  // arriving within the same 50ms window — a second ensureHeavy() call for a
+  // name whose FIRST request had already left that window (i.e. was already
+  // in flight on the network) was not recognized as a duplicate and fired
+  // its own request. heavyInFlightRef now tracks exactly which names are
+  // currently being fetched by an in-progress batch, for the batch's entire
+  // network round trip, not just its 50ms collection window.
+  const heavyLoadedRef = useRef<Set<string>>(new Set());
+  const heavyPendingRef = useRef<Set<string>>(new Set());
+  const heavyInFlightRef = useRef<Set<string>>(new Set());
+  const heavyFlushTimerRef = useRef<number | null>(null);
+  const flushHeavyBatch = useCallback(async () => {
+    const names = [...heavyPendingRef.current];
+    heavyPendingRef.current.clear();
+    heavyFlushTimerRef.current = null;
+    if (names.length === 0) return;
+    for (const n of names) heavyInFlightRef.current.add(n);
+    try {
+      const s = await fetchBoardWithRetry(2, true, names);
+      if (!acceptState(s)) return; // not marked loaded — see the `finally` below
+      for (const n of names) heavyLoadedRef.current.add(n);
+      // Keep every OTHER heavy collection exactly as it already was — this
+      // response only asked for `names`, so the rest come back as `[]`
+      // placeholders, not real emptiness (same reasoning as
+      // patchLiteResponse, scoped to just the collections not requested).
+      // Reads dataRef.current fresh at THIS resolution, not a snapshot taken
+      // when the batch started, so two overlapping batches for different
+      // collections patch/merge correctly regardless of which settles first.
+      const patched: any = { ...s.data };
+      for (const c of LITE_RESPONSE_PLACEHOLDER_COLLS) {
+        if (!names.includes(c) && dataRef.current && (dataRef.current as any)[c] !== undefined) {
+          patched[c] = (dataRef.current as any)[c];
+        }
+      }
+      applyStateSafely(s.rev, patched);
+    } catch {
+      // Left out of heavyLoadedRef, so the next ensureHeavy() call for the
+      // same name(s) retries instead of silently giving up forever. Local
+      // state (dataRef.current) is never touched on failure, so whatever was
+      // already loaded stays exactly as it was.
+    } finally {
+      // Always runs, success or failure — a name must never stay stuck
+      // "in flight" forever (that would permanently block retries), and a
+      // name that just succeeded is now in heavyLoadedRef so leaving the
+      // in-flight marker on it one tick longer would be harmless anyway.
+      for (const n of names) heavyInFlightRef.current.delete(n);
+    }
+  }, [acceptState, applyStateSafely]);
+  const ensureHeavy = useCallback((names: string[]) => {
+    const missing = names.filter((n) => !heavyLoadedRef.current.has(n) && !heavyInFlightRef.current.has(n));
+    if (missing.length === 0) return;
+    for (const n of missing) heavyPendingRef.current.add(n);
+    if (heavyFlushTimerRef.current == null) {
+      heavyFlushTimerRef.current = window.setTimeout(flushHeavyBatch, 50);
+    }
+  }, [flushHeavyBatch]);
 
   // This writes the ENTIRE board (every collection) to localStorage — it's
   // only ever read back as a best-effort "show something" fallback for a
@@ -599,8 +727,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
             patched[c] = (dataRef.current as any)[c];
           }
         }
-        const merged = mergeStableCollections(dataRef.current, patched);
-        setData(merged); dataRef.current = merged; setRev(j.rev); revRef.current = j.rev;
+        applyStateSafely(j.rev, patched);
       }
       // A record created with makeTempId() (shared/helpers.ts) got its real
       // id from the server just now — fix up the SAME ops/rec objects the
@@ -622,7 +749,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
       toast("Offline — will save automatically once back online", 5000);
       return false;
     }
-  }, [persistLocal, queueOps, toast, acceptState, markApplyFailed, rememberRejected, flagSessionExpired]);
+  }, [persistLocal, queueOps, toast, acceptState, markApplyFailed, rememberRejected, flagSessionExpired, applyStateSafely]);
 
   // "Who's opening which module" had no trail at all before this — Audit
   // Logs only ever recorded create/edit/delete actions, never a view.
@@ -640,6 +767,44 @@ export function AppProvider({ children, publicRoute = false }: { children: React
 
   /* Initial load + poll */
   const lastHeavyRefreshRef = useRef(0);
+
+  // Cross-tab poll coordination (2026-11-24) — SAFE polling coordination
+  // only, as scoped by this project's own risk assessment: N open tabs each
+  // independently hitting GET /api/rev every poll tick is pure duplicate
+  // traffic for a value every tab would get the exact same answer to. This
+  // elects one "leader" tab (via BroadcastChannel) to make that one cheap
+  // request and broadcast the result; followers reuse a recent-enough
+  // broadcast instead of asking themselves. Deliberately NOT extended to
+  // sharing actual board/heavy-collection DATA across tabs — different tabs
+  // can represent different logged-in sessions in the same browser, and
+  // sharing fetched data (not just a bare revision number) would risk
+  // leaking one session's data into another's tab; that's reported as
+  // deferred, not implemented, rather than guessed at.
+  //
+  // Fails open to EXACTLY today's behavior (every tab polls independently)
+  // whenever anything about the coordination can't be trusted: no
+  // BroadcastChannel support, no heartbeat seen yet, or the "leader"
+  // has gone quiet (closed/crashed/backgrounded) for longer than
+  // LEADER_TIMEOUT_MS — another tab always picks the baton back up within
+  // one heartbeat interval, never leaving every tab silently stuck.
+  const TAB_ID = useRef(Math.random().toString(36).slice(2) + Date.now().toString(36)).current;
+  const HEARTBEAT_MS = 4000;
+  const LEADER_TIMEOUT_MS = 12000; // 3 missed heartbeats
+  const FOLLOWER_REV_FRESHNESS_MS = 15000; // a touch over one poll interval
+  const pollChannelRef = useRef<BroadcastChannel | null>(null);
+  const knownTabsRef = useRef<Map<string, number>>(new Map()); // tabId -> last heartbeat ts
+  const lastBroadcastRevRef = useRef<{ rev: number; ts: number } | null>(null);
+  const isLeader = useCallback((): boolean => {
+    if (!pollChannelRef.current) return true; // no BroadcastChannel support — every tab acts alone, same as before this feature existed
+    const now = Date.now();
+    const alive = [TAB_ID];
+    for (const [id, ts] of knownTabsRef.current) {
+      if (now - ts < LEADER_TIMEOUT_MS) alive.push(id);
+    }
+    alive.sort();
+    return alive[0] === TAB_ID;
+  }, [TAB_ID]);
+
   useEffect(() => {
     let stopped = false;
     (async () => {
@@ -647,28 +812,18 @@ export function AppProvider({ children, publicRoute = false }: { children: React
         const j = await fetchBoardWithRetry(2, true);
         if (stopped) return;
         acceptState(j); // first load: always shown (sign-in screen needs data) but a stale token is dropped
-        setData(j.data); dataRef.current = j.data;
-        setRev(j.rev); revRef.current = j.rev;
+        applyStateSafely(j.rev, j.data);
         setMode("live"); modeRef.current = "live";
-        // The lite fetch above left dpr/qualityInspections empty — top them
-        // up right away, without making the first render wait on them. Not
-        // folded into the normal rev-diffing poll below: that poll only
-        // re-fetches when the revision has CHANGED, which it hasn't here
-        // (same rev, just a smaller response), so this would otherwise never
-        // happen until someone's next unrelated write bumped the revision.
-        lastHeavyRefreshRef.current = Date.now();
-        if (!LITE_FETCH_DISABLED) fetchBoardWithRetry().then((full) => {
-          if (stopped || !acceptState(full)) return;
-          const merged = mergeStableCollections(dataRef.current, full.data);
-          setData(merged); dataRef.current = merged;
-          setRev(full.rev); revRef.current = full.rev;
-        }).catch(() => {});
+        // No automatic heavy top-up here any more — the lite fetch above is
+        // ALL that's ever fetched automatically now. Whichever page mounts
+        // first (Dashboard, Tower Board, etc.) calls ensureHeavy() for
+        // whatever it actually needs; see its own doc comment above.
         // Anything queued from a previous offline session (app was closed
         // before the connection came back) gets its chance to actually
         // reach the server now, before anyone starts making new changes.
         if (pendingOpsRef.current.length > 0 && await flushPendingOps()) {
           const s = await fetchBoard();
-          if (!stopped && acceptState(s)) { setData(s.data); dataRef.current = s.data; setRev(s.rev); revRef.current = s.rev; }
+          if (!stopped && acceptState(s)) { applyStateSafely(s.rev, s.data); }
           toast("Synced changes saved while you were offline");
         }
       } catch {
@@ -700,9 +855,22 @@ export function AppProvider({ children, publicRoute = false }: { children: React
       }
       if (modeRef.current === "live") {
         try {
-          const r = await fetch(API_BASE + "/api/rev", { cache: "no-store" });
-          const j = await r.json();
-          if (j.rev !== revRef.current) {
+          // Leader does the real request and tells everyone else; a
+          // follower reuses that answer if it's recent enough, otherwise
+          // falls back to asking itself (same as if coordination didn't
+          // exist at all) — see the doc comment above isLeader().
+          let rev: number;
+          const freshBroadcast = lastBroadcastRevRef.current && Date.now() - lastBroadcastRevRef.current.ts < FOLLOWER_REV_FRESHNESS_MS;
+          if (isLeader() || !freshBroadcast) {
+            const r = await fetch(API_BASE + "/api/rev", { cache: "no-store" });
+            const j = await r.json();
+            rev = j.rev;
+            lastBroadcastRevRef.current = { rev, ts: Date.now() };
+            pollChannelRef.current?.postMessage({ type: "rev", rev, ts: Date.now() });
+          } else {
+            rev = lastBroadcastRevRef.current!.rev;
+          }
+          if (rev !== revRef.current) {
             // Every tab re-fetching the FULL ~9MB board on every single
             // revision bump (literally any write by anyone) was most of
             // this app's egress — measured at Render as tens of full
@@ -710,23 +878,31 @@ export function AppProvider({ children, publicRoute = false }: { children: React
             // don't need sub-minute freshness for other users (the author's
             // own change already shows locally via the optimistic apply()
             // update) — so a rev change always pulls the small `lite` state
-            // right away, and the heavy collections only get topped up at
-            // most once every HEAVY_REFRESH_MS, however many revisions
-            // passed in between.
+            // right away, and only whichever heavy collections a page has
+            // actually asked for (ensureHeavy) get topped up, at most once
+            // every HEAVY_REFRESH_MS, however many revisions passed in
+            // between — see below.
             const s = await fetchBoard(true);
             if (acceptState(s)) {
-              const merged = mergeStableCollections(dataRef.current, patchLiteResponse(s.data, dataRef.current));
-              setData(merged); dataRef.current = merged;
-              setRev(s.rev); revRef.current = s.rev;
+              applyStateSafely(s.rev, patchLiteResponse(s.data, dataRef.current));
             }
+            // Top up only whichever heavy collections a page has already
+            // asked for (ensureHeavy) — never the ones nobody's using — and
+            // only once every HEAVY_REFRESH_MS regardless of how many
+            // revisions passed in between.
             const now = Date.now();
-            if (!LITE_FETCH_DISABLED && now - lastHeavyRefreshRef.current >= HEAVY_REFRESH_MS) {
+            if (heavyLoadedRef.current.size > 0 && now - lastHeavyRefreshRef.current >= HEAVY_REFRESH_MS) {
               lastHeavyRefreshRef.current = now;
-              fetchBoardWithRetry().then((full) => {
+              const names = [...heavyLoadedRef.current];
+              fetchBoardWithRetry(2, true, names).then((full) => {
                 if (!acceptState(full)) return;
-                const mergedFull = mergeStableCollections(dataRef.current, full.data);
-                setData(mergedFull); dataRef.current = mergedFull;
-                setRev(full.rev); revRef.current = full.rev;
+                const patched: any = { ...full.data };
+                for (const c of LITE_RESPONSE_PLACEHOLDER_COLLS) {
+                  if (!names.includes(c) && dataRef.current && (dataRef.current as any)[c] !== undefined) {
+                    patched[c] = (dataRef.current as any)[c];
+                  }
+                }
+                applyStateSafely(full.rev, patched);
               }).catch(() => {});
             }
           }
@@ -746,8 +922,15 @@ export function AppProvider({ children, publicRoute = false }: { children: React
         const ok = await flushPendingOps();
         if (!ok) return;
         const s = await fetchBoard();
-        if (acceptState(s)) { setData(s.data); dataRef.current = s.data; }
-        setRev(s.rev); revRef.current = s.rev;
+        if (acceptState(s)) {
+          applyStateSafely(s.rev, s.data);
+        } else {
+          // Data rejected (e.g. a stale/public snapshot), but the revision
+          // number itself is still safe to acknowledge — same monotonic
+          // guard, just without touching dataRef/setData.
+          const nextRev = Math.max(revRef.current, s.rev);
+          setRev(nextRev); revRef.current = nextRev;
+        }
         modeRef.current = "live"; setMode("live");
         toast("Back online — your changes were saved");
       } catch {
@@ -766,7 +949,45 @@ export function AppProvider({ children, publicRoute = false }: { children: React
     const onVisible = () => { if (!document.hidden) pollTick(); };
     document.addEventListener("visibilitychange", onVisible);
 
-    return () => { stopped = true; window.clearInterval(iv); document.removeEventListener("visibilitychange", onVisible); };
+    // BroadcastChannel setup for the leader-election coordination above —
+    // feature-detected; `pollChannelRef.current` simply stays null (the
+    // permanent fail-open state, isLeader() always true) on any browser/
+    // context without support (e.g. some private-browsing modes), so this
+    // whole block is additive and never required for correctness.
+    let heartbeatIv: number | null = null;
+    if (typeof BroadcastChannel !== "undefined") {
+      const channel = new BroadcastChannel("neoteric-poll-leader");
+      pollChannelRef.current = channel;
+      channel.onmessage = (ev: MessageEvent) => {
+        const msg = ev.data;
+        if (!msg || typeof msg !== "object") return;
+        if (msg.type === "hb" && typeof msg.tabId === "string") {
+          knownTabsRef.current.set(msg.tabId, Date.now());
+        } else if (msg.type === "rev" && typeof msg.rev === "number") {
+          // Any tab's own successful /api/rev read is just as trustworthy
+          // as this tab's would have been — take the newest one seen,
+          // whoever made the request.
+          if (!lastBroadcastRevRef.current || msg.rev !== lastBroadcastRevRef.current.rev || msg.ts > lastBroadcastRevRef.current.ts) {
+            lastBroadcastRevRef.current = { rev: msg.rev, ts: msg.ts };
+          }
+        }
+      };
+      const sendHeartbeat = () => {
+        knownTabsRef.current.set(TAB_ID, Date.now());
+        try { channel.postMessage({ type: "hb", tabId: TAB_ID }); } catch {}
+      };
+      sendHeartbeat(); // announce immediately, don't wait for the first interval tick
+      heartbeatIv = window.setInterval(sendHeartbeat, HEARTBEAT_MS);
+    }
+
+    return () => {
+      stopped = true;
+      window.clearInterval(iv);
+      document.removeEventListener("visibilitychange", onVisible);
+      if (heartbeatIv != null) window.clearInterval(heartbeatIv);
+      pollChannelRef.current?.close();
+      pollChannelRef.current = null;
+    };
   }, []);
 
   /* Pick a default user/project once data first arrives */
@@ -841,23 +1062,15 @@ export function AppProvider({ children, publicRoute = false }: { children: React
       // while the snapshot feature is off) — then sign-in makes no extra request and waits for nothing.
       // `lite`: same reasoning as the initial-load effect — don't make the
       // Sign In button sit on dpr/qualityInspections/events over a slow
-      // connection when nothing right after login needs them yet. The
-      // background full fetch below tops them up moments later.
+      // connection when nothing right after login needs them yet. No
+      // automatic heavy top-up here any more — whichever page renders after
+      // login calls ensureHeavy() for what it actually needs.
       if (needsFullBoardAfterLogin(lastStatePublicRef.current)) {
         try {
           const s = await fetchBoardWithRetry(2, true);
           if (s && s.data && !s.public) {
             lastStatePublicRef.current = false;
-            const merged = mergeStableCollections(dataRef.current, patchLiteResponse(s.data, dataRef.current));
-            setData(merged); dataRef.current = merged;
-            setRev(s.rev); revRef.current = s.rev;
-            lastHeavyRefreshRef.current = Date.now();
-            if (!LITE_FETCH_DISABLED) fetchBoardWithRetry().then((full) => {
-              if (!full || !full.data || full.public) return;
-              const mergedFull = mergeStableCollections(dataRef.current, full.data);
-              setData(mergedFull); dataRef.current = mergedFull;
-              setRev(full.rev); revRef.current = full.rev;
-            }).catch(() => {});
+            applyStateSafely(s.rev, patchLiteResponse(s.data, dataRef.current));
           }
         } catch {}
       }
@@ -879,7 +1092,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
     } catch {
       return "Can't reach the server. Try again.";
     }
-  }, [setCurrentUserId, countMine]);
+  }, [setCurrentUserId, countMine, applyStateSafely]);
 
   const logout = useCallback(() => {
     try {
@@ -910,7 +1123,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
     setCurrentUserId, setCurrentProjectId, setActiveTab, setActiveMaster, openDrawer, closeDrawer,
     openAssignModal, closeAssignModal, openSnagModal, closeSnagModal,
     openChecklistModal, closeChecklistModal, openRecordModal, closeRecordModal, setOpenDrawingRequestId, setReInspectQualityId, setCaseStudyDraft,
-    login, logout, toast: pageToast, apply, me, myRole
+    login, logout, toast: pageToast, apply, me, myRole, ensureHeavy
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, myProjects, myAssignments, mySnags, myReleases, isCivilLikeRole } from "../shared/rules";
 import { ROLES } from "../services/config";
@@ -34,7 +34,8 @@ function SectionLabel({ icon, children, right }: { icon: string; children: React
    change needed. A role with no grants at all still gets the Team section
    (if they lead one) and a plain "nothing yet" notice, never a blank page. */
 export default function RoleDashboard() {
-  const { data, currentUserId, myRole, setActiveTab, openDrawer, setReInspectQualityId } = useApp();
+  const { data, currentUserId, myRole, setActiveTab, openDrawer, setReInspectQualityId, ensureHeavy } = useApp();
+  useEffect(() => { ensureHeavy(["qualityInspections"]); }, [ensureHeavy]);
   const role = myRole();
   const projects = myProjects(data, currentUserId);
   const projectIds = projects.map((p) => p.id);

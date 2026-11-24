@@ -78,7 +78,8 @@ function decodeSlabLabel(label: string): { name: string; parts: string[] } {
 const QC_INSPECTION_STAGE_ID = "STG-QC-INSPECTION";
 
 export default function QualityInspection() {
-  const { data, currentUserId, myRole, apply, toast, me, reInspectQualityId, setReInspectQualityId, setActiveTab } = useApp();
+  const { data, currentUserId, myRole, apply, toast, me, reInspectQualityId, setReInspectQualityId, setActiveTab, ensureHeavy } = useApp();
+  useEffect(() => { ensureHeavy(["qualityInspections"]); }, [ensureHeavy]);
   const { PHASE_GROUPS, PHASE_LOOKUP, QC_CHECKLISTS, WORK_TYPES, scopeOf, isFlatWise, requiresAreas, MULTI_FLOOR_WORK_TYPES, UNIT_FINAL_STAGES, LEGACY_PHASE_EQUIVALENT, phaseWorkType } = useChecklistDefs();
   const isAdmin = currentUserId === "U-ADMIN";
   const canCreate = isAdmin || hasModuleGrant(data, currentUserId, "qualityInspection", "create");

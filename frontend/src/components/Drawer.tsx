@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { viewPhoto } from "../shared/photoViewer";
 import { thumbUrl } from "../shared/photoThumb";
 import { useApp } from "../context/AppContext";
@@ -51,7 +51,8 @@ export default function Drawer() {
    it — its own and the floor-level ones — with the checklist it was for, who
    checked it and when, the exact points marked Not OK, and the snag it raised. */
 function UnitQualityChecks({ unitId, floorId }: { unitId: string; floorId: string }) {
-  const { data } = useApp();
+  const { data, ensureHeavy } = useApp();
+  useEffect(() => { ensureHeavy(["qualityInspections"]); }, [ensureHeavy]);
   const checks = checksForUnit(coll(data, "qualityInspections"), { id: unitId, floorId });
   const snags = coll(data, "snags");
   return (
@@ -102,7 +103,8 @@ function UnitQualityChecks({ unitId, floorId }: { unitId: string; floorId: strin
 }
 
 function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
-  const { data, currentProjectId, myRole, closeDrawer, openAssignModal, openSnagModal, openChecklistModal } = useApp();
+  const { data, currentProjectId, myRole, closeDrawer, openAssignModal, openSnagModal, openChecklistModal, ensureHeavy } = useApp();
+  useEffect(() => { ensureHeavy(["events"]); }, [ensureHeavy]);
   const {
     ackStage, startStage, completeStage, failStage, capturePhoto,
     ackStageItem, startStageItem, completeStageItem, failStageItem, captureStageItemPhoto

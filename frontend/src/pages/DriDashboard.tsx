@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, myProjects, myAssignments, mySnags, byId } from "../shared/rules";
 import NavIcon from "../components/NavIcon";
@@ -180,7 +180,8 @@ const STAGE_LABEL: Record<string, string> = {
    ops-wide floor/handover KPIs on OpsDashboard aren't their day-to-day
    concern the way their own raised tickets are. */
 export default function DriDashboard() {
-  const { data, currentUserId, me, setActiveTab, setOpenDrawingRequestId, openDrawer } = useApp();
+  const { data, currentUserId, me, setActiveTab, setOpenDrawingRequestId, openDrawer, ensureHeavy } = useApp();
+  useEffect(() => { ensureHeavy(["qualityInspections"]); }, [ensureHeavy]);
   // myProjects() falls back to "every project" for anyone with no
   // projectIds set (right for a project PICKER elsewhere in the app — an
   // unscoped Execution/Quality person should see every project to choose

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, myProjects } from "../shared/rules";
 import NavIcon from "../components/NavIcon";
@@ -33,7 +33,8 @@ function statusColor(status: string): "green" | "amber" | "gray" {
    previews the first couple of items so one PO with 20+ line items doesn't
    blow out every row's height. */
 export default function PurchaseOrders() {
-  const { data, currentUserId } = useApp();
+  const { data, currentUserId, ensureHeavy } = useApp();
+  useEffect(() => { ensureHeavy(["purchaseOrders"]); }, [ensureHeavy]);
   const allProjects = myProjects(data, currentUserId);
   const allowedProjectCodes = new Set(allProjects.map((p) => p.code));
 

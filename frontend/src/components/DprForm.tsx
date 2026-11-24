@@ -104,7 +104,8 @@ const CategoryEntry = React.memo(function CategoryEntry({ cat, entry, target, on
 const NO_PHOTOS: Photo[] = [];
 
 export default function DprForm({ isPublic, onDone, onDirtyChange }: { isPublic: boolean; onDone: (id: string) => void; onDirtyChange?: (dirty: boolean) => void }) {
-  const { data, apply, toast, currentUserId } = useApp();
+  const { data, apply, toast, currentUserId, ensureHeavy } = useApp();
+  useEffect(() => { if (!isPublic) ensureHeavy(["dpr"]); }, [isPublic, ensureHeavy]);
   const projects = useMemo(
     () => (isPublic ? coll(data, "projects").filter((p) => p.active !== false) : myProjects(data, currentUserId)),
     [data, isPublic, currentUserId]

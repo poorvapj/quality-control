@@ -936,6 +936,34 @@ const stateBuilder = createStateBuilder({
 });
 const getStateGzip = () => stateBuilder.get();
 
+// Single-flight for the `?lite=1[&include=...]` path (2026-11-24, fixing a
+// gap a regression review found) — this path intentionally bypasses
+// stateBuilder's cache (it must reflect the CURRENT revision, not a
+// possibly-just-replaced one), but with no sharing at all, two genuinely
+// concurrent requests for the exact same revision + include-set (e.g. two
+// browser tabs' pages both needing `qualityInspections` at once) each did
+// their own independent, uncached Mongo read. This is a TRANSIENT dedup
+// only — the Map entry is removed the moment the shared read settles
+// (success or failure), so nothing here is a persistent/stale cache; the
+// very next distinct request (different rev, or no one else concurrently
+// asking) does a completely fresh read, same as before this existed.
+// Keyed by revision + include-set: a request for an older/newer revision,
+// or a different set of collections, never shares with this one — avoids
+// the "unsafe reuse across revisions or writes" this must not do.
+const liteReadInFlight = new Map(); // key -> Promise<{rev, data}>
+function liteReadKey(rev, includeHeavy) {
+  return rev + ":" + [...includeHeavy].sort().join(",");
+}
+async function getLiteStateShared(rev, includeHeavy) {
+  const key = liteReadKey(rev, includeHeavy);
+  const existing = liteReadInFlight.get(key);
+  if (existing) return existing;
+  const promise = getState(rev, { lite: true, includeHeavy })
+    .finally(() => { liteReadInFlight.delete(key); });
+  liteReadInFlight.set(key, promise);
+  return promise;
+}
+
 // `knownRev`: the revision the caller read BEFORE asking for the data. The snapshot is stamped with it, so it
 // can never claim to be newer than the data it carries (a write landing mid-read only makes the stamp old).
 // On a real board, dpr + qualityInspections alone can be most of the whole
@@ -2361,21 +2389,38 @@ async function sendStateResponse(req, res) {
   if (PUBLIC_STATE_ENFORCE && !getSession(req)) {
     return sendJson(res, 200, await buildPublicState(mongoDb, COLLECTIONS, await getRev()));
   }
-  // ?lite=1 — only sent by AppContext.tsx right after login (see getState's
-  // doc comment) — bypasses the shared rev-cache (built for the normal,
+  // ?lite=1 — sent by AppContext.tsx on every lite fetch (login, initial
+  // load, poll) — bypasses the shared rev-cache (built for the normal,
   // identical-every-time polled response) and builds its own smaller one
   // directly, skipping the heaviest collections.
+  // ?include=dpr,qualityInspections — on-demand per-collection top-up
+  // (2026-11-24): a page that actually needs one of the normally-skipped
+  // heavy collections (or `events`) asks for it by name here instead of the
+  // client ever fetching the WHOLE board just to get one collection. Same
+  // `includeHeavy` mechanism sendOpsStateResponse already uses for a
+  // write's own response — reused here for reads too.
   let lite = false;
-  try { lite = new URL(req.url, "http://localhost").searchParams.get("lite") === "1"; } catch {}
+  let includeHeavy = new Set();
+  try {
+    const params = new URL(req.url, "http://localhost").searchParams;
+    lite = params.get("lite") === "1";
+    const includeParam = params.get("include");
+    if (includeParam) includeHeavy = new Set(includeParam.split(",").map((s) => s.trim()).filter(Boolean));
+  } catch {}
   if (lite) {
     const tLite0 = Date.now();
-    const state = await getState(undefined, { lite: true });
+    // Revision read BEFORE the shared-read key is built (same "read rev
+    // first" rule stateBuilder follows) — two requests that both read the
+    // same rev here are guaranteed to be asking for identical data, so
+    // sharing one read between them is always safe.
+    const rev = await getRev();
+    const state = await getLiteStateShared(rev, includeHeavy);
     // Timing visibility (2026-11-23) — the lite path had no timing log of its
     // own (only the cached/full path did, via stateBuilder), so when it was
     // slow enough to blow past the client's lite timeout and drop the whole
     // app into "offline" mode on first load, there was no way to tell how
     // slow it actually was. Logged so the next occurrence is measured.
-    console.log(`[lite-state] read ${Date.now() - tLite0}ms`);
+    console.log(`[lite-state] include=[${[...includeHeavy].join(",")}]: read ${Date.now() - tLite0}ms`);
     if (String(req.headers["accept-encoding"] || "").includes("gzip")) {
       const compressed = await new Promise((resolve, reject) =>
         zlib.gzip(JSON.stringify(state), (err, buf) => (err ? reject(err) : resolve(buf))));

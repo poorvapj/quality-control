@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, projectFloors, floorUnits, trackStages, prog, floorReleased, floorBelow, unitSummary, myProjects, byId } from "../shared/rules";
 import NavIcon from "../components/NavIcon";
@@ -48,7 +48,8 @@ function failTileColor(failing: { driAcknowledged?: boolean; linkedSnagId?: stri
 }
 
 export default function TowerBoard() {
-  const { data, currentProjectId, setCurrentProjectId, currentUserId, openDrawer, myRole } = useApp();
+  const { data, currentProjectId, setCurrentProjectId, currentUserId, openDrawer, myRole, ensureHeavy } = useApp();
+  useEffect(() => { ensureHeavy(["qualityInspections"]); }, [ensureHeavy]);
   const allProjects = myProjects(data, currentUserId);
   // The filter itself starts unset ("Choose") rather than showing whatever
   // project happens to be globally selected — but the board below still

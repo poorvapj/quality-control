@@ -92,7 +92,8 @@ function fmtDate(ts: number): string {
 }
 
 export default function DailyProgressReportPage() {
-  const { data, currentUserId, myRole, toast } = useApp();
+  const { data, currentUserId, myRole, toast, ensureHeavy } = useApp();
+  useEffect(() => { ensureHeavy(["dpr"]); }, [ensureHeavy]);
   const isAdmin = currentUserId === "U-ADMIN";
   const isDri = !isAdmin && (myRole() === "ADMIN" || myRole() === "DRI");
   const [open, setOpen] = useState(false);

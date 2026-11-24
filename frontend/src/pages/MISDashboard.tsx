@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, myProjects, projectFloors, projectUnits, trackStages } from "../shared/rules";
 import { computeDriScores, SHOW_QUALITY_SCORE } from "../shared/driQuality";
@@ -66,7 +66,8 @@ function StatusPill({ status }: { status: "On Track" | "Needs Attention" | "At R
 }
 
 export default function MISDashboard() {
-  const { data, currentUserId, openDrawer } = useApp();
+  const { data, currentUserId, openDrawer, ensureHeavy } = useApp();
+  useEffect(() => { ensureHeavy(["qualityInspections"]); }, [ensureHeavy]);
   const allProjects = myProjects(data, currentUserId);
 
   const [projectId, setProjectId] = useState("");

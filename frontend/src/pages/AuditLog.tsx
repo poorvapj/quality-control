@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, refLabel } from "../shared/rules";
 import { fmtDT, ago } from "../shared/helpers";
@@ -108,7 +108,8 @@ function moduleEvents(events: EventLog[], mod: ModuleDef): EventLog[] {
 }
 
 export default function AuditLog() {
-  const { data, currentUserId } = useApp();
+  const { data, currentUserId, ensureHeavy } = useApp();
+  useEffect(() => { ensureHeavy(["events"]); }, [ensureHeavy]);
   const [moduleKey, setModuleKey] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [fAction, setFAction] = useState("");
