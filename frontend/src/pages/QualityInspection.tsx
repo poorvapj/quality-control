@@ -10,6 +10,7 @@ import { thumbUrl } from "../shared/photoThumb";
 import { hasModuleGrant } from "../shared/permissionMatrix";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
+import MobileFilterBar from "../components/MobileFilterBar";
 import { approvalFor, effectiveApproval } from "../shared/approval";
 import { ApprovalBadge, ApprovalActions, ApprovalReviewPanel, OverdueBadge } from "../components/ApprovalControls";
 import PhotoGroupUploader from "../components/PhotoGroupUploader";
@@ -325,7 +326,11 @@ This cannot be undone.`)) return;
         )}
       </div>
 
-      <div className="flex gap-3.5 flex-wrap items-end mb-5">
+      {/* Desktop/tablet: every filter shown inline, as before. Narrower than
+          md: collapsed into MobileFilterBar below instead — see its own
+          doc comment for why (same filter state/handlers either way, just
+          rendered in a different place). */}
+      <div className="hidden md:flex gap-3.5 flex-wrap items-end mb-5">
         <div className="max-w-[180px]" style={{ position: "relative" }} ref={calendarWrapRef}>
           <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Date Range</div>
           <SearchDropdown
@@ -390,6 +395,77 @@ This cannot be undone.`)) return;
             }}
           />
         )}
+      </div>
+
+      {/* Mobile: the exact same filters, same state/handlers, just inside
+          MobileFilterBar's full-screen modal instead of an inline row. */}
+      <MobileFilterBar activeCount={[fProjectId, fFloorId, fResult, fDri, fSnagStatus, fApproval, fRange !== "all" ? fRange : ""].filter(Boolean).length}>
+        <div ref={calendarWrapRef}>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Date Range</div>
+          <SearchDropdown
+            icon="calendar"
+            searchable={false}
+            scrollable={false}
+            value={fRange}
+            onChange={(v) => { setFRange(v as DateRange); if (v === "custom") setCalendarOpen(true); }}
+            options={DATE_RANGES.map((r) => ({ value: r.key, label: r.label }))}
+            neutralActive
+          />
+          {fRange === "custom" && customFrom && customTo && (
+            <div className="text-[11px] text-[var(--text-muted)] mt-1">{customFrom} → {customTo}</div>
+          )}
+          {fRange === "custom" && calendarOpen && (
+            <CalendarRangePicker
+              from={customFrom}
+              to={customTo}
+              onCancel={() => setCalendarOpen(false)}
+              onApply={(from, to) => { setCustomFrom(from); setCustomTo(to); setCalendarOpen(false); }}
+            />
+          )}
+        </div>
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Project</div>
+          <SearchDropdown value={fProjectId} onChange={(v) => { setFProjectId(v); setFFloorId(""); }} options={[{ value: "", label: "All projects" }, ...projectOptions]} neutralActive />
+        </div>
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Floor</div>
+          <SearchDropdown value={fFloorId} onChange={setFFloorId} options={[{ value: "", label: "All floors" }, ...fFloors.map((f) => ({ value: f.id, label: f.name }))]} neutralActive />
+        </div>
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Result</div>
+          <SearchDropdown value={fResult} onChange={setFResult} options={[{ value: "", label: "All results" }, ...RESULTS.map((r) => ({ value: r, label: r }))]} neutralActive />
+        </div>
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">DRI</div>
+          <SearchDropdown value={fDri} onChange={setFDri} options={[{ value: "", label: "All" }, ...driOptions]} neutralActive />
+        </div>
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Snag Status</div>
+          <SearchDropdown value={fSnagStatus} onChange={setFSnagStatus} options={[
+            { value: "", label: "All" }, { value: "open", label: "Open" }, { value: "overdue", label: "Overdue" }, { value: "closed", label: "Closed" }
+          ]} neutralActive />
+        </div>
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Approval</div>
+          <SearchDropdown value={fApproval} onChange={setFApproval} options={[
+            { value: "", label: "All" }, { value: "none", label: "Not needed" }, { value: "pending", label: "Pending" },
+            { value: "approved", label: "Approved" }, { value: "rejected", label: "Rejected" }
+          ]} neutralActive />
+        </div>
+        {filtersActive && (
+          <Btn
+            label="Clear filters"
+            color="secondary"
+            onClick={() => {
+              setFProjectId(""); setFFloorId(""); setFResult(""); setFDri(""); setFSnagStatus(""); setFApproval("");
+              setFRange("all"); setCustomFrom(""); setCustomTo(""); setCalendarOpen(false);
+            }}
+          />
+        )}
+      </MobileFilterBar>
+      <div className="flex md:hidden gap-2.5 mb-5">
+        <Btn label={generating ? "Generating…" : "Generate Report"} color="secondary" icon="download" onClick={generateReport} disabled={generating} />
+        <Btn label="Fail Register" color="secondary" icon="bug" onClick={() => setActiveTab("qualityFails" as TabKey)} />
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
