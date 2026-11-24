@@ -18,7 +18,8 @@ import NavIcon from "./NavIcon";
 export default function MobileFilterBar({
   children,
   activeCount,
-  search
+  search,
+  trailing
 }: {
   /** The page's own filter controls (dropdowns, pickers, etc.) — rendered
    *  unchanged inside the modal body. */
@@ -31,6 +32,10 @@ export default function MobileFilterBar({
    *  (the reference design's magnifying-glass icon) — omit entirely for a
    *  page with no free-text search. */
   search?: { value: string; onChange: (v: string) => void; placeholder?: string };
+  /** Optional extra content (e.g. a page's primary action button) pushed to
+   *  the far end of the trigger row, so it sits on the same line as the
+   *  search/filter icons instead of wrapping to its own row on mobile. */
+  trailing?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -64,6 +69,7 @@ export default function MobileFilterBar({
             </span>
           )}
         </button>
+        {trailing && <div className="ml-auto">{trailing}</div>}
       </div>
 
       {open && (
@@ -74,11 +80,11 @@ export default function MobileFilterBar({
               <NavIcon name="close" size={16} />
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
+          <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2.5">
             {children}
           </div>
-          <div className="p-4 border-t" style={{ borderColor: "var(--border)" }}>
-            <button type="button" className="btn btn-primary w-full justify-center" onClick={() => setOpen(false)}>
+          <div className="p-3 border-t" style={{ borderColor: "var(--border)" }}>
+            <button type="button" className="btn btn-primary btn-sm w-full justify-center" onClick={() => setOpen(false)}>
               Apply
             </button>
           </div>

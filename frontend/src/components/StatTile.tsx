@@ -25,18 +25,18 @@ export default function StatTile({
       // (one number, one short label) never needed the same breathing room
       // a full content card does, and the previous p-4/p-5 made 2-up rows
       // of these take up most of a phone's screen before any real data.
-      className={"relative transition-shadow p-2.5 sm:p-4" + (onClick ? " cursor-pointer" : "")}
+      className={"relative transition-shadow p-2 sm:p-4" + (onClick ? " cursor-pointer" : "")}
       onClick={onClick}
     >
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex items-start justify-between gap-1.5">
         <div className="min-w-0">
-          <div className="text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1 leading-tight">{label}</div>
-          <div className={"text-lg sm:text-xl font-medium leading-none " + (valueClassName || "text-[var(--text-main)]")}>{value}</div>
-          {foot && <div className="text-[10.5px] text-[var(--text-sub)] font-semibold mt-1.5 leading-snug">{foot}</div>}
+          <div className="text-[8.5px] sm:text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-0.5 sm:mb-1 leading-tight">{label}</div>
+          <div className={"text-base sm:text-xl font-medium leading-none " + (valueClassName || "text-[var(--text-main)]")}>{value}</div>
+          {foot && <div className="text-[9.5px] sm:text-[10.5px] text-[var(--text-sub)] font-semibold mt-1 sm:mt-1.5 leading-snug">{foot}</div>}
         </div>
         {icon && (
-          <div className={"w-6 h-6 sm:w-7 sm:h-7 rounded-radius-sm flex items-center justify-center shrink-0 " + (iconClassName || "bg-[var(--bg-subtle)] text-[var(--text-muted)]")}>
-            <NavIcon name={icon} size={12} />
+          <div className={"w-5 h-5 sm:w-7 sm:h-7 rounded-radius-sm flex items-center justify-center shrink-0 " + (iconClassName || "bg-[var(--bg-subtle)] text-[var(--text-muted)]")}>
+            <NavIcon name={icon} size={11} />
           </div>
         )}
       </div>

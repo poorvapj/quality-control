@@ -8,6 +8,7 @@ import StatTile from "../components/StatTile";
 import Card from "../ui/tw/Card";
 import Badge from "../ui/tw/Badge";
 import Table, { TableRow, TableCell } from "../ui/tw/Table";
+import MobileFilterBar from "../components/MobileFilterBar";
 import type { PurchaseOrder } from "../types";
 
 const qty = (n: number) => n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
@@ -92,7 +93,7 @@ export default function PurchaseOrders() {
         <StatTile label="Statuses Seen" value={statusOptions.length} icon="clock" />
       </div>
 
-      <Card className="flex gap-3.5 flex-wrap mb-5">
+      <Card className="hidden md:flex gap-3.5 flex-wrap mb-5">
         <div className="max-w-[260px]">
           <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Project</div>
           <SearchDropdown value={fProjectCode} onChange={setFProjectCode} options={[{ value: "", label: "All projects" }, ...projectOptions]} neutralActive />
@@ -108,6 +109,23 @@ export default function PurchaseOrders() {
           </label>
         )}
       </Card>
+
+      <MobileFilterBar activeCount={[fProjectCode, fStatus].filter(Boolean).length}>
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Project</div>
+          <SearchDropdown value={fProjectCode} onChange={setFProjectCode} options={[{ value: "", label: "All projects" }, ...projectOptions]} neutralActive />
+        </div>
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Status</div>
+          <SearchDropdown value={fStatus} onChange={setFStatus} options={[{ value: "", label: "All statuses" }, ...statusOptions.map((s) => ({ value: s, label: s }))]} neutralActive />
+        </div>
+        {deletedCount > 0 && (
+          <label className="flex items-center gap-1.5 text-[12px] text-[var(--text-muted)] cursor-pointer">
+            <input type="checkbox" checked={showDeleted} onChange={(e) => setShowDeleted(e.target.checked)} />
+            Show deleted ({deletedCount})
+          </label>
+        )}
+      </MobileFilterBar>
 
       <Card padded={false} className="p-3 md:p-[18px]">
         {/* phones: one card per PO instead of a 7-column table squeezed sideways */}

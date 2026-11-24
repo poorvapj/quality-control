@@ -6,6 +6,7 @@ import { dueLabel, ago, displayId } from "../shared/helpers";
 import { ESCALATION_DAYS, HOUR } from "../services/config";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
+import MobileFilterBar from "../components/MobileFilterBar";
 import Card from "../ui/tw/Card";
 import Btn from "../ui/tw/Btn";
 import Badge, { type BadgeColor } from "../ui/tw/Badge";
@@ -130,7 +131,7 @@ export default function Snags() {
       )}
 
       <Card padded={false} className="min-h-[70vh] p-4.5">
-        <div className="flex gap-2.5 items-center flex-wrap mb-4 pb-1">
+        <div className="hidden md:flex gap-2.5 items-center flex-wrap mb-4 pb-1">
           <input className="input grow" placeholder="Search snags by title, unit or description…" value={q} onChange={(e) => setQ(e.target.value)} />
           <div className="w-[180px]">
             <SearchDropdown
@@ -182,6 +183,65 @@ export default function Snags() {
             />
           </div>
         </div>
+
+        <MobileFilterBar
+          activeCount={[fp !== ALL_PROJECTS ? fp : "", fs, fv, fm].filter(Boolean).length}
+          search={{ value: q, onChange: setQ, placeholder: "Search snags by title, unit or description…" }}
+        >
+          <div>
+            <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Project</div>
+            <SearchDropdown
+              value={fp}
+              onChange={setFp}
+              options={[{ value: ALL_PROJECTS, label: "All Projects" }, ...allProjects.map((p) => ({ value: p.id, label: p.name }))]}
+              neutralActive
+            />
+          </div>
+          <div>
+            <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Status</div>
+            <SearchDropdown
+              searchable={false}
+              value={fs}
+              onChange={setFs}
+              options={[
+                { value: "", label: "All statuses" },
+                { value: "Open", label: "Open" },
+                { value: "In Progress", label: "In Progress" },
+                { value: "Closed", label: "Closed" }
+              ]}
+              neutralActive
+            />
+          </div>
+          <div>
+            <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Severity</div>
+            <SearchDropdown
+              searchable={false}
+              value={fv}
+              onChange={setFv}
+              options={[
+                { value: "", label: "All severities" },
+                { value: "Critical", label: "Critical" },
+                { value: "Major", label: "Major" },
+                { value: "Minor", label: "Minor" }
+              ]}
+              neutralActive
+            />
+          </div>
+          <div>
+            <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Assignment</div>
+            <SearchDropdown
+              searchable={false}
+              value={fm}
+              onChange={setFm}
+              options={[
+                { value: "", label: "Everyone" },
+                { value: "mine", label: "Assigned to me" },
+                { value: "raised", label: "Raised by me" }
+              ]}
+              neutralActive
+            />
+          </div>
+        </MobileFilterBar>
         <div>
           {list.length === 0 && <div className="py-7.5 px-5 text-center text-[var(--text-muted)] text-[13px]">No snags match these filters.</div>}
           {list.map((s) => {

@@ -5,6 +5,7 @@ import { fmtDT, ago } from "../shared/helpers";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
 import Card from "../ui/tw/Card";
+import MobileFilterBar from "../components/MobileFilterBar";
 import Btn from "../ui/tw/Btn";
 import Table, { TableRow, TableCell } from "../ui/tw/Table";
 import type { EventLog } from "../types";
@@ -178,7 +179,7 @@ export default function AuditLog() {
         <Card className="text-center text-[13px] text-[var(--text-muted)]">No activity logged for this module yet.</Card>
       ) : (
         <>
-          <Card className="flex gap-3 flex-wrap mb-5">
+          <Card className="hidden md:flex gap-3 flex-wrap mb-5">
             <input className="input flex-1 min-w-[180px]" placeholder="Search by detail, action, or user…" value={q} onChange={(e) => setQ(e.target.value)} />
             <div className="w-[190px]">
               <SearchDropdown
@@ -197,6 +198,27 @@ export default function AuditLog() {
               />
             </div>
           </Card>
+
+          <MobileFilterBar activeCount={[fAction, fUser].filter(Boolean).length} search={{ value: q, onChange: setQ, placeholder: "Search by detail, action, or user…" }}>
+            <div>
+              <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Action</div>
+              <SearchDropdown
+                value={fAction}
+                onChange={setFAction}
+                options={[{ value: "", label: "All actions" }, ...actionOptions.map((a) => ({ value: a, label: ACTION_LABEL[a] || a }))]}
+                neutralActive
+              />
+            </div>
+            <div>
+              <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">User</div>
+              <SearchDropdown
+                value={fUser}
+                onChange={setFUser}
+                options={[{ value: "", label: "Everyone" }, ...users.map((u) => ({ value: u.id, label: u.name }))]}
+                neutralActive
+              />
+            </div>
+          </MobileFilterBar>
 
           <Card padded={false} className="p-3 md:p-[18px]">
             {shown.length === 0 ? (

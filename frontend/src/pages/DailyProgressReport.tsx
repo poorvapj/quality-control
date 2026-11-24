@@ -487,7 +487,7 @@ export default function DailyProgressReportPage() {
         </div>
       </div>
 
-      <div className="filter-bar hidden md:flex">
+      <div className="filter-bar !hidden md:!flex">
         <div className="field" style={{ minWidth: 150, position: "relative" }} ref={calendarWrapRef}>
           <label>Date Range</label>
           <SearchDropdown

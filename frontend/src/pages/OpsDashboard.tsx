@@ -13,6 +13,7 @@ import SearchDropdown from "../components/SearchDropdown";
 import CalendarRangePicker from "../components/CalendarRangePicker";
 import WeekPicker from "../components/WeekPicker";
 import Card from "../ui/tw/Card";
+import MobileFilterBar from "../components/MobileFilterBar";
 import Btn from "../ui/tw/Btn";
 import Badge from "../ui/tw/Badge";
 import Field from "../ui/tw/Field";
@@ -248,7 +249,7 @@ export default function OpsDashboard() {
         </div>
       </div>
 
-      <Card className="flex gap-3.5 flex-wrap mb-5">
+      <Card className="hidden md:flex gap-3.5 flex-wrap mb-5">
         <div className="max-w-[220px]">
           <Field label="Active Project">
             <SearchDropdown
@@ -311,6 +312,70 @@ export default function OpsDashboard() {
           </div>
         )}
       </Card>
+
+      <MobileFilterBar activeCount={[!viewAllProjects, fRange !== "all" ? fRange : ""].filter(Boolean).length}>
+        <div>
+          <Field label="Active Project">
+            <SearchDropdown
+              value={viewAllProjects ? ALL_PROJECTS_VALUE : (currentProjectId ?? "")}
+              onChange={(v) => {
+                if (v === ALL_PROJECTS_VALUE) { setViewAllProjects(true); return; }
+                setViewAllProjects(false);
+                setCurrentProjectId(v);
+              }}
+              options={[{ value: ALL_PROJECTS_VALUE, label: "All Projects" }, ...allProjects.map((p) => ({ value: p.id, label: p.name }))]}
+              neutralActive
+            />
+          </Field>
+        </div>
+        <div>
+          <Field label="Date Range">
+            <SearchDropdown
+              icon="calendar"
+              searchable={false}
+              scrollable={false}
+              value={fRange}
+              onChange={(v) => setFRange(v as DateRange)}
+              options={DATE_RANGES.map((r) => ({ value: r.key, label: r.label }))}
+            />
+          </Field>
+        </div>
+        {fRange === "custom" && (
+          <div className="relative" ref={calendarWrapRef}>
+            <Field label="Range">
+              <button type="button" className="select text-left" onClick={() => setCalendarOpen((o) => !o)}>
+                {customFrom && customTo ? customFrom + "  →  " + customTo : "Pick dates"}
+              </button>
+            </Field>
+            {calendarOpen && (
+              <CalendarRangePicker
+                from={customFrom}
+                to={customTo}
+                onCancel={() => setCalendarOpen(false)}
+                onApply={(from, to) => { setCustomFrom(from); setCustomTo(to); setCalendarOpen(false); }}
+              />
+            )}
+          </div>
+        )}
+        {fRange === "weekNumber" && (
+          <div className="relative" ref={weekWrapRef}>
+            <Field label="Week">
+              <button type="button" className="select text-left" onClick={() => setWeekPickerOpen((o) => !o)}>
+                Wk {weekNum}, {weekYear}
+              </button>
+            </Field>
+            {weekPickerOpen && (
+              <WeekPicker
+                year={weekYear}
+                week={weekNum}
+                onYearChange={setWeekYear}
+                onPickWeek={(w) => { setWeekNum(w); setWeekPickerOpen(false); }}
+                onBack={() => setWeekPickerOpen(false)}
+              />
+            )}
+          </div>
+        )}
+      </MobileFilterBar>
 
       <div className="text-[9px] font-semibold uppercase tracking-[0.1em] text-[var(--text-sub)] mb-2">KPI OVERVIEW</div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">

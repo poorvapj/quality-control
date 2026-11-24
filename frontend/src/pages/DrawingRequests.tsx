@@ -6,6 +6,7 @@ import SidePanel from "../components/SidePanel";
 import DrawingRequestForm from "../components/DrawingRequestForm";
 import DrawingRequestDetailModal from "../components/DrawingRequestDetailModal";
 import NavIcon from "../components/NavIcon";
+import MobileFilterBar from "../components/MobileFilterBar";
 import { hasModuleGrant } from "../shared/permissionMatrix";
 import type { DrawingRequest } from "../types";
 
@@ -145,7 +146,7 @@ export default function DrawingRequestsPage() {
       </div>
 
       {/* Matches ui/Filters.tsx's FilterRow: flex flex-wrap items-end gap-3 (12px) mb-4 (16px). */}
-      <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", rowGap: 12, columnGap: 12, marginBottom: 16 }}>
+      <div className="hidden md:flex" style={{ alignItems: "center", flexWrap: "wrap", rowGap: 12, columnGap: 12, marginBottom: 16 }}>
         <div style={{ position: "relative", flex: 1, minWidth: 180 }}>
           <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-sub)", display: "flex" }}>
             <NavIcon name="search" size={16} />
@@ -227,6 +228,56 @@ export default function DrawingRequestsPage() {
           <NavIcon name="eye" size={16} /> Search
         </button>
       </div>
+
+      <MobileFilterBar
+        activeCount={[dType, dPriority, dStatus, dTracking, dFrom, dTo].filter(Boolean).length}
+        search={{ value: dSearch, onChange: setDSearch, placeholder: "Search project…" }}
+        trailing={
+          <button
+            onClick={runSearch}
+            style={{
+              height: 34, padding: "0 16px", background: "#8B5CF6", borderRadius: 6, border: "none",
+              fontSize: 13, fontWeight: 700, color: "#fff", display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer"
+            }}
+          >
+            <NavIcon name="eye" size={14} /> Search
+          </button>
+        }
+      >
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Type</div>
+          <select style={{ ...selectStyle, width: "100%" }} value={dType} onChange={(e) => setDType(e.target.value)}>
+            <option value="">All Types</option>
+            {["Architectural", "Structural", "MEP", "Civil", "Interior", "Landscape", "Shop Drawing", "As-Built", "Other"].map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Priority</div>
+          <select style={{ ...selectStyle, width: "100%" }} value={dPriority} onChange={(e) => setDPriority(e.target.value)}>
+            <option value="">All Priorities</option>
+            <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="urgent">Urgent</option>
+          </select>
+        </div>
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Status</div>
+          <select style={{ ...selectStyle, width: "100%" }} value={dStatus} onChange={(e) => setDStatus(e.target.value)}>
+            <option value="">All Statuses</option>
+            {Object.entries(STAGE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </div>
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Review Stage</div>
+          <select style={{ ...selectStyle, width: "100%" }} value={dTracking} onChange={(e) => setDTracking(e.target.value)}>
+            <option value="">All Review Stages</option>
+            <option value="pending">Pending</option><option value="committed">Committed</option><option value="completed">Completed</option><option value="delayed">Delayed</option>
+          </select>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <input className="date-compact" type="date" style={{ ...dateInput, flex: 1 }} value={dFrom} onChange={(e) => setDFrom(e.target.value)} />
+          <span style={{ color: "var(--text-sub)", fontSize: 13 }}>to</span>
+          <input className="date-compact" type="date" style={{ ...dateInput, flex: 1 }} value={dTo} onChange={(e) => setDTo(e.target.value)} />
+        </div>
+      </MobileFilterBar>
 
       {/* Matches ui/Table.tsx exactly: rounded-lg (8px) border-gray-200 wrapper,
           text-sm (14px) table, bg-gray-50 thead, px-4 py-3 (16/12) cells,

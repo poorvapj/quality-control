@@ -3,6 +3,7 @@ import { useApp } from "../context/AppContext";
 import { coll, myProjects } from "../shared/rules";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
+import MobileFilterBar from "../components/MobileFilterBar";
 import Card from "../ui/tw/Card";
 import Table, { TableRow, TableCell } from "../ui/tw/Table";
 
@@ -68,7 +69,7 @@ export default function UserMIS() {
         </div>
       </div>
 
-      <div className="flex gap-3.5 flex-wrap mb-5">
+      <div className="hidden md:flex gap-3.5 flex-wrap mb-5">
         <div className="max-w-[260px] grow">
           <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Search</div>
           <input className="input" placeholder="Search by name…" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -78,6 +79,13 @@ export default function UserMIS() {
           <SearchDropdown value={fRole} onChange={setFRole} options={[{ value: "", label: "All roles" }, ...roleOptions]} neutralActive />
         </div>
       </div>
+
+      <MobileFilterBar activeCount={fRole ? 1 : 0} search={{ value: q, onChange: setQ, placeholder: "Search by name…" }}>
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Role</div>
+          <SearchDropdown value={fRole} onChange={setFRole} options={[{ value: "", label: "All roles" }, ...roleOptions]} neutralActive />
+        </div>
+      </MobileFilterBar>
 
       <Card padded={false} className="p-3 md:p-[18px]">
         {/* phones: one card per person instead of a 12-column table squeezed sideways */}

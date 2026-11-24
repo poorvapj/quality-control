@@ -8,6 +8,7 @@ import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
 import PossessionForm, { type PossessionActiveForm } from "../components/PossessionForm";
 import Card from "../ui/tw/Card";
+import MobileFilterBar from "../components/MobileFilterBar";
 import Btn from "../ui/tw/Btn";
 import StatTile from "../components/StatTile";
 import Table, { TableRow, TableCell } from "../ui/tw/Table";
@@ -201,7 +202,7 @@ export default function HandoverChecklist({ initialTab }: { initialTab?: "intern
     <div>
       <PageHeader tab={tab} />
 
-      <Card className="flex gap-3 flex-wrap items-end mb-5">
+      <Card className="hidden md:flex gap-3 flex-wrap items-end mb-5">
         <div className="w-[130px] shrink-0">
           <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Project</div>
           <SearchDropdown
@@ -239,6 +240,39 @@ export default function HandoverChecklist({ initialTab }: { initialTab?: "intern
           <Btn label="⬇ Combined Excel" color="secondary" size="sm" onClick={() => exportCombined("excel")} disabled={!mapped || units.length === 0} />
         </div>
       </Card>
+
+      <MobileFilterBar
+        activeCount={[viewProjectId, fFloor !== ALL_FLOORS ? fFloor : ""].filter(Boolean).length}
+        search={{ value: q, onChange: setQ, placeholder: "Unit name or code…" }}
+      >
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Project</div>
+          <SearchDropdown
+            value={viewProjectId}
+            onChange={(v) => { setViewProjectId(v); setCurrentProjectId(v); setFFloor(ALL_FLOORS); }}
+            options={[{ value: "", label: "Choose" }, ...allProjects.map((p) => ({ value: p.id, label: p.name }))]}
+            neutralActive
+          />
+        </div>
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Floor</div>
+          <SearchDropdown
+            searchable={false}
+            value={fFloor}
+            onChange={setFFloor}
+            options={[{ value: ALL_FLOORS, label: "All Floors" }, ...floors.map((f) => ({ value: f.id, label: f.name }))]}
+            neutralActive
+          />
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          <Btn label="🖨 PDF" color="secondary" size="sm" onClick={exportPdfReport} disabled={!mapped || units.length === 0} />
+          <Btn label="⬇ Excel" color="secondary" size="sm" onClick={exportExcelReport} disabled={!mapped || units.length === 0} />
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          <Btn label="🖨 Combined PDF" color="secondary" size="sm" onClick={() => exportCombined("pdf")} disabled={!mapped || units.length === 0} />
+          <Btn label="⬇ Combined Excel" color="secondary" size="sm" onClick={() => exportCombined("excel")} disabled={!mapped || units.length === 0} />
+        </div>
+      </MobileFilterBar>
 
       {!projectId ? (
         <Card className="text-center text-[13px] text-[var(--text-muted)]">

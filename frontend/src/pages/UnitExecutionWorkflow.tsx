@@ -12,6 +12,7 @@ import { approvalFor, effectiveApproval } from "../shared/approval";
 import { ApprovalBadge, ApprovalActions } from "../components/ApprovalControls";
 import SidePanel from "../components/SidePanel";
 import Card from "../ui/tw/Card";
+import MobileFilterBar from "../components/MobileFilterBar";
 import Btn from "../ui/tw/Btn";
 import Table, { TableRow, TableCell } from "../ui/tw/Table";
 import type { MaterialMeasurement } from "../types";
@@ -101,7 +102,7 @@ export default function UnitExecutionWorkflow() {
         {canCreate && <Btn label="＋ New Measurement" color="primary" onClick={() => setPanelOpen(true)} />}
       </div>
 
-      <Card className="flex gap-3.5 flex-wrap mb-5">
+      <Card className="hidden md:flex gap-3.5 flex-wrap mb-5">
         <div className="max-w-[260px]">
           <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Project</div>
           <SearchDropdown value={fProjectId} onChange={(v) => { setFProjectId(v); setFFloorId(""); setFUnitId(""); }} options={[{ value: "", label: "All projects" }, ...projectOptions]} neutralActive />
@@ -128,6 +129,34 @@ export default function UnitExecutionWorkflow() {
           />
         </div>
       </Card>
+
+      <MobileFilterBar activeCount={[fProjectId, fFloorId, fUnitId].filter(Boolean).length}>
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Project</div>
+          <SearchDropdown value={fProjectId} onChange={(v) => { setFProjectId(v); setFFloorId(""); setFUnitId(""); }} options={[{ value: "", label: "All projects" }, ...projectOptions]} neutralActive />
+        </div>
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Floor</div>
+          <SearchDropdown
+            searchable={false}
+            value={fFloorId}
+            onChange={(v) => { setFFloorId(v); setFUnitId(""); }}
+            options={[{ value: "", label: "All floors" }, ...floorOptions.map((fl) => ({ value: fl.id, label: fl.name }))]}
+            neutralActive
+            disabled={!fProjectId}
+          />
+        </div>
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Flat / Unit</div>
+          <SearchDropdown
+            value={fUnitId}
+            onChange={setFUnitId}
+            options={[{ value: "", label: "All flats" }, ...unitOptions.map((u) => ({ value: u.id, label: u.name }))]}
+            neutralActive
+            disabled={!fFloorId}
+          />
+        </div>
+      </MobileFilterBar>
 
       <Card padded={false} className="p-3 md:p-[18px]">
         {/* phones: one card per measurement instead of an 8-column table squeezed sideways */}

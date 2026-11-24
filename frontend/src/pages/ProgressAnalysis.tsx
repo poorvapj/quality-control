@@ -10,6 +10,7 @@ import Badge from "../ui/tw/Badge";
 import Table, { TableRow, TableCell } from "../ui/tw/Table";
 import SidePanel from "../components/SidePanel";
 import SearchDropdown from "../components/SearchDropdown";
+import MobileFilterBar from "../components/MobileFilterBar";
 import type { PurchaseOrder, TabKey } from "../types";
 
 interface LocationRow {
@@ -306,7 +307,7 @@ function ProjectDetailPanel({
         <StatTile label="Unbilled Qty" value={qty(totalUnbilled)} icon="package" />
       </div>
 
-      <div className="flex gap-3 flex-wrap items-end mb-4">
+      <div className="hidden md:flex gap-3 flex-wrap items-end mb-4">
         {towerOptions.length > 0 && (
           <div className="min-w-[130px]">
             <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Tower</div>
@@ -327,6 +328,30 @@ function ProjectDetailPanel({
         )}
         <Btn label={onlyVariance ? "Showing: Variance only" : "Show all items"} color="secondary" size="sm" onClick={() => setOnlyVariance((v) => !v)} />
       </div>
+
+      <MobileFilterBar
+        activeCount={[fTower, fFloor, fUnit].filter(Boolean).length}
+        trailing={<Btn label={onlyVariance ? "Variance only" : "All items"} color="secondary" size="sm" onClick={() => setOnlyVariance((v) => !v)} />}
+      >
+        {towerOptions.length > 0 && (
+          <div>
+            <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Tower</div>
+            <SearchDropdown value={fTower} onChange={setFTower} options={opts("All towers", towerOptions)} neutralActive />
+          </div>
+        )}
+        {floorOptions.length > 0 && (
+          <div>
+            <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Floor</div>
+            <SearchDropdown value={fFloor} onChange={setFFloor} options={opts("All floors", floorOptions)} neutralActive />
+          </div>
+        )}
+        {unitOptions.length > 0 && (
+          <div>
+            <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Unit</div>
+            <SearchDropdown value={fUnit} onChange={setFUnit} options={opts("All units", unitOptions)} neutralActive />
+          </div>
+        )}
+      </MobileFilterBar>
       {anyLocationFilter && (
         <div className="text-[11.5px] text-[var(--text-muted)] mb-3">
           Completed and Billed / Unbilled show only the selected location; Planned is the item's full plan.

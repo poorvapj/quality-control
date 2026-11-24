@@ -5,6 +5,7 @@ import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
 import StatTile from "../components/StatTile";
 import Card from "../ui/tw/Card";
+import MobileFilterBar from "../components/MobileFilterBar";
 import Badge from "../ui/tw/Badge";
 import Table, { TableRow, TableCell } from "../ui/tw/Table";
 
@@ -167,7 +168,7 @@ export default function ExecutionReconciliation() {
         </div>
       </div>
 
-      <Card className="flex gap-3.5 flex-wrap mb-5">
+      <Card className="hidden md:flex gap-3.5 flex-wrap mb-5">
         <div className="max-w-[260px]">
           <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Project</div>
           <SearchDropdown value={projectCode} onChange={(v) => { setProjectCode(v); setWorkOrderNo(""); }} options={[{ value: "", label: "All projects" }, ...projectOptions]} neutralActive />
@@ -184,6 +185,20 @@ export default function ExecutionReconciliation() {
           Date-range drill-down is per work order (progress entries are dated); item-level rows aggregate across all dates for now.
         </div>
       </Card>
+
+      <MobileFilterBar
+        activeCount={[projectCode, workOrderNo].filter(Boolean).length}
+        search={{ value: locationFilter, onChange: setLocationFilter, placeholder: "Search location…" }}
+      >
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Project</div>
+          <SearchDropdown value={projectCode} onChange={(v) => { setProjectCode(v); setWorkOrderNo(""); }} options={[{ value: "", label: "All projects" }, ...projectOptions]} neutralActive />
+        </div>
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Work Order</div>
+          <SearchDropdown value={workOrderNo} onChange={setWorkOrderNo} options={[{ value: "", label: "All work orders" }, ...workOrderOptions]} neutralActive />
+        </div>
+      </MobileFilterBar>
 
       <div className="text-[9px] font-semibold uppercase tracking-[0.1em] text-[var(--text-sub)] mb-2">EXECUTION &amp; MEASUREMENT</div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">

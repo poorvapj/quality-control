@@ -4,6 +4,7 @@ import { coll, projectFloors, floorUnits, trackStages, prog, floorReleased, floo
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
 import Card from "../ui/tw/Card";
+import MobileFilterBar from "../components/MobileFilterBar";
 import { executionComplete } from "../shared/misData";
 import { boardLensFor, qualityByUnit, qualityByFloor, measurementByUnit, LENS_LABEL, type BoardLens } from "../shared/boardLens";
 
@@ -145,7 +146,7 @@ export default function TowerBoard() {
         )}
       </div>
 
-      <Card className="flex gap-3 flex-wrap mb-5">
+      <Card className="hidden md:flex gap-3 flex-wrap mb-5">
         <div className="w-[200px] shrink-0">
           <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Project</div>
           <SearchDropdown
@@ -180,6 +181,41 @@ export default function TowerBoard() {
           <input className="input w-full" placeholder="Unit name or code…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
       </Card>
+
+      <MobileFilterBar
+        activeCount={[viewProjectId, fFloor !== ALL_FLOORS ? fFloor : "", fStatus].filter(Boolean).length}
+        search={{ value: q, onChange: setQ, placeholder: "Unit name or code…" }}
+      >
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Project</div>
+          <SearchDropdown
+            value={viewProjectId}
+            onChange={(v) => { setViewProjectId(v); setCurrentProjectId(v); setFFloor(ALL_FLOORS); }}
+            options={[{ value: "", label: "All Projects" }, ...allProjects.map((p) => ({ value: p.id, label: p.name }))]}
+            neutralActive
+          />
+        </div>
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Floor</div>
+          <SearchDropdown
+            searchable={false}
+            value={fFloor}
+            onChange={setFFloor}
+            options={[{ value: ALL_FLOORS, label: "All Floors" }, ...projectFloors(data, boardProjectId).map((f) => ({ value: f.id, label: f.name }))]}
+            neutralActive
+          />
+        </div>
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Status</div>
+          <SearchDropdown
+            searchable={false}
+            value={fStatus}
+            onChange={(v) => setFStatus(v as StatusFilter)}
+            options={statusOptions}
+            neutralActive
+          />
+        </div>
+      </MobileFilterBar>
 
       <Card>
         {floors.length === 0 && <div className="empty">No floors yet — add them in Masters ▸ Floor.</div>}

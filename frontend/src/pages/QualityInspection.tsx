@@ -322,7 +322,9 @@ This cannot be undone.`)) return;
           </div>
         </div>
         {canCreate && (
-          <Btn label="＋ New Inspection" color="primary" onClick={() => { setReInspectOf(null); setPanelOpen(true); }} />
+          <div className="hidden md:block">
+            <Btn label="＋ New Inspection" color="primary" onClick={() => { setReInspectOf(null); setPanelOpen(true); }} />
+          </div>
         )}
       </div>
 
@@ -399,7 +401,10 @@ This cannot be undone.`)) return;
 
       {/* Mobile: the exact same filters, same state/handlers, just inside
           MobileFilterBar's full-screen modal instead of an inline row. */}
-      <MobileFilterBar activeCount={[fProjectId, fFloorId, fResult, fDri, fSnagStatus, fApproval, fRange !== "all" ? fRange : ""].filter(Boolean).length}>
+      <MobileFilterBar
+        activeCount={[fProjectId, fFloorId, fResult, fDri, fSnagStatus, fApproval, fRange !== "all" ? fRange : ""].filter(Boolean).length}
+        trailing={canCreate && <Btn label="＋ New Inspection" color="primary" onClick={() => { setReInspectOf(null); setPanelOpen(true); }} />}
+      >
         <div ref={calendarWrapRef}>
           <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Date Range</div>
           <SearchDropdown

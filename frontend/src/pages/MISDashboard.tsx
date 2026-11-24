@@ -12,6 +12,7 @@ import Card from "../ui/tw/Card";
 import Badge from "../ui/tw/Badge";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
+import MobileFilterBar from "../components/MobileFilterBar";
 import StatTile from "../components/StatTile";
 import { ScoreBar, TrendChip, Sparkline, ScoreLedger, ScoringRules } from "../components/DriQualityParts";
 
@@ -133,7 +134,7 @@ export default function MISDashboard() {
       </div>
 
       {/* ---------------------------------------------------------- Filters */}
-      <Card className="mb-6">
+      <Card className="mb-6 hidden md:block">
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
           <div>
             <div className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Project</div>
@@ -169,6 +170,41 @@ export default function MISDashboard() {
           </div>
         </div>
       </Card>
+
+      <MobileFilterBar activeCount={[projectId, floorId, unitId, stageId, severity, status, fromDate, toDate].filter(Boolean).length}>
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Project</div>
+          <SearchDropdown value={projectId} onChange={(v) => { setProjectId(v); setFloorId(""); setUnitId(""); }} options={[{ value: "", label: "All Projects" }, ...allProjects.map((p) => ({ value: p.id, label: p.name }))]} neutralActive />
+        </div>
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Floor</div>
+          <SearchDropdown searchable={false} value={floorId} onChange={(v) => { setFloorId(v); setUnitId(""); }} options={[{ value: "", label: "All Floors" }, ...floors.map((f) => ({ value: f.id, label: f.name }))]} neutralActive disabled={!projectId} />
+        </div>
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Unit</div>
+          <SearchDropdown value={unitId} onChange={setUnitId} options={[{ value: "", label: "All Units" }, ...units.map((u) => ({ value: u.id, label: u.name }))]} neutralActive disabled={!projectId} />
+        </div>
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Stage / Trade</div>
+          <SearchDropdown searchable={false} value={stageId} onChange={setStageId} options={[{ value: "", label: "All Stages" }, ...tradeStages.map((x) => ({ value: x.stage.id, label: x.stage.name }))]} neutralActive disabled={!projectId} />
+        </div>
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Snag Severity</div>
+          <SearchDropdown searchable={false} value={severity} onChange={setSeverity} options={[{ value: "", label: "All Severities" }, ...SEVERITIES.map((s) => ({ value: s, label: s }))]} neutralActive />
+        </div>
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Snag Status</div>
+          <SearchDropdown searchable={false} value={status} onChange={setStatus} options={[{ value: "", label: "All Statuses" }, { value: "Open", label: "Open" }, { value: "In Progress", label: "In Progress" }, { value: "Closed", label: "Closed" }]} neutralActive />
+        </div>
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">From</div>
+          <input type="date" className="input w-full" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+        </div>
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">To</div>
+          <input type="date" className="input w-full" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+        </div>
+      </MobileFilterBar>
 
       {/* ------------------------------------------------------- 1. Top KPIs */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">

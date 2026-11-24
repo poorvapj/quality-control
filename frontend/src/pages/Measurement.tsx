@@ -14,6 +14,7 @@ import SidePanel from "../components/SidePanel";
 import StatTile from "../components/StatTile";
 import PhotoGroupUploader from "../components/PhotoGroupUploader";
 import Card from "../ui/tw/Card";
+import MobileFilterBar from "../components/MobileFilterBar";
 import Btn from "../ui/tw/Btn";
 import Badge from "../ui/tw/Badge";
 import Table, { TableRow, TableCell } from "../ui/tw/Table";
@@ -148,7 +149,7 @@ export default function Measurement() {
         <StatTile label="Unlinked" value={unlinked} icon="package" />
       </div>
 
-      <Card className="flex gap-3.5 flex-wrap mb-5">
+      <Card className="hidden md:flex gap-3.5 flex-wrap mb-5">
         <div className="max-w-[260px] min-w-[200px]">
           <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Project</div>
           <SearchDropdown value={fProjectId} onChange={setFProjectId} options={[{ value: "", label: "All projects" }, ...allProjects.map((p) => ({ value: p.id, label: p.name }))]} neutralActive />
@@ -160,6 +161,19 @@ export default function Measurement() {
           ]} />
         </div>
       </Card>
+
+      <MobileFilterBar activeCount={[fProjectId, fLink].filter(Boolean).length}>
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Project</div>
+          <SearchDropdown value={fProjectId} onChange={setFProjectId} options={[{ value: "", label: "All projects" }, ...allProjects.map((p) => ({ value: p.id, label: p.name }))]} neutralActive />
+        </div>
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">VMS link</div>
+          <SearchDropdown searchable={false} value={fLink} onChange={setFLink} neutralActive options={[
+            { value: "", label: "All" }, { value: "linked", label: "Linked" }, { value: "ambiguous", label: "Needs confirmation" }, { value: "unmatched", label: "Unlinked" }
+          ]} />
+        </div>
+      </MobileFilterBar>
       {comparisonNote && <div className="text-[12px] text-[var(--text-muted)] mb-3">VMS execution figures unavailable: {comparisonNote}</div>}
 
       <Card padded={false} className="mb-5 p-3 md:p-[18px]">
