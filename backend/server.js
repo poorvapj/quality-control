@@ -3220,6 +3220,17 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // The production frontend is hosted on Vercel, not this server — Render's
+  // own job here is the API only. Serving frontend/dist here too (useful
+  // locally: npm run build + node server.js, same-origin, no API_BASE
+  // needed) is real bandwidth Render doesn't need to spend in production:
+  // every hit re-sends the full JS bundle (no-cache on the static path
+  // below) instead of Vercel's own CDN handling it. Explicit opt-out (not a
+  // code deletion) so local dev is unaffected by default.
+  if (process.env.DISABLE_STATIC_SERVING === "1") {
+    return sendText(res, 404, "Not found (static serving disabled — the frontend is hosted separately)");
+  }
+
   if (urlPath === "/") urlPath = "/index.html";
 
   const filePath = path.join(STATIC_ROOT, urlPath);
