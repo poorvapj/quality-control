@@ -396,10 +396,39 @@ export function AppProvider({ children, publicRoute = false }: { children: React
   // monotonic safety net on top, it does not change what each site
   // considers "real" vs "placeholder" data.
   const collectionRevRef = useRef<Record<string, number>>({});
-  const applyStateSafely = useCallback((incomingRev: number, incomingData: any): any => {
+  // `freshKeys` (2026-11-24 — fixing a confirmed bug, found via a live
+  // production repro, not speculation): omitted entirely, EVERY key in
+  // `incomingData` is trusted as genuinely fresh (a true full-board fetch —
+  // initial load's own direct path, offline recovery, pending-ops flush —
+  // every collection really was just read from the database). When
+  // provided, ONLY the keys it names are genuinely fresh for THIS response;
+  // every other key present in `incomingData` is a mere carried-forward
+  // placeholder (already correctly restored from dataRef.current by the
+  // CALLER's own existing patch logic — patchLiteResponse, or the
+  // touched-set loop in apply()/flushHeavyBatch) and must NOT be allowed to
+  // stamp collectionRevRef or participate in the staleness check at all.
+  //
+  // Root cause this fixes: a page's own MODULE_VIEW audit-log write (fired
+  // on every tab navigation — see the loggedTabsRef effect below) bumps the
+  // global revision just like any other write, and its own /api/ops
+  // response carries every OTHER collection back as a placeholder (since
+  // that write's `touched` set is empty — it's an `{op:"event"}`, not an
+  // upsert naming a `coll`). If that write's response happened to resolve
+  // BEFORE a concurrent ensureHeavy() fetch for, say, "qualityInspections"
+  // (exactly what happens on every real page load — the MODULE_VIEW log and
+  // ensureHeavy() both fire from the same page mount), the OLD code would
+  // stamp collectionRevRef["qualityInspections"] from that write's
+  // placeholder `[]`, at that write's own (newer) revision — then the real,
+  // slightly-older-revision ensureHeavy() response would be judged "stale"
+  // against that false stamp and rejected outright, even though it was the
+  // first genuine fetch of that collection all session. Confirmed via a
+  // real browser repro against production (231 real records fetched
+  // directly, same endpoint, same auth — but the page itself showed 0).
+  const applyStateSafely = useCallback((incomingRev: number, incomingData: any, freshKeys?: Set<string>): any => {
     const safe: any = { ...incomingData };
     for (const key of Object.keys(incomingData)) {
       if (key === "progress") continue;
+      if (freshKeys && !freshKeys.has(key)) continue; // not genuinely fetched by THIS response — leave it exactly as the caller's own patch logic already set it, never stamp or stale-check it here
       const lastRev = collectionRevRef.current[key] ?? -1;
       if (incomingRev < lastRev) {
         // Stale for THIS collection specifically — keep whatever's already
@@ -415,6 +444,13 @@ export function AppProvider({ children, publicRoute = false }: { children: React
     const nextRev = Math.max(revRef.current, incomingRev);
     setRev(nextRev); revRef.current = nextRev;
     return merged;
+  }, []);
+  // Shared helper for every lite-style call site: everything EXCEPT the
+  // normally-skipped heavy collections is genuinely fresh in a lite
+  // response; `extraFresh` adds back whichever heavy collection(s) THIS
+  // particular request actually included (`?include=...`).
+  const freshKeysForLite = useCallback((data: any, extraFresh: string[] = []): Set<string> => {
+    return new Set(Object.keys(data).filter((k) => !LITE_RESPONSE_PLACEHOLDER_COLLS.includes(k) || extraFresh.includes(k)));
   }, []);
 
   // On-demand heavy-collection loader (2026-11-24) — see the fetchBoard()
@@ -458,7 +494,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
           patched[c] = (dataRef.current as any)[c];
         }
       }
-      applyStateSafely(s.rev, patched);
+      applyStateSafely(s.rev, patched, freshKeysForLite(patched, names));
     } catch {
       // Left out of heavyLoadedRef, so the next ensureHeavy() call for the
       // same name(s) retries instead of silently giving up forever. Local
@@ -471,7 +507,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
       // in-flight marker on it one tick longer would be harmless anyway.
       for (const n of names) heavyInFlightRef.current.delete(n);
     }
-  }, [acceptState, applyStateSafely]);
+  }, [acceptState, applyStateSafely, freshKeysForLite]);
   const ensureHeavy = useCallback((names: string[]) => {
     const missing = names.filter((n) => !heavyLoadedRef.current.has(n) && !heavyInFlightRef.current.has(n));
     if (missing.length === 0) return;
@@ -727,7 +763,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
             patched[c] = (dataRef.current as any)[c];
           }
         }
-        applyStateSafely(j.rev, patched);
+        applyStateSafely(j.rev, patched, touched);
       }
       // A record created with makeTempId() (shared/helpers.ts) got its real
       // id from the server just now — fix up the SAME ops/rec objects the
@@ -812,7 +848,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
         const j = await fetchBoardWithRetry(2, true);
         if (stopped) return;
         acceptState(j); // first load: always shown (sign-in screen needs data) but a stale token is dropped
-        applyStateSafely(j.rev, j.data);
+        applyStateSafely(j.rev, j.data, freshKeysForLite(j.data));
         setMode("live"); modeRef.current = "live";
         // No automatic heavy top-up here any more — the lite fetch above is
         // ALL that's ever fetched automatically now. Whichever page mounts
@@ -884,7 +920,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
             // between — see below.
             const s = await fetchBoard(true);
             if (acceptState(s)) {
-              applyStateSafely(s.rev, patchLiteResponse(s.data, dataRef.current));
+              applyStateSafely(s.rev, patchLiteResponse(s.data, dataRef.current), freshKeysForLite(s.data));
             }
             // Top up only whichever heavy collections a page has already
             // asked for (ensureHeavy) — never the ones nobody's using — and
@@ -902,7 +938,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
                     patched[c] = (dataRef.current as any)[c];
                   }
                 }
-                applyStateSafely(full.rev, patched);
+                applyStateSafely(full.rev, patched, freshKeysForLite(patched, names));
               }).catch(() => {});
             }
           }
@@ -1070,7 +1106,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
           const s = await fetchBoardWithRetry(2, true);
           if (s && s.data && !s.public) {
             lastStatePublicRef.current = false;
-            applyStateSafely(s.rev, patchLiteResponse(s.data, dataRef.current));
+            applyStateSafely(s.rev, patchLiteResponse(s.data, dataRef.current), freshKeysForLite(s.data));
           }
         } catch {}
       }
@@ -1092,7 +1128,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
     } catch {
       return "Can't reach the server. Try again.";
     }
-  }, [setCurrentUserId, countMine, applyStateSafely]);
+  }, [setCurrentUserId, countMine, applyStateSafely, freshKeysForLite]);
 
   const logout = useCallback(() => {
     try {
