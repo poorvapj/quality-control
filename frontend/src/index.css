@@ -1008,6 +1008,9 @@
       .stat-card {
         padding: 6px 8px;
       }
+      .stats-grid > * {
+        min-height: 0;
+      }
       .stat-val {
         font-size: 13px;
         margin-top: 1px;
