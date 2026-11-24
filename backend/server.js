@@ -3420,7 +3420,11 @@ connectMongo()
           }
         })().finally(() => { weeklyQcCheckInFlight = false; });
       };
-      setInterval(checkWeeklyQcSchedule, 5 * 60 * 1000);
+      // 15 min, not 5 (2026-11-24, reducing repeated API/DB calls on a
+      // throttled free Atlas tier) — the hour-long 16:00-16:59 IST window
+      // this checks for is still caught comfortably at this cadence, just
+      // with a third as many checks per day.
+      setInterval(checkWeeklyQcSchedule, 15 * 60 * 1000);
       checkWeeklyQcSchedule(); // in case the process starts mid-window
 
       // Manual test trigger — Admin only, ignores the schedule/marker, so
