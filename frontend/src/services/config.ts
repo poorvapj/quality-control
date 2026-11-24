@@ -207,6 +207,20 @@ export const MASTERS: Record<MasterKey, MasterDef> = {
       { k: "active", label: "Active", type: "bool" }
     ]
   },
+  vendors: {
+    label: "Vendor", icon: "🏢", prefix: "VC",
+    desc: "Registered contractors/vendors — code/name/contact/work types only, no financial or KYC fields.",
+    cols: ["code", "company", "owner", "mobile", "vendorGroup", "workTypes", "active"],
+    fields: [
+      { k: "code", label: "Vendor code", type: "text", required: true, hint: "e.g. VC-0174" },
+      { k: "company", label: "Company", type: "text", required: true },
+      { k: "owner", label: "Owner", type: "text" },
+      { k: "mobile", label: "Mobile", type: "text" },
+      { k: "vendorGroup", label: "Vendor group", type: "text", hint: "Optional — for vendors grouped under one umbrella company" },
+      { k: "workTypes", label: "Work types", type: "text", hint: "Comma-separated, e.g. Excavation, Concrete" },
+      { k: "active", label: "Active", type: "bool" }
+    ]
+  },
   permissions: {
     label: "Drawing Request Permission", icon: "🔐", prefix: "PRM",
     desc: "Per-user grants for the Drawing Requests review chain — not tied to role. DRI always bypasses this check.",
