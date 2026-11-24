@@ -13,6 +13,7 @@ import DprForm from "../components/DprForm";
 import { WORK_CATEGORIES } from "../services/config";
 import DrawingRequestForm from "../components/DrawingRequestForm";
 import { LoadingEmpty, InlineSpinner } from "../ui/tw/Table";
+import MobileFilterBar from "../components/MobileFilterBar";
 
 type DprTab = "work" | "drawing" | "summary";
 
@@ -486,7 +487,7 @@ export default function DailyProgressReportPage() {
         </div>
       </div>
 
-      <div className="filter-bar">
+      <div className="filter-bar hidden md:flex">
         <div className="field" style={{ minWidth: 150, position: "relative" }} ref={calendarWrapRef}>
           <label>Date Range</label>
           <SearchDropdown
@@ -541,6 +542,67 @@ export default function DailyProgressReportPage() {
           />
         </div>
         <button className="btn btn-primary" onClick={generateReport}>⬇ Generate Report</button>
+      </div>
+
+      <MobileFilterBar activeCount={[fProject, fUser, fRange !== "all" ? fRange : ""].filter(Boolean).length}>
+        <div className="field" style={{ position: "relative" }}>
+          <label>Date Range</label>
+          <SearchDropdown
+            icon="calendar"
+            searchable={false}
+            scrollable={false}
+            value={fRange}
+            onChange={(v) => { setFRange(v as DateRange); if (v === "custom") setCalendarOpen(true); }}
+            options={DATE_RANGES.map((r) => ({ value: r.key, label: r.label }))}
+            neutralActive
+          />
+          {fRange === "custom" && customFrom && customTo && (
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>{customFrom} → {customTo}</div>
+          )}
+          {fRange === "custom" && calendarOpen && (
+            <CalendarRangePicker
+              from={customFrom}
+              to={customTo}
+              onCancel={() => setCalendarOpen(false)}
+              onApply={(from, to) => { setCustomFrom(from); setCustomTo(to); setCalendarOpen(false); }}
+            />
+          )}
+        </div>
+        {fRange === "weekNumber" && (
+          <>
+            <div className="field">
+              <label>Week</label>
+              <input className="input" type="number" min={1} max={53} value={weekNum} onChange={(e) => setWeekNum(Math.min(53, Math.max(1, Number(e.target.value) || 1)))} />
+            </div>
+            <div className="field">
+              <label>Year</label>
+              <input className="input" type="number" value={weekYear} onChange={(e) => setWeekYear(Number(e.target.value) || nowForWeek.getFullYear())} />
+            </div>
+          </>
+        )}
+        <div className="field">
+          <label>Project</label>
+          <SearchDropdown
+            value={fProject}
+            onChange={setFProject}
+            options={[{ value: "", label: "All Projects" }, ...projects.map((p) => ({ value: p.id, label: p.name }))]}
+            neutralActive
+          />
+        </div>
+        <div className="field">
+          <label>DRI / Site Engineer</label>
+          <SearchDropdown
+            value={fUser}
+            onChange={setFUser}
+            options={[{ value: "", label: "All DRI" }, ...users.map((u) => ({ value: u.id, label: u.name }))]}
+            neutralActive
+          />
+        </div>
+      </MobileFilterBar>
+
+      <div className="flex md:hidden gap-2.5 mb-5">
+        <button className="btn btn-secondary btn-sm flex-1 justify-center" onClick={() => setDrOpen(true)}><NavIcon name="drawing" size={13} /> Drawing Request</button>
+        <button className="btn btn-primary btn-sm flex-1 justify-center" onClick={generateReport}>⬇ Generate Report</button>
       </div>
 
       <div className={"stats-grid" + (isDri ? " cols-5" : "")} style={{ marginBottom: 20 }}>

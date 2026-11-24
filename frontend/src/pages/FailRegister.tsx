@@ -5,6 +5,7 @@ import { type DateRange, DATE_RANGES, dateRangeBounds } from "../shared/dateRang
 import CalendarRangePicker from "../components/CalendarRangePicker";
 import NavIcon from "../components/NavIcon";
 import SearchDropdown from "../components/SearchDropdown";
+import MobileFilterBar from "../components/MobileFilterBar";
 import Card from "../ui/tw/Card";
 import Btn from "../ui/tw/Btn";
 import Badge from "../ui/tw/Badge";
@@ -124,7 +125,7 @@ export default function FailRegister() {
         <Btn label="Download CSV" color="secondary" icon="download" onClick={downloadCsv} />
       </div>
 
-      <div className="flex gap-3.5 flex-wrap mb-5">
+      <div className="hidden md:flex gap-3.5 flex-wrap mb-5">
         <div className="max-w-[180px]" style={{ position: "relative" }} ref={calendarWrapRef}>
           <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Date Range</div>
           <SearchDropdown
@@ -153,6 +154,36 @@ export default function FailRegister() {
           <SearchDropdown value={fProjectId} onChange={setFProjectId} options={[{ value: "", label: "All projects" }, ...projectOptions]} neutralActive />
         </div>
       </div>
+
+      <MobileFilterBar activeCount={[fProjectId, fRange !== "all" ? fRange : ""].filter(Boolean).length}>
+        <div ref={calendarWrapRef}>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Date Range</div>
+          <SearchDropdown
+            icon="calendar"
+            searchable={false}
+            scrollable={false}
+            value={fRange}
+            onChange={(v) => { setFRange(v as DateRange); if (v === "custom") setCalendarOpen(true); }}
+            options={DATE_RANGES.map((r) => ({ value: r.key, label: r.label }))}
+            neutralActive
+          />
+          {fRange === "custom" && customFrom && customTo && (
+            <div className="text-[11px] text-[var(--text-muted)] mt-1">{customFrom} → {customTo}</div>
+          )}
+          {fRange === "custom" && calendarOpen && (
+            <CalendarRangePicker
+              from={customFrom}
+              to={customTo}
+              onCancel={() => setCalendarOpen(false)}
+              onApply={(from, to) => { setCustomFrom(from); setCustomTo(to); setCalendarOpen(false); }}
+            />
+          )}
+        </div>
+        <div>
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--text-muted)] mb-1">Project</div>
+          <SearchDropdown value={fProjectId} onChange={setFProjectId} options={[{ value: "", label: "All projects" }, ...projectOptions]} neutralActive />
+        </div>
+      </MobileFilterBar>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
         <StatTile label="Total Fails" value={filtered.length} icon="bug" />
