@@ -11,7 +11,11 @@ export default function Table({
 }: {
   columns: string[];
   children: React.ReactNode;
-  empty?: string;
+  /** A plain string by default, but accepts any node — e.g. a spinner +
+   *  "Loading…" while a page's own on-demand heavy-collection fetch
+   *  (ensureHeavy/isHeavyLoaded) is still in flight, so that in-progress
+   *  wait is never shown as the same final "nothing here" empty state. */
+  empty?: React.ReactNode;
   /** Caps the table body's height and makes it scroll internally (header
    *  stays put, sticky) — e.g. "480px", for tables that can otherwise grow
    *  to hundreds of rows (every unit on a floor/project). Omit for a
@@ -57,6 +61,28 @@ export default function Table({
         </tbody>
       </table>
     </div>
+  );
+}
+
+/** Drop-in `empty` value for a page whose heavy collection (dpr/
+ *  qualityInspections/etc.) is still loading on-demand — pass it only while
+ *  `!isHeavyLoaded([...])`, falling back to the Table's own default "No
+ *  records found." once it resolves either way. */
+export function LoadingEmpty({ label = "Loading…" }: { label?: string }) {
+  // Not the existing `.spinner` class — that one's white-on-transparent,
+  // built for sitting on a colored button; this needs to read on the
+  // page's own background instead, light or dark theme.
+  return (
+    <span className="inline-flex items-center gap-2 text-[var(--text-muted)]">
+      <span
+        style={{
+          display: "inline-block", width: 14, height: 14,
+          border: "2px solid var(--border)", borderTopColor: "var(--text-muted)",
+          borderRadius: "50%", animation: "spin 0.7s linear infinite", flexShrink: 0
+        }}
+      />
+      {label}
+    </span>
   );
 }
 

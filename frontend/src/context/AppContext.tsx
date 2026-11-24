@@ -262,6 +262,10 @@ interface AppContextValue {
   // in a page's own mount effect for whatever it actually reads. A no-op
   // once that collection has already been loaded this session.
   ensureHeavy: (names: string[]) => void;
+  // Reactive: true once every named collection has actually loaded this
+  // session — use alongside ensureHeavy() to show a loading state instead
+  // of a premature "no records" while the fetch is still in flight.
+  isHeavyLoaded: (names: string[]) => boolean;
   // Resolves true once the change actually reached the server, false if it
   // was only queued (offline) or rejected — see apply()'s own comment.
   apply: (ops: Op[]) => Promise<boolean>;
@@ -471,6 +475,13 @@ export function AppProvider({ children, publicRoute = false }: { children: React
   const heavyPendingRef = useRef<Set<string>>(new Set());
   const heavyInFlightRef = useRef<Set<string>>(new Set());
   const heavyFlushTimerRef = useRef<number | null>(null);
+  // heavyLoadedRef is a ref (no re-render on change) — this mirrors it in
+  // actual React state so a page can show a loading indicator instead of a
+  // misleadingly-final "No records found" while its own ensureHeavy() call
+  // is still in flight (2026-11-24, UX request after the on-demand load
+  // made that first few-second wait newly visible on pages that previously
+  // always had every collection ready immediately).
+  const [loadedHeavyKeys, setLoadedHeavyKeys] = useState<Set<string>>(new Set());
   const flushHeavyBatch = useCallback(async () => {
     const names = [...heavyPendingRef.current];
     heavyPendingRef.current.clear();
@@ -481,6 +492,11 @@ export function AppProvider({ children, publicRoute = false }: { children: React
       const s = await fetchBoardWithRetry(2, true, names);
       if (!acceptState(s)) return; // not marked loaded — see the `finally` below
       for (const n of names) heavyLoadedRef.current.add(n);
+      setLoadedHeavyKeys((prev) => {
+        const next = new Set(prev);
+        for (const n of names) next.add(n);
+        return next;
+      });
       // Keep every OTHER heavy collection exactly as it already was — this
       // response only asked for `names`, so the rest come back as `[]`
       // placeholders, not real emptiness (same reasoning as
@@ -516,6 +532,13 @@ export function AppProvider({ children, publicRoute = false }: { children: React
       heavyFlushTimerRef.current = window.setTimeout(flushHeavyBatch, 50);
     }
   }, [flushHeavyBatch]);
+  // Reactive companion to ensureHeavy() — true once every named collection
+  // has actually been loaded this session, so a page can show a loading
+  // indicator instead of treating "nothing here yet" as a final empty state
+  // during the few seconds ensureHeavy()'s own fetch is still in flight.
+  const isHeavyLoaded = useCallback((names: string[]): boolean => {
+    return names.every((n) => loadedHeavyKeys.has(n));
+  }, [loadedHeavyKeys]);
 
   // This writes the ENTIRE board (every collection) to localStorage — it's
   // only ever read back as a best-effort "show something" fallback for a
@@ -1159,7 +1182,7 @@ export function AppProvider({ children, publicRoute = false }: { children: React
     setCurrentUserId, setCurrentProjectId, setActiveTab, setActiveMaster, openDrawer, closeDrawer,
     openAssignModal, closeAssignModal, openSnagModal, closeSnagModal,
     openChecklistModal, closeChecklistModal, openRecordModal, closeRecordModal, setOpenDrawingRequestId, setReInspectQualityId, setCaseStudyDraft,
-    login, logout, toast: pageToast, apply, me, myRole, ensureHeavy
+    login, logout, toast: pageToast, apply, me, myRole, ensureHeavy, isHeavyLoaded
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

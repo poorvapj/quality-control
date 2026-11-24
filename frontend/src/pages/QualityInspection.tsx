@@ -18,7 +18,7 @@ import StatTile from "../components/StatTile";
 import Card from "../ui/tw/Card";
 import Btn from "../ui/tw/Btn";
 import Badge from "../ui/tw/Badge";
-import Table, { TableRow, TableCell } from "../ui/tw/Table";
+import Table, { TableRow, TableCell, LoadingEmpty } from "../ui/tw/Table";
 import type { Op, Photo, QualityInspection as QI, QualityInspectionResult, Severity, Snag, TabKey } from "../types";
 
 interface VmsWorkItem { itemId: string; itemType: "scopeItem" | "subItem"; parentItemId: string | null; description: string; unit: string }
@@ -78,7 +78,7 @@ function decodeSlabLabel(label: string): { name: string; parts: string[] } {
 const QC_INSPECTION_STAGE_ID = "STG-QC-INSPECTION";
 
 export default function QualityInspection() {
-  const { data, currentUserId, myRole, apply, toast, me, reInspectQualityId, setReInspectQualityId, setActiveTab, ensureHeavy } = useApp();
+  const { data, currentUserId, myRole, apply, toast, me, reInspectQualityId, setReInspectQualityId, setActiveTab, ensureHeavy, isHeavyLoaded } = useApp();
   useEffect(() => { ensureHeavy(["qualityInspections"]); }, [ensureHeavy]);
   const { PHASE_GROUPS, PHASE_LOOKUP, QC_CHECKLISTS, WORK_TYPES, scopeOf, isFlatWise, requiresAreas, MULTI_FLOOR_WORK_TYPES, UNIT_FINAL_STAGES, LEGACY_PHASE_EQUIVALENT, phaseWorkType } = useChecklistDefs();
   const isAdmin = currentUserId === "U-ADMIN";
@@ -418,7 +418,11 @@ This cannot be undone.`)) return;
       <Card padded={false} className="p-3 md:p-[18px]">
         {/* phones: one card per inspection instead of a table that scrolls sideways */}
         <div className="md:hidden flex flex-col gap-2.5">
-          {filtered.length === 0 && <div className="py-6 text-center text-[13px] text-[var(--text-muted)]">No inspections recorded yet.</div>}
+          {filtered.length === 0 && (
+            <div className="py-6 text-center text-[13px] text-[var(--text-muted)]">
+              {!isHeavyLoaded(["qualityInspections"]) ? <LoadingEmpty label="Loading inspections…" /> : "No inspections recorded yet."}
+            </div>
+          )}
           {filtered.map((insp) => {
             const snag = linkedSnag(insp);
             const overdue = !!snag && snag.status !== "Closed" && !!snag.dueAt && snag.dueAt < Date.now();
@@ -466,6 +470,7 @@ This cannot be undone.`)) return;
           // to an unreadable, overlapping sliver.
           colWidths={["100px", "90px", "160px", "190px", "140px", "130px", "200px", "150px"]}
           maxHeight="560px"
+          empty={!isHeavyLoaded(["qualityInspections"]) ? <LoadingEmpty label="Loading inspections…" /> : undefined}
         >
           {filtered.map((insp) => {
             const snag = linkedSnag(insp);

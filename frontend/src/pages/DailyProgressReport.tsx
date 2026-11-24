@@ -12,6 +12,7 @@ import SidePanel from "../components/SidePanel";
 import DprForm from "../components/DprForm";
 import { WORK_CATEGORIES } from "../services/config";
 import DrawingRequestForm from "../components/DrawingRequestForm";
+import { LoadingEmpty } from "../ui/tw/Table";
 
 type DprTab = "work" | "drawing" | "summary";
 
@@ -92,7 +93,7 @@ function fmtDate(ts: number): string {
 }
 
 export default function DailyProgressReportPage() {
-  const { data, currentUserId, myRole, toast, ensureHeavy } = useApp();
+  const { data, currentUserId, myRole, toast, ensureHeavy, isHeavyLoaded } = useApp();
   useEffect(() => { ensureHeavy(["dpr"]); }, [ensureHeavy]);
   const isAdmin = currentUserId === "U-ADMIN";
   const isDri = !isAdmin && (myRole() === "ADMIN" || myRole() === "DRI");
@@ -641,7 +642,7 @@ export default function DailyProgressReportPage() {
               </div>
               <div className="wp-body">
                 {labourByProject.length === 0 ? (
-                  <div className="empty">No labour data yet.</div>
+                  <div className="empty">{!isHeavyLoaded(["dpr"]) ? <LoadingEmpty label="Loading progress reports…" /> : "No labour data yet."}</div>
                 ) : (
                   <div className="wp-table-wrap">
                     <table className="data wp-table">
@@ -717,7 +718,7 @@ export default function DailyProgressReportPage() {
 
             <div className="table-scroll">
               {rows.length === 0 ? (
-                <div className="empty">No daily progress reports yet.</div>
+                <div className="empty">{!isHeavyLoaded(["dpr"]) ? <LoadingEmpty label="Loading progress reports…" /> : "No daily progress reports yet."}</div>
               ) : (
                 <table className="data">
                   <thead>
