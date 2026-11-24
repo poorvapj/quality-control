@@ -19,7 +19,10 @@ export default function MobileFilterBar({
   children,
   activeCount,
   search,
-  trailing
+  trailing,
+  hideTrigger,
+  open: controlledOpen,
+  onOpenChange
 }: {
   /** The page's own filter controls (dropdowns, pickers, etc.) — rendered
    *  unchanged inside the modal body. */
@@ -36,41 +39,54 @@ export default function MobileFilterBar({
    *  the far end of the trigger row, so it sits on the same line as the
    *  search/filter icons instead of wrapping to its own row on mobile. */
   trailing?: React.ReactNode;
+  /** Skip rendering the built-in trigger row entirely — for a page that
+   *  places its own filter-icon button elsewhere (e.g. beside a header
+   *  action button) and drives the modal via `open`/`onOpenChange` instead. */
+  hideTrigger?: boolean;
+  /** Controlled open state for the modal — pairs with `hideTrigger` so a
+   *  page's own button can open/close it. Omit for the default
+   *  uncontrolled behavior (the built-in trigger manages its own state). */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [openState, setOpenState] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : openState;
+  const setOpen = onOpenChange || setOpenState;
   const [searchOpen, setSearchOpen] = useState(false);
 
   return (
     <>
-      <div className="flex md:hidden items-center gap-2 mb-3">
-        {search && (
-          searchOpen ? (
-            <input
-              autoFocus
-              className="input flex-1"
-              placeholder={search.placeholder || "Search..."}
-              value={search.value}
-              onChange={(e) => search.onChange(e.target.value)}
-              onBlur={() => { if (!search.value) setSearchOpen(false); }}
-            />
-          ) : (
-            <button type="button" className="btn-icon" onClick={() => setSearchOpen(true)} aria-label="Search">
-              <NavIcon name="search" size={16} />
-            </button>
-          )
-        )}
-        <button type="button" className="btn-icon relative" onClick={() => setOpen(true)} aria-label="Filters">
-          <NavIcon name="filter" size={16} />
-          {!!activeCount && (
-            <span
-              className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-primary text-white text-[9px] font-bold flex items-center justify-center"
-            >
-              {activeCount}
-            </span>
+      {!hideTrigger && (
+        <div className="flex md:hidden items-center gap-2 mb-3">
+          {search && (
+            searchOpen ? (
+              <input
+                autoFocus
+                className="input flex-1"
+                placeholder={search.placeholder || "Search..."}
+                value={search.value}
+                onChange={(e) => search.onChange(e.target.value)}
+                onBlur={() => { if (!search.value) setSearchOpen(false); }}
+              />
+            ) : (
+              <button type="button" className="btn-icon" onClick={() => setSearchOpen(true)} aria-label="Search">
+                <NavIcon name="search" size={16} />
+              </button>
+            )
           )}
-        </button>
-        {trailing && <div className="ml-auto">{trailing}</div>}
-      </div>
+          <button type="button" className="btn-icon relative" onClick={() => setOpen(true)} aria-label="Filters">
+            <NavIcon name="filter" size={16} />
+            {!!activeCount && (
+              <span
+                className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-primary text-white text-[9px] font-bold flex items-center justify-center"
+              >
+                {activeCount}
+              </span>
+            )}
+          </button>
+          {trailing && <div className="ml-auto flex items-center" style={{ height: 38 }}>{trailing}</div>}
+        </div>
+      )}
 
       {open && (
         <div className="fixed inset-0 z-50 flex flex-col" style={{ background: "var(--bg-card)" }}>

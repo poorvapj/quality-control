@@ -115,6 +115,8 @@ export default function DailyProgressReportPage() {
   const [fProject, setFProject] = useState("");
   const [fUser, setFUser] = useState("");
   const [fRange, setFRange] = useState<DateRange>("all");
+  const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
+  const mobileFilterActiveCount = [fProject, fUser, fRange !== "all" ? fRange : ""].filter(Boolean).length;
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -482,6 +484,14 @@ export default function DailyProgressReportPage() {
           </div>
         </div>
         <div className="page-header-actions">
+          <button type="button" className="btn-icon relative flex md:hidden" onClick={() => setMobileFilterOpen(true)} aria-label="Filters">
+            <NavIcon name="filter" size={16} />
+            {!!mobileFilterActiveCount && (
+              <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-primary text-white text-[9px] font-bold flex items-center justify-center">
+                {mobileFilterActiveCount}
+              </span>
+            )}
+          </button>
           <button className="btn btn-secondary btn-sm" onClick={() => setDrOpen(true)}><NavIcon name="drawing" size={13} /> Drawing Request</button>
           <button className="btn btn-primary btn-sm" onClick={() => setOpen(true)}>＋ New Report</button>
         </div>
@@ -544,7 +554,12 @@ export default function DailyProgressReportPage() {
         <button className="btn btn-primary" onClick={generateReport}>⬇ Generate Report</button>
       </div>
 
-      <MobileFilterBar activeCount={[fProject, fUser, fRange !== "all" ? fRange : ""].filter(Boolean).length}>
+      <MobileFilterBar
+        hideTrigger
+        open={mobileFilterOpen}
+        onOpenChange={setMobileFilterOpen}
+        activeCount={mobileFilterActiveCount}
+      >
         <div className="field" style={{ position: "relative" }}>
           <label>Date Range</label>
           <SearchDropdown
@@ -598,11 +613,8 @@ export default function DailyProgressReportPage() {
             neutralActive
           />
         </div>
+        <button className="btn btn-primary w-full justify-center" onClick={generateReport}>⬇ Generate Report</button>
       </MobileFilterBar>
-
-      <div className="flex md:hidden mb-5">
-        <button className="btn btn-primary btn-sm flex-1 justify-center" onClick={generateReport}>⬇ Generate Report</button>
-      </div>
 
       <div className={"stats-grid" + (isDri ? " cols-5" : "")} style={{ marginBottom: 20 }}>
         {/* Each card jumps to wherever that number is actually broken down —

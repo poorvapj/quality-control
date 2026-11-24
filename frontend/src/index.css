@@ -1009,7 +1009,7 @@
         padding: 6px 8px;
       }
       .stats-grid > * {
-        min-height: 0;
+        min-height: 0 !important;
       }
       .stat-val {
         font-size: 13px;
