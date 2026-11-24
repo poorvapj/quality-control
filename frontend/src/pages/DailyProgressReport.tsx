@@ -600,8 +600,7 @@ export default function DailyProgressReportPage() {
         </div>
       </MobileFilterBar>
 
-      <div className="flex md:hidden gap-2.5 mb-5">
-        <button className="btn btn-secondary btn-sm flex-1 justify-center" onClick={() => setDrOpen(true)}><NavIcon name="drawing" size={13} /> Drawing Request</button>
+      <div className="flex md:hidden mb-5">
         <button className="btn btn-primary btn-sm flex-1 justify-center" onClick={generateReport}>⬇ Generate Report</button>
       </div>
 
