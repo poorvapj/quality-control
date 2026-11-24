@@ -1,6 +1,15 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
 import NavIcon from "./NavIcon";
+
+// 2026-11-24: re-added after being removed earlier when mobile-data payload
+// size looked like the only cause of slow sign-in — now confirmed the free
+// Atlas tier itself can genuinely take up to ~a minute on a cold/first
+// request of the day (see the real [stateBuilder]/[lite-state] timings in
+// Render's logs), so a silent spinner for that long reads as broken rather
+// than slow. Shown only after a short delay, so a normal fast sign-in never
+// flashes it.
+const WAKING_DELAY_MS = 4000;
 
 export default function LoginScreen() {
   const { data, mode, login } = useApp();
@@ -9,6 +18,8 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [waking, setWaking] = useState(false);
+  const wakingTimer = useRef<number | null>(null);
 
   if (!data && mode === "offline") {
     return (
@@ -28,8 +39,12 @@ export default function LoginScreen() {
     if (!email.trim() || !password) return;
     setSubmitting(true);
     setError(null);
+    setWaking(false);
+    wakingTimer.current = window.setTimeout(() => setWaking(true), WAKING_DELAY_MS);
     const err = await login(email.trim(), password);
+    if (wakingTimer.current) { window.clearTimeout(wakingTimer.current); wakingTimer.current = null; }
     setSubmitting(false);
+    setWaking(false);
     if (err) setError(err);
   }
 
@@ -112,6 +127,11 @@ export default function LoginScreen() {
             {submitting && <span className="spinner" />}
             {submitting ? "Signing in…" : "Sign In"}
           </button>
+          {waking && (
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 10, textAlign: "center", lineHeight: 1.5 }}>
+              Waking up the server — this can take up to a minute on the first request today.
+            </div>
+          )}
         </form>
       </div>
     </div>
