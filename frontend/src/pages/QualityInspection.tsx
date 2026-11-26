@@ -88,6 +88,26 @@ export default function QualityInspection() {
   const allowedProjectCodes = new Set(allProjects.map((p) => p.code));
   const users = coll(data, "users");
   const snags = coll(data, "snags");
+  // Same "is this DRI responsible for this project" check DriDashboard's own
+  // Acknowledge section uses — lets the DRI acknowledge/disagree right here
+  // instead of having to switch to Dashboard to find the same Fail record.
+  const canAckAsDri = isAdmin || myRole() === "DRI";
+  const myDriProjectIds = new Set(allProjects.map((p) => p.id));
+  const [ackBusyId, setAckBusyId] = useState<string | null>(null);
+  async function acknowledgeFail(insp: QI) {
+    setAckBusyId(insp.id);
+    const synced = await apply([{ op: "upsert", coll: "qualityInspections", rec: { id: insp.id, driAcknowledged: true } } as any]);
+    setAckBusyId(null);
+    toast(synced ? "Acknowledged" : "Saved on this device — will finish submitting once you're back online");
+  }
+  async function disagreeFail(insp: QI) {
+    const remarks = window.prompt("Add a remark explaining why you disagree:");
+    if (!remarks || !remarks.trim()) return;
+    setAckBusyId(insp.id);
+    const synced = await apply([{ op: "upsert", coll: "qualityInspections", rec: { id: insp.id, driDisputed: true, driAcknowledgedRemarks: remarks.trim() } } as any]);
+    setAckBusyId(null);
+    toast(synced ? "Marked as disputed" : "Saved on this device — will finish submitting once you're back online");
+  }
 
   const [workItems, setWorkItems] = useState<WorkItemsResponse | null>(null);
   useEffect(() => {
@@ -151,7 +171,13 @@ This cannot be undone.`)) return;
       {canCreate && insp.result !== "Pass" && snag?.status !== "Closed" && (!!insp.driAcknowledged || !!insp.driDisputed) && (
         <Btn label="Re-inspect" color="secondary" size="sm" onClick={() => { setReInspectOf(insp); setPanelOpen(true); }} />
       )}
-      {canCreate && insp.result !== "Pass" && snag?.status !== "Closed" && !insp.driAcknowledged && !insp.driDisputed && (
+      {insp.result !== "Pass" && snag?.status !== "Closed" && !insp.driAcknowledged && !insp.driDisputed && canAckAsDri && myDriProjectIds.has(insp.projectId) && (
+        <>
+          <Btn label={ackBusyId === insp.id ? "Saving…" : "Acknowledge"} size="sm" onClick={() => acknowledgeFail(insp)} disabled={ackBusyId === insp.id} />
+          <Btn label="Disagree" color="secondary" size="sm" onClick={() => disagreeFail(insp)} disabled={ackBusyId === insp.id} />
+        </>
+      )}
+      {canCreate && insp.result !== "Pass" && snag?.status !== "Closed" && !insp.driAcknowledged && !insp.driDisputed && !(canAckAsDri && myDriProjectIds.has(insp.projectId)) && (
         <span className="text-[10.5px] text-[var(--text-sub)]">Waiting on DRI acknowledgement</span>
       )}
       {isAdmin && <Btn label="Delete" color="secondary" size="sm" onClick={() => deleteInspection(insp)} />}

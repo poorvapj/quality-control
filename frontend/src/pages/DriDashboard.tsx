@@ -14,6 +14,7 @@ import StatTile from "../components/StatTile";
 import { ApprovalQueue, SentBackList } from "../components/ApprovalControls";
 import { useSlaTimelines } from "../shared/slaTimelines";
 import type { TabKey, TeamDailyReport, QualityInspection } from "../types";
+import { LoadingEmpty } from "../ui/tw/Table";
 
 /* One Team's Daily Report, pending or already-signed-off — the leader
    taps Approve, which is a sign-off record only (doesn't gate anything
@@ -180,7 +181,7 @@ const STAGE_LABEL: Record<string, string> = {
    ops-wide floor/handover KPIs on OpsDashboard aren't their day-to-day
    concern the way their own raised tickets are. */
 export default function DriDashboard() {
-  const { data, currentUserId, me, setActiveTab, setOpenDrawingRequestId, openDrawer, ensureHeavy } = useApp();
+  const { data, currentUserId, me, setActiveTab, setOpenDrawingRequestId, openDrawer, ensureHeavy, isHeavyLoaded } = useApp();
   useEffect(() => { ensureHeavy(["qualityInspections"]); }, [ensureHeavy]);
   // myProjects() falls back to "every project" for anyone with no
   // projectIds set (right for a project PICKER elsewhere in the app — an
@@ -293,7 +294,18 @@ export default function DriDashboard() {
           : <>{asg.slice(0, 5).map((a) => <AssignRow key={a.id} a={a} />)}{sng.slice(0, 5).map((s) => <SnagRow key={s.id} s={s} />)}</>}
       </Card>
 
-      {needsAck.length > 0 && (
+      {!isHeavyLoaded(["qualityInspections"]) ? (
+        <>
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-2.5">
+            <div className="text-[13px] font-bold tracking-tight text-[var(--text-sub)] uppercase flex items-center gap-2">
+              <NavIcon name="bug" size={13} /> Quality Failures Needing Your Acknowledgment
+            </div>
+          </div>
+          <Card padded={false} className="mb-6">
+            <LoadingEmpty label="Loading quality inspections…" />
+          </Card>
+        </>
+      ) : needsAck.length > 0 && (
         <>
           <div className="flex items-center justify-between gap-3 flex-wrap mb-2.5">
             <div className="text-[13px] font-bold tracking-tight text-[var(--text-sub)] uppercase flex items-center gap-2">
