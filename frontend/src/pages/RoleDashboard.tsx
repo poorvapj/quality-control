@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { coll, myProjects, myAssignments, mySnags, myReleases, isCivilLikeRole } from "../shared/rules";
 import { ROLES } from "../services/config";
@@ -6,7 +6,7 @@ import AssignRow from "../components/AssignRow";
 import SnagRow from "../components/SnagRow";
 import { hasModuleGrant } from "../shared/permissionMatrix";
 import QualityFailures from "../components/QualityFailures";
-import { ApprovalQueue, SentBackList } from "../components/ApprovalControls";
+import { ApprovalQueue, SentBackList, ApprovalReviewPanel } from "../components/ApprovalControls";
 import NavIcon from "../components/NavIcon";
 import Card from "../ui/tw/Card";
 import StatTile from "../components/StatTile";
@@ -81,6 +81,32 @@ export default function RoleDashboard() {
   const myWorkMeasurements = coll(data, "workMeasurements").filter((m) => m.recordedByUserId === currentUserId && projectIds.includes(m.projectId));
   const recentMeasurements = [...myUnitMeasurements, ...myWorkMeasurements].sort((a, b) => b.createdAt - a.createdAt).slice(0, 5);
 
+  // Any of MY OWN submissions a team leader left an UNREAD note on one
+  // specific photo of — independent of Approve/Reject, so a note on an
+  // otherwise-Approved record isn't only visible via Sent Back To Redo
+  // (which only ever lists Rejected ones). Drops off this list the moment
+  // I actually open the record (ApprovalReviewPanel marks it seen) —
+  // otherwise read notes would sit here forever.
+  const hasUnseenRemark = (rec: any) => (rec.photos || []).some((p: any) => p.remark && !p.remarkSeen);
+  const photoNoteItems: { coll: "qualityInspections" | "materialMeasurements" | "workMeasurements"; rec: any }[] = [
+    ...myInspections.filter(hasUnseenRemark).map((rec) => ({ coll: "qualityInspections" as const, rec })),
+    ...myUnitMeasurements.filter(hasUnseenRemark).map((rec: any) => ({ coll: "materialMeasurements" as const, rec })),
+    ...myWorkMeasurements.filter(hasUnseenRemark).map((rec: any) => ({ coll: "workMeasurements" as const, rec }))
+  ].sort((a, b) => b.rec.createdAt - a.rec.createdAt);
+  const [openPhotoNote, setOpenPhotoNote] = useState<{ coll: "qualityInspections" | "materialMeasurements" | "workMeasurements"; rec: any } | null>(null);
+
+  // My own Fail/Rework inspections the DRI has acted on (acknowledged,
+  // disagreed, or the corrective work is already marked Resolved) — ready
+  // for ME to go re-check, same unlock QualityInspection.tsx's own
+  // Re-inspect button uses. Surfaced here so I don't have to hunt through
+  // the whole Quality Inspection list to find which of my own Fails moved.
+  const readyToReinspect = myInspections.filter((i) => {
+    if (i.result === "Pass") return false;
+    const snag = i.linkedSnagId ? coll(data, "snags").find((s) => s.id === i.linkedSnagId) : null;
+    if (snag?.status === "Closed") return false;
+    return !!i.driAcknowledged || !!i.driDisputed || !!snag?.resolvedAt;
+  });
+
   return (
     <div>
       <div className="flex items-start gap-3 mt-0.5 mb-5">
@@ -112,6 +138,50 @@ export default function RoleDashboard() {
       <ApprovalQueue />
       <SentBackList />
 
+      {photoNoteItems.length > 0 && (
+        <>
+          <SectionLabel icon="eye" right={`${photoNoteItems.length}`}>Photo Notes From Your Team Leader</SectionLabel>
+          <Card padded={false} className="mb-6">
+            {photoNoteItems.slice(0, 6).map(({ coll: c, rec }) => (
+              <div
+                key={rec.id}
+                role="button" tabIndex={0}
+                onClick={() => setOpenPhotoNote({ coll: c, rec })}
+                onKeyDown={(e) => { if (e.key === "Enter") setOpenPhotoNote({ coll: c, rec }); }}
+                className="py-3 px-4 border-b border-[var(--border)] last:border-b-0 cursor-pointer hover:bg-[var(--bg-card-hover)]"
+              >
+                <div className="text-[13px] font-bold truncate">{rec.projectCode || rec.projectName} · {rec.floorName}{rec.unitName ? ` / ${rec.unitName}` : ""}</div>
+                <div className="text-[11px] text-[var(--text-muted)] mt-0.5">{rec.inspectionDate || rec.measurementDate} · View details ›</div>
+              </div>
+            ))}
+          </Card>
+          <ApprovalReviewPanel item={openPhotoNote} onClose={() => setOpenPhotoNote(null)} />
+        </>
+      )}
+
+      {readyToReinspect.length > 0 && (
+        <>
+          <SectionLabel icon="eye" right={`${readyToReinspect.length}`}>Ready to Re-inspect</SectionLabel>
+          <Card padded={false} className="mb-6">
+            {readyToReinspect.slice(0, 10).map((i) => (
+              <div
+                key={i.id}
+                role="button" tabIndex={0}
+                onClick={() => { setReInspectQualityId(i.id); setActiveTab("qualityInspection" as TabKey); }}
+                onKeyDown={(e) => { if (e.key === "Enter") { setReInspectQualityId(i.id); setActiveTab("qualityInspection" as TabKey); } }}
+                className="flex items-center justify-between gap-3 py-3 px-4 border-b border-[var(--border)] last:border-b-0 cursor-pointer hover:bg-[var(--bg-card-hover)]"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] font-bold truncate">{i.projectCode} · {i.floorName}{i.unitName ? ` / ${i.unitName}` : ""}{i.workType ? ` · ${i.workType}` : ""}</div>
+                  <div className="text-[11px] text-[var(--text-muted)] mt-0.5">{i.inspectionDate} · View / re-inspect ›</div>
+                </div>
+                <Badge color={i.result === "Fail" ? "red" : "amber"}>{i.result}</Badge>
+              </div>
+            ))}
+          </Card>
+        </>
+      )}
+
       {canQuality && (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
@@ -130,7 +200,7 @@ export default function RoleDashboard() {
             ) : (
               myInspections.slice(0, 6).map((i) => {
                 const snag = i.linkedSnagId ? coll(data, "snags").find((s) => s.id === i.linkedSnagId) : null;
-                const driResponded = !!i.driAcknowledged || !!i.driDisputed;
+                const driResponded = !!i.driAcknowledged || !!i.driDisputed || !!snag?.resolvedAt;
                 const canReinspect = i.result !== "Pass" && snag?.status !== "Closed" && driResponded;
                 return (
                   <div

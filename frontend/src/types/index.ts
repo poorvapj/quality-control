@@ -198,6 +198,10 @@ export interface Photo {
   remark?: string;
   remarkByName?: string;
   remarkAt?: number;
+  // Set once the submitter has actually opened this record and seen the
+  // note — lets a dashboard's "Photo Notes" list show only what's genuinely
+  // unread instead of nagging forever about something already looked at.
+  remarkSeen?: boolean;
 }
 
 export interface Snag extends BaseRecord {

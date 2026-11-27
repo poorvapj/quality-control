@@ -241,10 +241,15 @@ export default function DriDashboard() {
   // yet agreed genuinely failed here — regardless of who the corrective
   // action happens to be assigned to (QualityFailures below only ever shows
   // the person the SNAG is assigned to, which is almost never the site DRI
-  // themself).
+  // themself). ALSO shown to whoever the inspector actually named as the
+  // responsible DRI on this one inspection (correctiveAction.assignedToUserId),
+  // even if that person isn't scoped to the project via Masters ▸ User —
+  // the inspector's own pick is what matters here, not whether someone
+  // remembered to add the project to that user's record.
   const needsAck = coll(data, "qualityInspections")
     .filter((i) => {
-      if (!projectIds.includes(i.projectId) || i.result === "Pass" || i.driAcknowledged || i.driDisputed) return false;
+      const named = i.correctiveAction?.assignedToUserId === currentUserId;
+      if ((!projectIds.includes(i.projectId) && !named) || i.result === "Pass" || i.driAcknowledged || i.driDisputed) return false;
       // Already resolved (re-inspected to a Pass, or otherwise closed) before
       // anyone acknowledged it — acknowledging a closed snag after the fact
       // serves no purpose, so don't keep nagging the DRI about it.

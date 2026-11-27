@@ -168,16 +168,18 @@ This cannot be undone.`)) return;
   const rowActions = (insp: QI, snag: Snag | null, row: boolean) => (
     <div className={row ? "flex flex-col gap-1.5 items-start" : "flex flex-wrap gap-1.5"} onClick={(e) => e.stopPropagation()}>
       <Btn label="History" color="secondary" size="sm" onClick={() => setHistoryFloor({ floorId: insp.floorId, floorLabel: insp.floorName })} />
-      {canCreate && insp.result !== "Pass" && snag?.status !== "Closed" && (!!insp.driAcknowledged || !!insp.driDisputed) && (
+      {canCreate && insp.result !== "Pass" && snag?.status !== "Closed" && (!!insp.driAcknowledged || !!insp.driDisputed || !!snag?.resolvedAt) && (
         <Btn label="Re-inspect" color="secondary" size="sm" onClick={() => { setReInspectOf(insp); setPanelOpen(true); }} />
       )}
-      {insp.result !== "Pass" && snag?.status !== "Closed" && !insp.driAcknowledged && !insp.driDisputed && canAckAsDri && myDriProjectIds.has(insp.projectId) && (
+      {insp.result !== "Pass" && snag?.status !== "Closed" && !insp.driAcknowledged && !insp.driDisputed && canAckAsDri
+        && (myDriProjectIds.has(insp.projectId) || insp.correctiveAction?.assignedToUserId === currentUserId) && (
         <>
           <Btn label={ackBusyId === insp.id ? "Saving…" : "Acknowledge"} size="sm" onClick={() => acknowledgeFail(insp)} disabled={ackBusyId === insp.id} />
           <Btn label="Disagree" color="secondary" size="sm" onClick={() => disagreeFail(insp)} disabled={ackBusyId === insp.id} />
         </>
       )}
-      {canCreate && insp.result !== "Pass" && snag?.status !== "Closed" && !insp.driAcknowledged && !insp.driDisputed && !(canAckAsDri && myDriProjectIds.has(insp.projectId)) && (
+      {canCreate && insp.result !== "Pass" && snag?.status !== "Closed" && !insp.driAcknowledged && !insp.driDisputed && !snag?.resolvedAt
+        && !(canAckAsDri && (myDriProjectIds.has(insp.projectId) || insp.correctiveAction?.assignedToUserId === currentUserId)) && (
         <span className="text-[10.5px] text-[var(--text-sub)]">Waiting on DRI acknowledgement</span>
       )}
       {isAdmin && <Btn label="Delete" color="secondary" size="sm" onClick={() => deleteInspection(insp)} />}

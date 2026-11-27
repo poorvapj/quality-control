@@ -549,6 +549,7 @@ function TrackDrawer({ kind, id }: { kind: "unit" | "floor"; id: string }) {
 function SnagDrawer({ id }: { id: string }) {
   const { data, closeDrawer, toast, myRole, currentUserId, apply } = useApp();
   const { setSnagStatus, markSnagNotApplicable, markSnagResolved, saveSnagAssignee, capturePhoto } = useActions();
+  const isAdmin = currentUserId === "U-ADMIN";
   const fileRef = useRef<HTMLInputElement>(null);
   const resolveFileRef = useRef<HTMLInputElement>(null);
   const closeFileRef = useRef<HTMLInputElement>(null);
@@ -652,15 +653,17 @@ function SnagDrawer({ id }: { id: string }) {
               {(s.photos || []).map((p, i) => (
                 <div key={i} style={{ position: "relative", display: "inline-block" }}>
                   <img className="photo-thumb" src={thumbUrl(p.url)} onClick={() => viewPhoto(p.url, (s.photos || []).map((x) => x.url))} />
-                  <button
-                    type="button"
-                    title="Remove photo"
-                    onClick={() => {
-                      if (!confirm("Remove this photo?")) return;
-                      apply([{ op: "upsert", coll: "snags", rec: { id: s.id, photos: (s.photos || []).filter((_, pi) => pi !== i) } }]);
-                    }}
-                    style={{ position: "absolute", top: -6, right: -6, width: 18, height: 18, borderRadius: 99, border: "none", background: "var(--color-fail)", color: "#fff", fontSize: 10, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}
-                  >✕</button>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      title="Remove photo (Admin only — this may be someone else's evidence)"
+                      onClick={() => {
+                        if (!confirm("Remove this photo? This could be the original evidence someone else added.")) return;
+                        apply([{ op: "upsert", coll: "snags", rec: { id: s.id, photos: (s.photos || []).filter((_, pi) => pi !== i) } }]);
+                      }}
+                      style={{ position: "absolute", top: -6, right: -6, width: 18, height: 18, borderRadius: 99, border: "none", background: "var(--color-fail)", color: "#fff", fontSize: 10, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}
+                    >✕</button>
+                  )}
                 </div>
               ))}
             </div>

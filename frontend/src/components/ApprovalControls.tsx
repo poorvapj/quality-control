@@ -117,7 +117,11 @@ function Photos({
             <div className="flex items-center gap-2">
               <img
                 src={thumbUrl(p.url)} alt=""
-                onClick={() => viewPhoto(p.url, photos.map((x) => x.url))}
+                onClick={() => viewPhoto(p.url, photos.map((x) => x.url), {
+                  remarks: photos.map((x: any) => x.remark),
+                  remarkNames: photos.map((x: any) => x.remarkByName),
+                  onSaveRemark
+                })}
                 className="w-16 h-16 object-cover rounded-radius-sm border border-[var(--border)] cursor-pointer"
               />
               {onSaveRemark && editingIdx !== i && (
@@ -155,11 +159,23 @@ function RecordDetails({ collName, rec, decidable }: { collName: ApprovalColl; r
   const savePhotoRemark = decidable
     ? (index: number, remark: string) => {
         const photos = (rec.photos || []).map((p: any, i: number) =>
-          i === index ? { ...p, remark: remark || undefined, remarkByName: remark ? (me()?.name || "Team leader") : undefined, remarkAt: remark ? Date.now() : undefined } : p
+          i === index
+            ? { ...p, remark: remark || undefined, remarkByName: remark ? (me()?.name || "Team leader") : undefined, remarkAt: remark ? Date.now() : undefined, remarkSeen: remark ? false : undefined }
+            : p
         );
         apply([{ op: "upsert", coll: collName, rec: { id: rec.id, photos } } as any]);
       }
     : undefined;
+  // The SUBMITTER (not the reviewer) opened this record — if any photo
+  // carries an unread note, mark it seen so it drops off their own
+  // dashboard's "Photo Notes" list instead of nagging forever.
+  useEffect(() => {
+    if (decidable) return;
+    const unseen = (rec.photos || []).some((p: any) => p.remark && !p.remarkSeen);
+    if (!unseen) return;
+    const photos = (rec.photos || []).map((p: any) => (p.remark && !p.remarkSeen ? { ...p, remarkSeen: true } : p));
+    apply([{ op: "upsert", coll: collName, rec: { id: rec.id, photos } } as any]);
+  }, [decidable, rec.id, collName]); // eslint-disable-line react-hooks/exhaustive-deps
   if (collName === "qualityInspections") {
     const color = rec.result === "Pass" ? "#16a34a" : rec.result === "Fail" ? "#dc2626" : "#d97706";
     // The corrective-action evidence — whatever Execution added when marking
@@ -168,6 +184,13 @@ function RecordDetails({ collName, rec, decidable }: { collName: ApprovalColl; r
     // separately from the inspection's own photos above (which only prove
     // the defect existed, not that it's fixed).
     const linkedSnag = rec.linkedSnagId ? coll(data, "snags").find((s: any) => s.id === rec.linkedSnagId) : null;
+    // The snag starts out with a COPY of this inspection's own photos (see
+    // raiseSnagOnApproveQi in server.js) as the initial "what's wrong"
+    // evidence — only show photos added SINCE then (the actual corrective
+    // work), or the same 2-3 photos would appear twice on screen.
+    const correctiveActionPhotos = (linkedSnag?.photos || []).filter(
+      (p: any) => !(rec.photos || []).some((rp: any) => rp.url === p.url)
+    );
     return (
       <>
         <Detail label="Project">{rec.projectCode} — {rec.projectName}</Detail>
@@ -205,7 +228,7 @@ function RecordDetails({ collName, rec, decidable }: { collName: ApprovalColl; r
         {linkedSnag?.closedAt && (
           <Detail label="Closed">{refLabel(data, "users", linkedSnag.closedBy)} · {new Date(linkedSnag.closedAt).toLocaleString()}</Detail>
         )}
-        <Photos photos={linkedSnag?.photos} label="Corrective-action photos" />
+        <Photos photos={correctiveActionPhotos} label="Corrective-action photos" />
       </>
     );
   }
