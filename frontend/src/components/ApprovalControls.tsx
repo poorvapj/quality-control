@@ -355,10 +355,19 @@ export function ApprovalQueue() {
 
 /** Dashboard section for a team member: their work the leader sent back. */
 export function SentBackList() {
-  const { data, currentUserId } = useApp();
+  const { data, currentUserId, setReInspectQualityId, setActiveTab } = useApp();
   const [open, setOpen] = useState<{ coll: ApprovalColl; rec: any } | null>(null);
   const items = rejectedFor(data, currentUserId);
   if (items.length === 0) return null;
+  // A rejected Quality Inspection jumps straight into re-inspecting it (same
+  // flow as "Ready to Re-inspect") instead of only a read-only review panel —
+  // a rejection ALWAYS means "redo this", so there is nothing to decide here,
+  // just somewhere faster to get to the redo. Measurements have no such
+  // single-button redo yet, so they keep opening the review panel.
+  const goTo = (c: ApprovalColl, rec: any) => {
+    if (c === "qualityInspections") { setReInspectQualityId(rec.id); setActiveTab("qualityInspection" as any); }
+    else setOpen({ coll: c, rec });
+  };
   return (
     <>
       <div className={sectionLabel}><NavIcon name="bug" size={13} /> Sent Back To Redo <span className="text-[11px] font-medium normal-case text-[var(--text-muted)]">· {items.length}</span></div>
@@ -368,15 +377,17 @@ export function SentBackList() {
             key={rec.id}
             role="button"
             tabIndex={0}
-            onClick={() => setOpen({ coll: c, rec })}
-            onKeyDown={(e) => { if (e.key === "Enter") setOpen({ coll: c, rec }); }}
+            onClick={() => goTo(c, rec)}
+            onKeyDown={(e) => { if (e.key === "Enter") goTo(c, rec); }}
             className="py-3 px-4 border-b border-[var(--border)] last:border-b-0 cursor-pointer hover:bg-[var(--bg-card-hover)]"
           >
             <div className="text-[13px] font-bold">{KIND_LABEL[c]} · {describeRecord(c, rec)}</div>
             <div className="text-[11.5px] mt-1" style={{ color: "var(--color-fail)" }}>
               {rec.approval?.approverName || "Team leader"}: {rec.approval?.remark || "no remark"}
             </div>
-            <div className="text-[10.5px] text-[var(--text-muted)] mt-0.5">Record a new one to replace it. · View details ›</div>
+            <div className="text-[10.5px] text-[var(--text-muted)] mt-0.5">
+              {c === "qualityInspections" ? "Tap to re-inspect ›" : "Record a new one to replace it. · View details ›"}
+            </div>
           </div>
         ))}
       </Card>

@@ -1333,7 +1333,7 @@ async function raiseSnagOnApproveQi(db, rec) {
   if (claim.modifiedCount !== 1) return null;
   const location = full.unitName ? `${full.floorName} / ${full.unitName}` : full.floorName;
   const label = full.itemDescription ? `${location} · ${full.itemDescription}` : location;
-  await db.collection("snags").insertOne({
+  const snagDoc = {
     id: snagId,
     projectId: full.projectId,
     floorId: full.floorId,
@@ -1350,8 +1350,13 @@ async function raiseSnagOnApproveQi(db, rec) {
     dueAt: full.correctiveAction ? new Date(full.correctiveAction.targetDate).getTime() || null : null,
     photos: full.photos || [],
     comments: []
-  });
+  };
+  await db.collection("snags").insertOne(snagDoc);
   rec.linkedSnagId = snagId;
+  // A Fail/Rework approved by a team leader raises its snag here (not via the
+  // normal "snags" upsert op path), so it must notify the assignee itself —
+  // that upsert-branch notify in applyOps never runs for this insert.
+  if (snagDoc.assignedTo) notifySnagTarget("snag_assigned", snagDoc, null);
   return snagId;
 }
 
