@@ -190,6 +190,14 @@ export interface Photo {
   // just now (e.g. as closing evidence) apart from one already sitting on
   // the record from earlier (e.g. the original QC-fail inspection photo).
   at?: number;
+  // A team leader's note on THIS specific photo while reviewing an
+  // approval queue item (Quality Inspection / Material / Work Measurement)
+  // — separate from the record-level reject remark, so "the third photo's
+  // crack looks deeper than the others" doesn't get lost in one blanket
+  // comment. Shown back to the submitter wherever these photos render.
+  remark?: string;
+  remarkByName?: string;
+  remarkAt?: number;
 }
 
 export interface Snag extends BaseRecord {

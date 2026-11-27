@@ -96,14 +96,51 @@ function Detail({ label, children }: { label: string; children?: React.ReactNode
   return <div className="mb-3"><div className={FIELD_LABEL}>{label}</div><div className="text-[13px] leading-snug">{children}</div></div>;
 }
 
-function Photos({ photos, label = "Photos" }: { photos?: { url: string }[]; label?: string }) {
+/** Per-photo remark, editable only when `onSaveRemark` is passed (the
+ *  reviewer's own view) — otherwise an existing remark still shows,
+ *  read-only, wherever these same photos render for the submitter. */
+function Photos({
+  photos, label = "Photos", onSaveRemark
+}: {
+  photos?: { url: string; remark?: string; remarkByName?: string }[];
+  label?: string;
+  onSaveRemark?: (index: number, remark: string) => void;
+}) {
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [draft, setDraft] = useState("");
   if (!photos || photos.length === 0) return null;
   return (
     <Detail label={`${label} (${photos.length})`}>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-col gap-2.5">
         {photos.map((p, i) => (
-          <img key={i} src={thumbUrl(p.url)} alt="" onClick={() => viewPhoto(p.url, photos.map((x) => x.url))}
-            className="w-16 h-16 object-cover rounded-radius-sm border border-[var(--border)] cursor-pointer" />
+          <div key={i} className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <img
+                src={thumbUrl(p.url)} alt=""
+                onClick={() => viewPhoto(p.url, photos.map((x) => x.url))}
+                className="w-16 h-16 object-cover rounded-radius-sm border border-[var(--border)] cursor-pointer"
+              />
+              {onSaveRemark && editingIdx !== i && (
+                <Btn
+                  label={p.remark ? "Edit remark" : "Add remark"} color="secondary" size="sm"
+                  onClick={() => { setEditingIdx(i); setDraft(p.remark || ""); }}
+                />
+              )}
+            </div>
+            {editingIdx === i ? (
+              <div className="flex flex-col gap-1.5 max-w-[320px]">
+                <textarea className="textarea" rows={2} placeholder="Note on this specific photo…" value={draft} onChange={(e) => setDraft(e.target.value)} />
+                <div className="flex gap-1.5">
+                  <Btn label="Save" color="primary" size="sm" onClick={() => { onSaveRemark!(i, draft.trim()); setEditingIdx(null); }} />
+                  <Btn label="Cancel" color="secondary" size="sm" onClick={() => setEditingIdx(null)} />
+                </div>
+              </div>
+            ) : p.remark ? (
+              <div className="text-[11.5px] text-[var(--text-muted)] max-w-[260px]">
+                {p.remarkByName ? `${p.remarkByName}: ` : ""}{p.remark}
+              </div>
+            ) : null}
+          </div>
         ))}
       </div>
     </Detail>
@@ -113,8 +150,16 @@ function Photos({ photos, label = "Photos" }: { photos?: { url: string }[]; labe
 const STATUS_COLOR: Record<string, string> = { OK: "#16a34a", "Not OK": "#dc2626", "N/A": "var(--text-muted)" };
 
 /** The whole record, laid out so a leader can judge it before deciding. */
-function RecordDetails({ collName, rec }: { collName: ApprovalColl; rec: any }) {
-  const { data } = useApp();
+function RecordDetails({ collName, rec, decidable }: { collName: ApprovalColl; rec: any; decidable?: boolean }) {
+  const { data, apply, currentUserId, me } = useApp();
+  const savePhotoRemark = decidable
+    ? (index: number, remark: string) => {
+        const photos = (rec.photos || []).map((p: any, i: number) =>
+          i === index ? { ...p, remark: remark || undefined, remarkByName: remark ? (me()?.name || "Team leader") : undefined, remarkAt: remark ? Date.now() : undefined } : p
+        );
+        apply([{ op: "upsert", coll: collName, rec: { id: rec.id, photos } } as any]);
+      }
+    : undefined;
   if (collName === "qualityInspections") {
     const color = rec.result === "Pass" ? "#16a34a" : rec.result === "Fail" ? "#dc2626" : "#d97706";
     // The corrective-action evidence — whatever Execution added when marking
@@ -151,7 +196,7 @@ function RecordDetails({ collName, rec }: { collName: ApprovalColl; rec: any }) 
           </Detail>
         )}
         <Detail label="Remarks">{rec.remarks}</Detail>
-        <Photos photos={rec.photos} />
+        <Photos photos={rec.photos} onSaveRemark={savePhotoRemark} />
         {rec.correctiveAction && <Detail label="Corrective action">{rec.correctiveAction.assignedToName} · due {rec.correctiveAction.targetDate}</Detail>}
         <Detail label="Snag raised">{rec.linkedSnagId}</Detail>
         {linkedSnag?.resolvedAt && (
@@ -192,7 +237,7 @@ function RecordDetails({ collName, rec }: { collName: ApprovalColl; rec: any }) 
       <Detail label="Dimensions">{dims}</Detail>
       <Detail label="VMS item">{rec.linkedItemDescription ? `${rec.linkedWorkOrderNo || ""} · ${rec.linkedItemDescription}` : ""}</Detail>
       <Detail label="Remarks">{rec.remarks}</Detail>
-      <Photos photos={rec.photos} />
+      <Photos photos={rec.photos} onSaveRemark={savePhotoRemark} />
     </>
   );
 }
@@ -222,7 +267,7 @@ export function ApprovalReviewPanel({ item, onClose, closeWhenDecided }: {
             <ApprovalBadge approval={approval} />
             {approval?.status === "pending" && <OverdueBadge pendingSinceTs={live.createdAt} queueKey={SLA_QUEUE_FOR[item.coll]} />}
           </div>
-          <RecordDetails collName={item.coll} rec={live} />
+          <RecordDetails collName={item.coll} rec={live} decidable={decidable} />
           {decidable && (
             <div className="mt-2 pt-3 border-t border-[var(--border)]">
               <div className={FIELD_LABEL}>Your decision</div>
