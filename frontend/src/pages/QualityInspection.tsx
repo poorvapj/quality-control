@@ -92,7 +92,13 @@ export default function QualityInspection() {
   // Acknowledge section uses — lets the DRI acknowledge/disagree right here
   // instead of having to switch to Dashboard to find the same Fail record.
   const canAckAsDri = isAdmin || myRole() === "DRI";
-  const myDriProjectIds = new Set(allProjects.map((p) => p.id));
+  // myProjects() falls back to EVERY project when a DRI has no projectIds
+  // set at all (the right default for a plain project picker) — but that
+  // fallback must never mean "responsible for every project's Fails" here.
+  // A DRI with no projectIds scoped is responsible for NONE by this check
+  // (same rule DriDashboard's own needsAck already applies); only Admin
+  // genuinely gets all of them.
+  const myDriProjectIds = new Set(isAdmin || me()?.projectIds?.length ? allProjects.map((p) => p.id) : []);
   const [ackBusyId, setAckBusyId] = useState<string | null>(null);
   async function acknowledgeFail(insp: QI) {
     setAckBusyId(insp.id);
